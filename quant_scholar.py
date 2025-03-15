@@ -432,17 +432,8 @@ def json_to_md(filename: str, md_filename: str,
             f.write("---\nlayout: default\n---\n\n")
 
         if use_title:
-            f.write(('<p align=\"center\">'
-                    '<h1 align=\"center\">🌟 QUANT-SCHOLAR 🌟</h1>'
-                    '<h2 align=\"center\">Automatically Quantitative Finance Papers List</h2>'
-                    '</p>\
-            \
-            '
-                    '<p align=\"center\">'
-                    '<img src=\"https://raw.githubusercontent.com/LLMQuant/quant-scholar/main/asset/icon.png\" width=\"180\">'
-                    '</p>\
-            \
-            '))
+            f.write('<p align="center"><h1 align="center">🌟 QUANT-SCHOLAR 🌟</h1><h2 align="center">Automatically Quantitative Finance Papers List</h2></p> \n')
+            f.write('<p align="center"><img src="https://raw.githubusercontent.com/LLMQuant/quant-scholar/main/asset/icon.png" width="180"></p>')
             f.write(f"\n \n")
             f.write(f"## 🚩 Updated on {DateNow} \n")
         else:
