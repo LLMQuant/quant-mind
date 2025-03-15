@@ -7,7 +7,7 @@ on:
     - cron:  "0 2 * * 1"
 
 env:
-  GITHUB_USER_NAME: WinstonLiyte
+  GITHUB_USER_NAME: WinstonLiyt
   GITHUB_USER_EMAIL: 195722024@qq.com
 
 jobs:
