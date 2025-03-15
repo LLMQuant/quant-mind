@@ -439,7 +439,7 @@ def json_to_md(filename: str, md_filename: str,
             \
             '
                     '<p align=\"center\">'
-                    '<img src=\"asset/icon.png\" width=\"180\">'
+                    '<img src=\"https://raw.githubusercontent.com/LLMQuant/quant-scholar/main/asset/icon.png\" width=\"180\">'
                     '</p>\
             \
             '))
