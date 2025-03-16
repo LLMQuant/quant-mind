@@ -1,3 +1,4 @@
 requests
 arxiv
 pyyaml
+ruff
