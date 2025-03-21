@@ -7,7 +7,7 @@ on:
     - cron:  "0 2 * * 1"
 
 env:
-  GITHUB_USER_NAME: WinstonLiyt
+  GITHUB_USER_NAME: WinstonLiyte
   GITHUB_USER_EMAIL: 195722024@qq.com
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
         uses: github-actions-x/commit@v2.9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Github Action Automatic Update Quant Arxiv Scholar Paper List"
+          commit-message: "[Workflow] Automatic Update Quant Scholar Paper List"
           files: README.md docs/quant-scholar.json
           rebase: 'true'
           name: ${{ env.GITHUB_USER_NAME }}
