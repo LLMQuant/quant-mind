@@ -39,8 +39,8 @@ jobs:
           
       - name: Run quant_scholar.py
         run: |
-            python quant_scholar.py
-            cp README.md wiki/index.md
+          python quant_scholar.py
+          cp README.md wiki/index.md
           
       - name: Push update the quant scholar paper list
         uses: github-actions-x/commit@v2.9
