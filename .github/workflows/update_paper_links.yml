@@ -8,7 +8,7 @@ on:
 
 env:
   GITHUB_USER_NAME: WinstonLiyte
-  GITHUB_USER_EMAIL: 195722024@qq.com
+  GITHUB_USER_EMAIL: 1957922024@qq.com
 
 jobs:
   build:
@@ -33,13 +33,14 @@ jobs:
       - name: Run quant_scholar.py
         run: |
           python quant_scholar.py --update_paper_links
+          cp README.md wiki/index.md
           
       - name: Push update the quant scholar paper list
         uses: github-actions-x/commit@v2.9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "[Workflow] Automatic Update Quant Scholar Paper List"
-          files: README.md docs/quant-scholar.json
+          files: README.md docs/quant-scholar.json wiki/index.md
           rebase: 'true'
           name: ${{ env.GITHUB_USER_NAME }}
           email: ${{ env.GITHUB_USER_EMAIL }}
