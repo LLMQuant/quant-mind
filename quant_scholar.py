@@ -230,6 +230,29 @@ def get_daily_papers(topic: str, query="quantitative finance", max_results=2):
             pdf_file.write(pdf_response.content)
         logging.info(f"Downloaded PDF for {paper_title} to {pdf_filename}")
 
+        # Generate paper JSON data
+        paper_json = {
+            "paper_id": paper_id,
+            "paper_key": paper_key,
+            "title": paper_title,
+            "url": paper_url,
+            "pdf_url": pdf_filename,
+            "abstract": paper_abstract,
+            "authors": paper_authors,
+            "first_author": paper_first_author,
+            "primary_category": str(primary_category),
+            "publish_time": str(publish_time),
+            "update_time": str(update_time),
+            "comments": comments,
+            "code_url": code_url
+        }
+
+        # Save paper JSON to file
+        json_filename = os.path.join(query_folder_path, f"{paper_key}.json")
+        with open(json_filename, "w", encoding="utf-8") as f:
+            json.dump(paper_json, f, ensure_ascii=False, indent=4)
+        logging.info(f"Saved paper JSON for {paper_title} to {json_filename}")
+
         paper_summary = paper_abstract
 
         try:
