@@ -1,0 +1,15 @@
+{
+    "paper_id": "2503.03612v4",
+    "paper_key": "2503.03612",
+    "title": "Large language models in finance : what is financial sentiment?",
+    "url": "http://arxiv.org/abs/2503.03612",
+    "pdf_url": "/data/userdata/v-yuanteli/llmquant/quant-scholar/papers/2025-03/Machine Learning in Finance/2503.03612.pdf",
+    "abstract": "Financial sentiment has become a crucial yet complex concept in finance, increasingly used in market forecasting and investment strategies. Despite its growing importance, there remains a need to define and understand what financial sentiment truly represents and how it can be effectively measured. We explore the nature of financial sentiment and investigate how large language models (LLMs) contribute to its estimation. We trace the evolution of sentiment measurement in finance, from market-based and lexicon-based methods to advanced natural language processing techniques. The emergence of LLMs has significantly enhanced sentiment analysis, providing deeper contextual understanding and greater accuracy in extracting sentiment from financial text. We examine how BERT-based models, such as RoBERTa and FinBERT, are optimized for structured sentiment classification, while GPT-based models, including GPT-4, OPT, and LLaMA, excel in financial text generation and real-time sentiment interpretation. A comparative analysis of bidirectional and autoregressive transformer architectures highlights their respective roles in investor sentiment analysis, algorithmic trading, and financial decision-making. By exploring what financial sentiment is and how it is estimated within LLMs, we provide insights into the growing role of AI-driven sentiment analysis in finance.",
+    "authors": "Kemal Kirtac, Guido Germano",
+    "first_author": "Kemal Kirtac, Guido Germano",
+    "primary_category": "q-fin.ST",
+    "publish_time": "2025-03-05",
+    "update_time": "2025-03-18",
+    "comments": "There are two different articles with the same content and different   names (see arXiv:2412.19245)",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2503.03612v4"
+}
