@@ -4,7 +4,7 @@ repo_name: "daily_quant_paper"
 show_authors: True
 show_links: True
 show_badge: True
-max_results: 1
+max_results: 20
 
 publish_readme: True
 paper_list_json_path: './docs/quant-scholar.json'
