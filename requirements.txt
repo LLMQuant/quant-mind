@@ -1,4 +1,0 @@
-requests
-arxiv
-pyyaml
-ruff
