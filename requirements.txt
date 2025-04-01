@@ -2,3 +2,4 @@ requests
 arxiv
 pyyaml
 ruff
+marker-pdf>=0.1.0 
