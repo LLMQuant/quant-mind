@@ -15,12 +15,12 @@ class PDF2MarkdownTool(ParseTool):
         output_dir: Optional[str] = None,
     ):
         """
-        初始化 PDF 转 Markdown 工具
+        Initialize the PDF to Markdown conversion tool.
 
         Args:
-            cleanup: 是否清理转换后的 markdown 内容
-            extract_images: 是否提取图片
-            output_dir: 输出目录，如果不指定则使用默认目录
+            cleanup: Whether to clean up the converted markdown content
+            extract_images: Whether to extract images from the PDF
+            output_dir: Output directory for converted files. If not specified, uses default directory
         """
         self.cleanup = cleanup
         self.extract_images = extract_images
@@ -42,40 +42,40 @@ class PDF2MarkdownTool(ParseTool):
         self.logger.info(f"Converting {file_path} to markdown")
 
         try:
-            # 构建 marker 命令
+            # Build marker command
             cmd = ["marker_single", file_path]
 
-            # 添加可选参数
+            # Add optional parameters
             if self.output_dir:
                 cmd.extend(["--output_dir", self.output_dir])
             if self.extract_images:
                 cmd.append("--extract_images")
 
-            # 执行转换命令
+            # Execute conversion command
             result = subprocess.run(cmd, capture_output=True, text=True)
 
-            # 检查是否成功
+            # Check if successful
             if result.returncode != 0:
-                raise Exception(f"转换失败: {result.stderr}")
+                raise Exception(f"Conversion failed: {result.stderr}")
 
-            # 获取输出文件路径
+            # Get output file path
             output_path = os.path.splitext(file_path)[0] + ".md"
             if self.output_dir:
                 output_path = os.path.join(self.output_dir, os.path.basename(output_path))
 
-            # 读取转换后的内容
+            # Read converted content
             with open(output_path, "r", encoding="utf-8") as f:
                 markdown_content = f.read()
 
-            # 清理内容
+            # Clean up content
             if self.cleanup:
                 markdown_content = self._clean_markdown(markdown_content)
 
-            self.logger.info("PDF 转换完成")
+            self.logger.info("PDF conversion completed successfully")
             return markdown_content
 
         except Exception as e:
-            self.logger.error(f"转换过程中出错: {str(e)}")
+            self.logger.error(f"Error during conversion: {str(e)}")
             raise
 
     def get_format(self) -> str:
@@ -83,10 +83,10 @@ class PDF2MarkdownTool(ParseTool):
 
     def _clean_markdown(self, content: str) -> str:
         """Clean up the markdown content."""
-        # 删除多余的空行
+        # Delete extra blank lines
         content = "\n".join(line for line in content.split("\n") if line.strip())
 
-        # 确保标题前后有空行
+        # Ensure titles have blank lines before and after
         content = content.replace("\n#", "\n\n#")
         content = content.replace("\n##", "\n\n##")
         content = content.replace("\n###", "\n\n###")
