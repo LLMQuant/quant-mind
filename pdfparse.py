@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Union
-import os
+from pathlib import Path
 import logging
 import subprocess
 from autoscholar.base.parse_tool import ParseTool
@@ -36,18 +36,19 @@ class PDF2MarkdownTool(ParseTool):
         Returns:
             String containing markdown representation of the PDF
         """
-        if not os.path.exists(file_path):
+        pdf_path = Path(file_path)
+        if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {file_path}")
 
         self.logger.info(f"Converting {file_path} to markdown")
 
         try:
             # Build marker command
-            cmd = ["marker_single", file_path]
+            cmd = ["marker_single", str(pdf_path)]
 
             # Add optional parameters
             if self.output_dir:
-                cmd.extend(["--output_dir", self.output_dir])
+                cmd.extend(["--output_dir", str(self.output_dir)])
             if self.extract_images:
                 cmd.append("--extract_images")
 
@@ -59,13 +60,12 @@ class PDF2MarkdownTool(ParseTool):
                 raise Exception(f"Conversion failed: {result.stderr}")
 
             # Get output file path
-            output_path = os.path.splitext(file_path)[0] + ".md"
+            output_path = pdf_path.with_suffix(".md")
             if self.output_dir:
-                output_path = os.path.join(self.output_dir, os.path.basename(output_path))
+                output_path = Path(self.output_dir) / output_path.name
 
             # Read converted content
-            with open(output_path, "r", encoding="utf-8") as f:
-                markdown_content = f.read()
+            markdown_content = output_path.read_text(encoding="utf-8")
 
             # Clean up content
             if self.cleanup:
@@ -111,22 +111,23 @@ class PDF2JSONTool(ParseTool):
         Returns:
             Dict containing structured representation of the PDF
         """
-        if not os.path.exists(file_path):
+        pdf_path = Path(file_path)
+        if not pdf_path.exists():
             raise FileNotFoundError(f"PDF file not found: {file_path}")
 
         self.logger.info(f"Converting {file_path} to JSON structure")
 
         # Extract document structure
-        document_structure = self._extract_document_structure(file_path)
+        document_structure = self._extract_document_structure(str(pdf_path))
 
         # Extract metadata if requested
         if self.include_metadata:
-            metadata = self._extract_metadata(file_path)
+            metadata = self._extract_metadata(str(pdf_path))
             document_structure["metadata"] = metadata
 
         # Extract references if requested
         if self.extract_references:
-            references = self._extract_references(file_path)
+            references = self._extract_references(str(pdf_path))
             document_structure["references"] = references
 
         return document_structure
@@ -228,21 +229,24 @@ class Paper:
 
         if output_path is None:
             # Generate output path based on original PDF path
-            base_name = os.path.splitext(os.path.basename(self.path))[0]
+            pdf_path = Path(self.path)
             ext = ".md" if self.content_format == "markdown" else ".json"
-            output_path = os.path.join(os.path.dirname(self.path), base_name + ext)
+            output_path = pdf_path.with_suffix(ext)
 
         try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                if self.content_format == "json":
-                    import json
+            output_path = Path(output_path)
+            if self.content_format == "json":
+                import json
 
-                    json.dump(self.content, f, indent=2, ensure_ascii=False)
-                else:
-                    f.write(self.content)
+                output_path.write_text(
+                    json.dumps(self.content, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            else:
+                output_path.write_text(self.content, encoding="utf-8")
 
             self.logger.info(f"Saved parsed content to {output_path}")
-            return output_path
+            return str(output_path)
 
         except Exception as e:
             self.logger.error(f"Error saving content: {str(e)}")
