@@ -137,42 +137,81 @@ class PDF2JSONTool(ParseTool):
         return "json"
 
     def _extract_document_structure(self, file_path: str) -> Dict:
-        """Extract document structure from PDF."""
-        # Actual implementation would go here
-        return {
-            "title": "Sample Paper Title",
-            "sections": [
-                {
-                    "heading": "Introduction",
-                    "level": 1,
-                    "content": "This is the introduction content...",
-                    "subsections": [],
-                },
-                # More sections...
-            ],
-        }
+        """Extract document structure from PDF.
+
+        TODO: Implement actual logic for extracting document structure from PDF.
+        This should include:
+        1. Parsing the PDF file to identify sections and subsections
+        2. Extracting headings and their hierarchy levels
+        3. Extracting content for each section
+        4. Building a structured dictionary with title, sections, and their content
+
+        Returns:
+            Dict: A dictionary containing the document structure with the following format:
+            {
+                "title": str,  # Document title
+                "sections": [  # List of sections
+                    {
+                        "heading": str,  # Section heading
+                        "level": int,    # Heading level (1 for main sections, 2 for subsections, etc.)
+                        "content": str,  # Section content
+                        "subsections": []  # Nested subsections
+                    }
+                ]
+            }
+        """
+        pass
 
     def _extract_metadata(self, file_path: str) -> Dict:
-        """Extract document metadata."""
-        return {
-            "authors": ["Author 1", "Author 2"],
-            "year": 2023,
-            "doi": "10.1234/5678",
-            "journal": "Journal of Sample Science",
-        }
+        """Extract document metadata.
+
+        TODO: Implement actual logic for extracting metadata from PDF.
+        This should include:
+        1. Extracting author information
+        2. Extracting publication year
+        3. Extracting DOI (Digital Object Identifier)
+        4. Extracting journal/conference information
+        5. Extracting any other relevant metadata
+
+        Returns:
+            Dict: A dictionary containing the document metadata with the following format:
+            {
+                "authors": List[str],  # List of author names
+                "year": int,           # Publication year
+                "doi": str,            # Digital Object Identifier
+                "journal": str,        # Journal or conference name
+                "keywords": List[str], # Optional: List of keywords
+                "abstract": str        # Optional: Abstract text
+            }
+        """
+        pass
 
     def _extract_references(self, file_path: str) -> List[Dict]:
-        """Extract references from the document."""
-        return [
-            {
-                "authors": ["Author A", "Author B"],
-                "year": 2020,
-                "title": "A referenced paper",
-                "journal": "Journal of References",
-                "doi": "10.5678/1234",
-            },
-            # More references...
-        ]
+        """Extract references from the document.
+
+        TODO: Implement actual logic for extracting references from PDF.
+        This should include:
+        1. Identifying reference section
+        2. Parsing individual references
+        3. Extracting reference details (authors, year, title, etc.)
+        4. Validating and formatting reference data
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing a reference with the following format:
+            [
+                {
+                    "authors": List[str],  # List of author names
+                    "year": int,           # Publication year
+                    "title": str,          # Paper title
+                    "journal": str,        # Journal or conference name
+                    "doi": str,            # Digital Object Identifier
+                    "volume": str,         # Optional: Journal volume
+                    "issue": str,          # Optional: Journal issue
+                    "pages": str           # Optional: Page numbers
+                }
+            ]
+        """
+        pass
 
 
 # Example usage
