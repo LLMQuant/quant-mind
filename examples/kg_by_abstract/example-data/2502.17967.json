@@ -1,0 +1,15 @@
+{
+    "paper_id": "2502.17967v1",
+    "paper_key": "2502.17967",
+    "title": "LLM Knows Geometry Better than Algebra: Numerical Understanding of LLM-Based Agents in A Trading Arena",
+    "url": "http://arxiv.org/abs/2502.17967",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2502.17967.pdf",
+    "abstract": "Recent advancements in large language models (LLMs) have significantly improved performance in natural language processing tasks. However, their ability to generalize to dynamic, unseen tasks, particularly in numerical reasoning, remains a challenge. Existing benchmarks mainly evaluate LLMs on problems with predefined optimal solutions, which may not align with real-world scenarios where clear answers are absent. To bridge this gap, we design the Agent Trading Arena, a virtual numerical game simulating complex economic systems through zero-sum games, where agents invest in stock portfolios. Our experiments reveal that LLMs, including GPT-4o, struggle with algebraic reasoning when dealing with plain-text stock data, often focusing on local details rather than global trends. In contrast, LLMs perform significantly better with geometric reasoning when presented with visual data, such as scatter plots or K-line charts, suggesting that visual representations enhance numerical reasoning. This capability is further improved by incorporating the reflection module, which aids in the analysis and interpretation of complex data. We validate our findings on NASDAQ Stock dataset, where LLMs demonstrate stronger reasoning with visual data compared to text. Our code and data are publicly available at https://github.com/wekjsdvnm/Agent-Trading-Arena.git.",
+    "authors": "Tianmi Ma, Jiawei Du, Wenxin Huang, Wenjie Wang, Liang Xie, Xian Zhong, Joey Tianyi Zhou",
+    "first_author": "Tianmi Ma, Jiawei Du, Wenxin Huang",
+    "primary_category": "cs.LG",
+    "publish_time": "2025-02-25",
+    "update_time": "2025-02-25",
+    "comments": "",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2502.17967v1"
+}

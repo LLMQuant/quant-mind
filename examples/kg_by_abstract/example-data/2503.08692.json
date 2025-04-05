@@ -1,0 +1,15 @@
+{
+    "paper_id": "2503.08692v1",
+    "paper_key": "2503.08692",
+    "title": "Detecting Crypto Pump-and-Dump Schemes: A Thresholding-Based Approach to Handling Market Noise",
+    "url": "http://arxiv.org/abs/2503.08692",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2503.08692.pdf",
+    "abstract": "We propose a simple yet robust unsupervised model to detect pump-and-dump events on tokens listed on the Poloniex Exchange platform. By combining threshold-based criteria with exponentially weighted moving averages (EWMA) and volatility measures, our approach effectively distinguishes genuine anomalies from minor trading fluctuations, even for tokens with low liquidity and prolonged inactivity. These characteristics present a unique challenge, as standard anomaly-detection methods often over-flag negligible volume spikes. Our framework overcomes this issue by tailoring both price and volume thresholds to the specific trading patterns observed, resulting in a model that balances high true-positive detection with minimal noise.",
+    "authors": "Mahya Karbalaii",
+    "first_author": "Mahya Karbalaii",
+    "primary_category": "q-fin.ST",
+    "publish_time": "2025-02-27",
+    "update_time": "2025-02-27",
+    "comments": "",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2503.08692v1"
+}

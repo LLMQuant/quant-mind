@@ -1,0 +1,15 @@
+{
+    "paper_id": "2502.20978v2",
+    "paper_key": "2502.20978",
+    "title": "Using quantile time series and historical simulation to forecast financial risk multiple steps ahead",
+    "url": "http://arxiv.org/abs/2502.20978",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2502.20978.pdf",
+    "abstract": "A method for quantile-based, semi-parametric historical simulation estimation of multiple step ahead Value-at-Risk (VaR) and Expected Shortfall (ES) models is developed. It uses the quantile loss function, analogous to how the quasi-likelihood is employed by standard historical simulation methods. The returns data are scaled by the estimated quantile series, then resampling is employed to estimate the forecast distribution one and multiple steps ahead, allowing tail risk forecasting. The proposed method is applicable to any data or model where the relationship between VaR and ES does not change over time and can be extended to allow a measurement equation incorporating realized measures, thus including Realized GARCH and Realized CAViaR type models. Its finite sample properties, and its comparison with existing historical simulation methods, are evaluated via a simulation study. A forecasting study assesses the relative accuracy of the 1% and 2.5% VaR and ES one-day-ahead and ten-day-ahead forecasting results for the proposed class of models compared to several competitors.",
+    "authors": "Richard Gerlach, Antonio Naimoli, Giuseppe Storti",
+    "first_author": "Richard Gerlach, Antonio Naimoli, Giuseppe Storti",
+    "primary_category": "q-fin.ST",
+    "publish_time": "2025-02-28",
+    "update_time": "2025-03-04",
+    "comments": "",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2502.20978v2"
+}

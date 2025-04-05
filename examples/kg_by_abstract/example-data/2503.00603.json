@@ -1,0 +1,15 @@
+{
+    "paper_id": "2503.00603v1",
+    "paper_key": "2503.00603",
+    "title": "Understanding the Commodity Futures Term Structure Through Signatures",
+    "url": "http://arxiv.org/abs/2503.00603",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2503.00603.pdf",
+    "abstract": "Signature methods have been widely and effectively used as a tool for feature extraction in statistical learning methods, notably in mathematical finance. They lack, however, interpretability: in the general case, it is unclear why signatures actually work. The present article aims to address this issue directly, by introducing and developing the concept of signature perturbations. In particular, we construct a regular perturbation of the signature of the term structure of log prices for various commodities, in terms of the convenience yield. Our perturbation expansion and rigorous convergence estimates help explain the success of signature-based classification of commodities markets according to their term structure, with the volatility of the convenience yield as the major discriminant.",
+    "authors": "Hari P. Krishnan, Stephan Sturm",
+    "first_author": "Hari P. Krishnan, Stephan Sturm",
+    "primary_category": "q-fin.MF",
+    "publish_time": "2025-03-01",
+    "update_time": "2025-03-01",
+    "comments": "19 pages, 1 figure",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2503.00603v1"
+}
