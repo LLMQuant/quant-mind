@@ -46,7 +46,14 @@ uv pip install -e .
 > [!Note]
 > The `-e` flag installs the package in "editable" mode, which means changes to the source code will be reflected immediately without reinstalling.
 
-### Custom Index Configuration
+### Pre-commit Setup
+
+```bash
+# Run the pre-commit setup script
+bash scripts/pre-commit-setup.sh
+```
+
+### [Optional] Custom Index Configuration
 
 > [!Tip]
 > Your pyproject.toml already includes a custom index configuration for Tsinghua mirror:
