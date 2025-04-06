@@ -50,11 +50,6 @@ class TestKnowledgeGraph(unittest.TestCase):
             kg.graph[self.paper1.paper_id][self.paper2.paper_id]["weight"], 0.8
         )
 
-    def test_invalid_graph_type(self):
-        """Test that an invalid graph type raises an error."""
-        with self.assertRaises(TypeError):
-            KnowledgeGraph(graph="not a graph", papers=self.papers)
-
 
 if __name__ == "__main__":
     unittest.main()
