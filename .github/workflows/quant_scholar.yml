@@ -52,4 +52,4 @@ jobs:
           git config --global user.email "${{ env.GITHUB_USER_EMAIL }}"
           git add README.md docs/quant-scholar.json wiki/index.md
           git commit -m "[Workflow] Automatic Update Quant Scholar Paper List" || echo "No changes to commit"
-          git push origin HEAD:master
+          git push
