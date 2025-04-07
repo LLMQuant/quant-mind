@@ -34,13 +34,19 @@ jobs:
         run: |
           python quant_scholar.py --update_paper_links
           cp README.md wiki/index.md
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
           
-      - name: Push update the quant scholar paper list
-        uses: github-actions-x/commit@v2.9
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "[Workflow] Automatic Update Quant Scholar Paper List"
-          files: README.md docs/quant-scholar.json wiki/index.md
-          rebase: 'true'
-          name: ${{ env.GITHUB_USER_NAME }}
-          email: ${{ env.GITHUB_USER_EMAIL }}
+      - name: Commit and Push
+        run: |
+          git config --global user.name "${{ env.GITHUB_USER_NAME }}"
+          git config --global user.email "${{ env.GITHUB_USER_EMAIL }}"
+          git add README.md docs/quant-scholar.json wiki/index.md
+          git commit -m "[Workflow] Automatic Update Quant Scholar Paper List" || echo "No changes to commit"
+          git push
+
