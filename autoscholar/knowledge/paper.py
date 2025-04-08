@@ -1,93 +1,225 @@
-from typing import Dict, Optional, Union
+# scholarauto/knowledge/paper.py
+
+import json
+import uuid
 from pathlib import Path
-import logging
-from autoscholar.base.parse_tool import ParseTool
+from typing import Any, Callable, Dict, List, Optional, Union
 
 
 class Paper:
-    """Class representing an academic paper with PDF parsing capabilities."""
+    """Class representing a research paper as a basic knowledge entity.
 
-    def __init__(self, path: Optional[str] = None, title: Optional[str] = None):
-        """Initialize a Paper instance.
+    A minimal data structure that stores essential paper information.
+    Additional metadata can be stored in meta_info dictionary.
+    """
 
-        Args:
-            path: Path to the PDF file
-            title: Optional title of the paper
+    def __init__(
+        self,
+        title: str = "",
+        abstract: str = "",
+        id: Optional[str] = None,
+        paper_id: Optional[str] = None,
+        url: Optional[str] = None,
+        pdf_url: Optional[str] = None,
+        code_url: Optional[str] = None,
+        full_text: Optional[str] = None,
+        embedding: Optional[List[float]] = None,
+        meta_info: Optional[Dict[str, Any]] = None,
+    ):
+        """Initialize a Paper knowledge entity.
+
+        Parameters:
+            title: Paper title
+            abstract: Paper abstract
+            id: Unique identifier for the paper (defaults to UUID)
+            paper_id: Unique identifier for the paper (defaults to UUID)
+            url: URL to the paper (optional)
+            pdf_url: URL to the PDF version (optional)
+            full_text: Complete text content (optional)
+            embedding: Embedding of the paper (optional)
+            meta_info: Dictionary for flexible metadata storage (optional)
         """
-        self.path = path
+        self.id = id or str(uuid.uuid4())
+        self.paper_id = paper_id
         self.title = title
-        self.content = None
-        self.content_format = None
-        self.metadata = {}
-        self.logger = logging.getLogger(__name__)
+        self.abstract = abstract
+        self.url = url
+        self.pdf_url = pdf_url
+        self.full_text = full_text
+        self.embedding = embedding
+        self.code_url = code_url
+        self.meta_info = meta_info or {}
 
-    def parse_pdf(self, parse_tool: ParseTool) -> None:
-        """Parse the PDF using the provided parsing tool.
+        # Embedding is not stored directly as an attribute
+        # but can be added to meta_info if needed temporarily
 
-        Args:
-            parse_tool: An instance of a class implementing the ParseTool interface
-        """
-        if not self.path:
-            raise ValueError("Paper path not set. Set paper.path before parsing.")
-
-        try:
-            self.logger.info(f"Parsing PDF using {parse_tool.__class__.__name__}")
-            self.content = parse_tool.parse(self.path)
-            self.content_format = parse_tool.get_format()
-
-            # Extract title if not already set
-            if not self.title and self.content_format == "json":
-                self.title = self.content.get("title", None)
-
-            self.logger.info(f"Successfully parsed PDF to {self.content_format} format")
-
-        except Exception as e:
-            self.logger.error(f"Error parsing PDF: {str(e)}")
-            raise
-
-    def get_content(self) -> Union[str, Dict]:
-        """Get the parsed content.
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the paper to a dictionary representation.
 
         Returns:
-            The parsed content in the format specified by the parse_tool used
+            Dictionary with paper attributes
         """
-        if self.content is None:
-            raise ValueError("Paper has not been parsed yet. Call parse_pdf first.")
-        return self.content
+        return {
+            "id": self.id,
+            "paper_id": self.paper_id,
+            "title": self.title,
+            "abstract": self.abstract,
+            "url": self.url,
+            "pdf_url": self.pdf_url,
+            "full_text": self.full_text,
+            "code_url": self.code_url,
+            "meta_info": self.meta_info,
+        }
 
-    def save_parsed_content(self, output_path: Optional[str] = None) -> str:
-        """Save the parsed content to a file.
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Paper":
+        """Create a Paper object from a dictionary.
 
-        Args:
-            output_path: Custom path to save the file. If not provided, will use the PDF name.
+        Parameters:
+            data: Dictionary with paper attributes
 
         Returns:
-            Path to the saved file
+            Paper object
         """
-        if self.content is None:
-            raise ValueError("No content to save. Parse the PDF first.")
+        # Define known attributes
+        known_attrs = [
+            "id",
+            "paper_id",
+            "title",
+            "abstract",
+            "url",
+            "pdf_url",
+            "code_url",
+            "full_text",
+            "meta_info",
+        ]
 
-        if output_path is None:
-            # Generate output path based on original PDF path
-            pdf_path = Path(self.path)
-            ext = ".md" if self.content_format == "markdown" else ".json"
-            output_path = pdf_path.with_suffix(ext)
+        # Extract known attributes
+        attrs = {
+            attr: data.get(attr, "" if attr in ["title", "abstract"] else None)
+            for attr in known_attrs
+        }
 
-        try:
-            output_path = Path(output_path)
-            if self.content_format == "json":
-                import json
+        # Get existing meta_info or create empty dict
+        meta_info = attrs.get("meta_info", {}).copy() if attrs.get("meta_info") else {}
 
-                output_path.write_text(
-                    json.dumps(self.content, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-            else:
-                output_path.write_text(self.content, encoding="utf-8")
+        # Add any remaining keys from data to meta_info
+        for key, value in data.items():
+            if key not in attrs:
+                meta_info[key] = value
 
-            self.logger.info(f"Saved parsed content to {output_path}")
-            return str(output_path)
+        # Update meta_info in attrs
+        attrs["meta_info"] = meta_info
 
-        except Exception as e:
-            self.logger.error(f"Error saving content: {str(e)}")
-            raise
+        return cls(**attrs)
+
+    def get_text_for_embedding(
+        self, construct_fn: Optional[Callable[["Paper"], str]] = None
+    ) -> str:
+        """Get concatenated text used for creating embeddings.
+
+        Parameters:
+        ----------
+            construct_fn: Function to construct the text from the paper
+
+        Returns:
+            Concatenated text of title and abstract
+        """
+        if construct_fn is None:
+            return f"{self.title}\n\n{self.abstract}"
+        else:
+            return construct_fn(self)
+
+    def to_json(self) -> str:
+        """Convert the paper to a JSON string.
+
+        Returns:
+            JSON string representation
+        """
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+
+    def __str__(self) -> str:
+        """Get string representation of the paper.
+
+        Returns:
+            String with basic paper info
+        """
+        return f"Paper({self.id}): {self.title}"
+
+    def __repr__(self) -> str:
+        """Get representation of the paper.
+
+        Returns:
+            String representation
+        """
+        return f"Paper(paper_id='{self.paper_id}', title='{self.title}')"
+
+    def set_embedding(self, embedding: List[float]):
+        """Set the embedding of the paper.
+
+        Parameters:
+            embedding: Embedding of the paper
+        """
+        self.embedding = embedding
+
+    @classmethod
+    def load_paper_from_path(cls, json_path: str) -> "Paper":
+        """Load a paper from a JSON file.
+
+        Parameters:
+            json_path: Path to the JSON file containing paper data
+
+        Returns:
+            Paper object
+        """
+        with open(json_path, "r", encoding="utf-8") as f:
+            paper_data = json.load(f)
+
+        if not isinstance(paper_data, dict):
+            raise ValueError("JSON file must be a dictionary")
+
+        return cls.from_dict(paper_data)
+
+    @classmethod
+    def load_paper_from_paths(
+        cls, json_path_list: List[Union[str, Path]]
+    ) -> List["Paper"]:
+        """Create a Paper object from a JSON file.
+
+        Parameters:
+            json_path: Path to the JSON file containing paper data
+        """
+        papers = []
+        for json_path in json_path_list:
+            papers.append(cls.load_paper_from_path(json_path))
+        return papers
+
+    @classmethod
+    def from_json_list(cls, json_str: str) -> List["Paper"]:
+        """Create multiple Paper objects from a JSON string containing a list.
+
+        Parameters:
+            json_str: JSON string containing a list of paper data
+
+        Returns:
+            List of Paper objects
+        """
+        papers_data = json.loads(json_str)
+
+        if not isinstance(papers_data, list):
+            raise ValueError("JSON string must contain a list of paper objects")
+
+        return [cls.from_dict(paper_data) for paper_data in papers_data]
+
+    @classmethod
+    def to_json_list(cls, papers: List["Paper"]) -> str:
+        """Convert a list of Paper objects to a JSON string.
+
+        Parameters:
+            papers: List of Paper objects
+
+        Returns:
+            JSON string representation of the list
+        """
+        papers_data = [paper.to_dict() for paper in papers]
+        return json.dumps(papers_data, ensure_ascii=False, indent=2)

@@ -1,0 +1,15 @@
+{
+    "paper_id": "2503.02680v1",
+    "paper_key": "2503.02680",
+    "title": "VWAP Execution with Signature-Enhanced Transformers: A Multi-Asset Learning Approach",
+    "url": "http://arxiv.org/abs/2503.02680",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2503.02680.pdf",
+    "abstract": "In this paper I propose a novel approach to Volume Weighted Average Price (VWAP) execution that addresses two key practical challenges: the need for asset-specific model training and the capture of complex temporal dependencies. Building upon my recent work in dynamic VWAP execution arXiv:2502.18177, I demonstrate that a single neural network trained across multiple assets can achieve performance comparable to or better than traditional asset-specific models. The proposed architecture combines a transformer-based design inspired by arXiv:2406.02486 with path signatures for capturing geometric features of price-volume trajectories, as in arXiv:2406.17890. The empirical analysis, conducted on hourly cryptocurrency trading data from 80 trading pairs, shows that the globally-fitted model with signature features (GFT-Sig) achieves superior performance in both absolute and quadratic VWAP loss metrics compared to asset-specific approaches. Notably, these improvements persist for out-of-sample assets, demonstrating the model's ability to generalize across different market conditions. The results suggest that combining global parameter sharing with signature-based feature extraction provides a scalable and robust approach to VWAP execution, offering significant practical advantages over traditional asset-specific implementations.",
+    "authors": "Remi Genet",
+    "first_author": "Remi Genet",
+    "primary_category": "q-fin.ST",
+    "publish_time": "2025-03-04",
+    "update_time": "2025-03-04",
+    "comments": "",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2503.02680v1"
+}

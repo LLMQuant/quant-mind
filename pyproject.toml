@@ -17,3 +17,29 @@ max-doc-length = 100
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[tool.setuptools]
+packages = ["autoscholar"]
+
+[project]
+name = "autoscholar"
+version = "0.1.0"
+description = "Quantitative Auto-Scholar"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "arxiv",
+    "pyyaml",
+    "ruff",
+    "pytest",
+    "numpy>=2.2.4",
+    "networkx>=3.4.2",
+    "scikit-learn>=1.6.1",
+    "pyvis==0.3.1",
+    "plotly>=6.0.1",
+    "openai>=1.68.2",
+]

@@ -1,0 +1,15 @@
+{
+    "paper_id": "2502.15853v1",
+    "paper_key": "2502.15853",
+    "title": "Multi-Agent Stock Prediction Systems: Machine Learning Models, Simulations, and Real-Time Trading Strategies",
+    "url": "http://arxiv.org/abs/2502.15853",
+    "pdf_url": "/Users/wenkeli/work/LLMQuant/quant-scholar/papers/2025-03/Machine Learning in Finance/2502.15853.pdf",
+    "abstract": "This paper presents a comprehensive study on stock price prediction, leveragingadvanced machine learning (ML) and deep learning (DL) techniques to improve financial forecasting accuracy. The research evaluates the performance of various recurrent neural network (RNN) architectures, including Long Short-Term Memory (LSTM) networks, Gated Recurrent Units (GRU), and attention-based models. These models are assessed for their ability to capture complex temporal dependencies inherent in stock market data. Our findings show that attention-based models outperform other architectures, achieving the highest accuracy by capturing both short and long-term dependencies. This study contributes valuable insights into AI-driven financial forecasting, offering practical guidance for developing more accurate and efficient trading systems.",
+    "authors": "Daksh Dave, Gauransh Sawhney, Vikhyat Chauhan",
+    "first_author": "Daksh Dave, Gauransh Sawhney, Vikhyat Chauhan",
+    "primary_category": "q-fin.ST",
+    "publish_time": "2025-02-21",
+    "update_time": "2025-02-21",
+    "comments": "",
+    "code_url": "https://arxiv.paperswithcode.com/api/v0/papers/2502.15853v1"
+}
