@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Union
 from pathlib import Path
 import logging
 import subprocess
+import json
 from autoscholar.base.parse_tool import ParseTool
 from autoscholar.knowledge import Paper
 
@@ -160,7 +161,19 @@ class PDF2JSONTool(ParseTool):
                 ]
             }
         """
-        pass
+        # 临时实现，返回一个示例结构
+        return {
+            "title": "Sample Paper Title",
+            "sections": [
+                {
+                    "heading": "Introduction",
+                    "level": 1,
+                    "content": "This is the introduction content...",
+                    "subsections": [],
+                },
+                # More sections...
+            ],
+        }
 
     def _extract_metadata(self, file_path: str) -> Dict:
         """Extract document metadata.
@@ -184,7 +197,13 @@ class PDF2JSONTool(ParseTool):
                 "abstract": str        # Optional: Abstract text
             }
         """
-        pass
+        # 临时实现，返回一个示例结构
+        return {
+            "authors": ["Author 1", "Author 2"],
+            "year": 2023,
+            "doi": "10.1234/5678",
+            "journal": "Journal of Sample Science",
+        }
 
     def _extract_references(self, file_path: str) -> List[Dict]:
         """Extract references from the document.
@@ -211,7 +230,110 @@ class PDF2JSONTool(ParseTool):
                 }
             ]
         """
-        pass
+        # 临时实现，返回一个示例结构
+        return [
+            {
+                "authors": ["Author A", "Author B"],
+                "year": 2020,
+                "title": "A referenced paper",
+                "journal": "Journal of References",
+                "doi": "10.5678/1234",
+            },
+            # More references...
+        ]
+
+
+class PDFParser:
+    """Adapter class to integrate PDF parsing with the Paper class from the main repository."""
+
+    def __init__(self, parse_tool: ParseTool):
+        """
+        Initialize the PDF parser.
+
+        Args:
+            parse_tool: An instance of a class implementing the ParseTool interface
+        """
+        self.parse_tool = parse_tool
+        self.logger = logging.getLogger(__name__)
+
+    def parse_pdf_to_paper(self, pdf_path: str, title: Optional[str] = None) -> Paper:
+        """
+        Parse a PDF file and create a Paper object.
+
+        Args:
+            pdf_path: Path to the PDF file
+            title: Optional title for the paper
+
+        Returns:
+            Paper object with parsed content
+        """
+        try:
+            # Parse the PDF
+            content = self.parse_tool.parse(pdf_path)
+
+            # Create a Paper object
+            paper = Paper(title=title or "")
+
+            # Store the parsed content in meta_info
+            if self.parse_tool.get_format() == "markdown":
+                paper.meta_info["markdown_content"] = content
+                paper.full_text = content
+            elif self.parse_tool.get_format() == "json":
+                # If it's JSON, extract title and other metadata if available
+                if isinstance(content, dict):
+                    if "title" in content and not paper.title:
+                        paper.title = content["title"]
+
+                    # Store the entire JSON structure in meta_info
+                    paper.meta_info["json_content"] = content
+
+                    # Extract abstract if available
+                    if "metadata" in content and "abstract" in content["metadata"]:
+                        paper.abstract = content["metadata"]["abstract"]
+
+            # Set the PDF URL
+            paper.pdf_url = f"file://{Path(pdf_path).absolute()}"
+
+            return paper
+
+        except Exception as e:
+            self.logger.error(f"Error parsing PDF: {str(e)}")
+            raise
+
+    def save_paper_content(self, paper: Paper, output_path: Optional[str] = None) -> str:
+        """
+        Save the paper content to a file.
+
+        Args:
+            paper: Paper object with parsed content
+            output_path: Custom path to save the file. If not provided, will use a default name.
+
+        Returns:
+            Path to the saved file
+        """
+        if not paper.meta_info:
+            raise ValueError("Paper has no content to save.")
+
+        if output_path is None:
+            # Generate output path based on paper title or ID
+            base_name = paper.title or paper.id
+            # Replace spaces and special characters
+            base_name = "".join(c if c.isalnum() else "_" for c in base_name)
+            output_path = f"{base_name}.json"
+
+        try:
+            output_path = Path(output_path)
+
+            # Save as JSON
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(paper.to_dict(), f, ensure_ascii=False, indent=2)
+
+            self.logger.info(f"Saved paper content to {output_path}")
+            return str(output_path)
+
+        except Exception as e:
+            self.logger.error(f"Error saving paper content: {str(e)}")
+            raise
 
 
 # Example usage
@@ -223,14 +345,13 @@ if __name__ == "__main__":
     pdf2md = PDF2MarkdownTool(cleanup=True, extract_images=True)
     pdf2json = PDF2JSONTool(include_metadata=True, extract_references=True)
 
-    # Create and parse a paper with markdown
-    paper1 = Paper(path="example_paper.pdf")
-    paper1.parse_pdf(pdf2md)
-    markdown_content = paper1.get_content()
-    paper1.save_parsed_content("example_paper.md")
+    # Create PDF parser
+    pdf_parser = PDFParser(pdf2md)
 
-    # Create and parse a paper with JSON
-    paper2 = Paper(path="example_paper.pdf", title="Manual Title Override")
-    paper2.parse_pdf(pdf2json)
-    json_structure = paper2.get_content()
-    paper2.save_parsed_content("example_paper.json")
+    # Parse PDF to Paper
+    paper = pdf_parser.parse_pdf_to_paper("example_paper.pdf")
+    print(f"Parsed paper: {paper.title}")
+
+    # Save paper content
+    output_path = pdf_parser.save_paper_content(paper)
+    print(f"Saved paper content to: {output_path}")
