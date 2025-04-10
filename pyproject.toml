@@ -42,4 +42,6 @@ dependencies = [
     "pyvis==0.3.1",
     "plotly>=6.0.1",
     "openai>=1.68.2",
+    "camel-ai>=0.2.42",
+    "pillow>=11.1.0",
 ]
