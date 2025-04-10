@@ -54,6 +54,10 @@ jobs:
       #     sudo apt-get update
       #     sudo apt-get install -y gh
 
+      - name: Pull latest changes
+        run: |
+          git pull --rebase origin master
+
       - name: Commit and Push
         run: |
           git config --global user.name "${{ env.GITHUB_USER_NAME }}"
