@@ -1,28 +1,26 @@
 name: Run Quant Scholar
-
 on:
   workflow_call:
     inputs:
       config-path:
         required: true
         type: string
-
   workflow_dispatch:
   schedule:
+    # Every day at 00:00
     - cron: "0 0 */1 * *"
-
-
 env:
   GITHUB_USER_NAME: WinstonLiyte
   GITHUB_USER_EMAIL: 1957922024@qq.com
-  
-  
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Set up Python Env
         uses: actions/setup-python@v4
@@ -38,13 +36,6 @@ jobs:
         run: |
           python quant_scholar.py
           cp README.md wiki/index.md
-
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
 
       - name: Commit and Push
         run: |
