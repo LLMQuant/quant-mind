@@ -1,7 +1,7 @@
-<p align="center"><h1 align="center">🌟 QUANT-SCHOLAR 🌟</h1><h2 align="center">Automatically Quantitative Finance Papers List</h2></p> 
+<p align="center"><h1 align="center">🌟 QUANT-SCHOLAR 🌟</h1><h2 align="center">Automatically Quantitative Finance Papers List</h2></p>
 <p align="center"><img src="https://raw.githubusercontent.com/LLMQuant/quant-scholar/main/asset/icon.png" width="180"></p>
- 
-## 🚩 Updated on 2025.04.15 
+
+## 🚩 Updated on 2025.04.15
 <details>
   <summary><strong>📜 Contents</strong></summary>
   <ol>
@@ -279,4 +279,3 @@
 | 2025-03-03 | Unify and Anchor: A Context-Aware Transformer for Cross-Domain Time Series Forecasting | Xiaobin Hong, Jiawen Zhang, Wenzhong Li et.al. | [2503.01157](http://arxiv.org/abs/2503.01157) |  | 20 pages, 12 figures, 8 tables, conference under review | <details><summary>Abstract (click to expand)</summary>The rise of foundation models has revolutionized natural language processing and computer vision, yet their best practices to time series forecasting remains underexplored. Existing time series foundation models often adopt methodologies from these fields without addressing the unique characteristics of time series data. In this paper, we identify two key challenges in cross-domain time series forecasting: the complexity of temporal patterns and semantic misalignment. To tackle these issues, we propose the ``Unify and Anchor" transfer paradigm, which disentangles frequency components for a unified perspective and incorporates external context as domain anchors for guided adaptation. Based on this framework, we introduce ContexTST, a Transformer-based model that employs a time series coordinator for structured representation and the Transformer blocks with a context-informed mixture-of-experts mechanism for effective cross-domain generalization. Extensive experiments demonstrate that ContexTST advances state-of-the-art forecasting performance while achieving strong zero-shot transferability across diverse domains.</details> |
 
 <p align=right>(<a href=#-updated-on-20250415>back to top</a>)</p>
-
