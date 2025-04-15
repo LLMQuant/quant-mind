@@ -1,8 +1,8 @@
 from typing import Dict, List, Optional
 
 import networkx as nx
+from camel.embeddings import BaseEmbedding
 
-from autoscholar.embeddings import BaseEmbedding
 from autoscholar.knowledge.knowledge_graph import KnowledgeGraph
 from autoscholar.knowledge.paper import Paper
 from autoscholar.utils.logger import setup_logger
