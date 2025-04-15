@@ -131,10 +131,13 @@ class TestPDF2MarkdownTool(unittest.TestCase):
         )
         paper = pdf_tool.parse_to_paper("test.pdf", title="Test Paper")
         pdf_tool.cleanup = True
+        mock_pdf_path = "a mock pdf path"
 
         # Verify Paper object attributes
         self.assertEqual(paper.title, "Test Paper")
-        self.assertEqual(paper.full_text, self.mock_converter.convert(None))
+        self.assertEqual(
+            paper.full_text, self.mock_converter.convert(mock_pdf_path)
+        )
         self.assertIn("markdown_content", paper.meta_info)
         self.assertTrue(paper.pdf_url.startswith("file://"))
 
