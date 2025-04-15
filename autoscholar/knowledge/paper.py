@@ -101,7 +101,9 @@ class Paper:
         }
 
         # Get existing meta_info or create empty dict
-        meta_info = attrs.get("meta_info", {}).copy() if attrs.get("meta_info") else {}
+        meta_info = (
+            attrs.get("meta_info", {}).copy() if attrs.get("meta_info") else {}
+        )
 
         # Add any remaining keys from data to meta_info
         for key, value in data.items():

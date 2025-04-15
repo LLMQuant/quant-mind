@@ -6,7 +6,9 @@ from pathlib import Path
 import subprocess
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 try:
@@ -17,7 +19,9 @@ try:
     markdown_file_path = markdown_output_dir / "2503.08696/2503.08696.md"
     image_file_list = sorted(markdown_output_dir.glob("*.jpeg"))
     latex_template_file = Path("autoscholar/scholar_summary/demo/template.tex")
-    latex_output_file = Path("autoscholar/scholar_summary/demo/2503.08696/demo_summary.tex")
+    latex_output_file = Path(
+        "autoscholar/scholar_summary/demo/2503.08696/demo_summary.tex"
+    )
 
     conversion_command = ["marker_single", pdf_file_path]
     conversion_command.extend(["--output_dir", markdown_output_dir])
@@ -86,9 +90,15 @@ try:
     # Step 3. Compile LaTeX to PDF
     logger.info("Starting LaTeX compilation to PDF...")
     subprocess.run(
-        ["lualatex", "-interaction=nonstopmode", "-output-directory", str(latex_output_file.parent.resolve()), str(latex_output_file.name)],
+        [
+            "lualatex",
+            "-interaction=nonstopmode",
+            "-output-directory",
+            str(latex_output_file.parent.resolve()),
+            str(latex_output_file.name),
+        ],
         check=True,
-        cwd=str(latex_output_file.parent.resolve())
+        cwd=str(latex_output_file.parent.resolve()),
     )
     logger.info("LaTeX compilation completed. PDF generated.")
 
