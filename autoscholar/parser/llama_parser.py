@@ -82,7 +82,12 @@ class LlamaParser(ParseTool):
         self, source: Union[str, Path, bytes], **kwargs: Any
     ) -> JobResult:
         """Parse the source into a JobResult object."""
-        return self.llama_parse.parse(source, **kwargs)
+        try:
+            return self.llama_parse.parse(source, **kwargs)
+        except Exception as e:
+            # Handle exceptions and provide useful error messages
+            print(f"An error occurred while parsing: {e}")
+            raise
 
     def get_format(self) -> STRUCTURED_TYPES:
         return STRUCTURED_TYPES.LLAMA_PARSE
