@@ -44,4 +44,6 @@ dependencies = [
     "openai>=1.68.2",
     "camel-ai>=0.2.42",
     "pillow>=11.1.0",
+    "llama-cloud-services>=0.6.12",
+    "ipykernel>=6.29.5",
 ]

@@ -9,6 +9,7 @@ class STRUCTURED_TYPES(Enum):
 
     MARKDOWN = "markdown"
     JSON = "json"
+    LLAMA_PARSE = "llama_parse"
 
 
 class ParseTool(ABC):
