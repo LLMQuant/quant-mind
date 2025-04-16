@@ -7,6 +7,7 @@ import dotenv
 from llama_cloud_services import LlamaParse
 from llama_cloud_services.parse.types import JobResult
 
+from ..utils.logger import setup_logger
 from .parse_tool import STRUCTURED_TYPES, ParseTool
 
 dotenv.load_dotenv()
@@ -44,6 +45,8 @@ class LlamaParser(ParseTool):
         system_prompt_append: Optional[str] = None,
         **kwargs,
     ):
+        self.logger = setup_logger(__name__)
+
         self.api_key = api_key or os.getenv("LLAMA_CLOUD_API_KEY")
         if not self.api_key:
             raise ValueError("LLAMA_CLOUD_API_KEY is not set")
@@ -86,7 +89,7 @@ class LlamaParser(ParseTool):
             return self.llama_parse.parse(source, **kwargs)
         except Exception as e:
             # Handle exceptions and provide useful error messages
-            print(f"An error occurred while parsing: {e}")
+            self.logger.error(f"An error occurred while parsing: {e}")
             raise
 
     def get_format(self) -> STRUCTURED_TYPES:
