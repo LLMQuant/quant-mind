@@ -1,12 +1,9 @@
-import os
-import argparse
-import datetime
-import requests
-import yaml
+from pathlib import Path
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, Any, Optional
+import yaml
 
-from utils.logger import setup_logger
+from autoscholar.utils.logger import setup_logger
 
 # Set up logger
 logger = setup_logger(__name__)
@@ -15,165 +12,61 @@ logger = setup_logger(__name__)
 class BaseCrawler(ABC):
     """Base class for implementing crawlers for different sources.
 
-    This abstract class defines the interface and common functionality
-    for crawlers that collect data from various sources.
+    This abstract class provides a minimal interface for crawlers.
+    Subclasses can implement their own specific functionality and workflow.
     """
 
-    def __init__(self, config: Dict[str, Any]):
-        """Initialize the crawler with configuration.
+    def __init__(self, **kwargs):
+        """Initialize the crawler with optional parameters.
 
         Parameters:
         ----------
-        config : Dict[str, Any]
-            Dictionary containing configuration settings.
+        **kwargs : Any
+            Optional parameters that can be used by subclasses.
         """
-        self.config = config
-        self.data_collector = []
-        self.output_dir = config.get("output_dir", "data")
+        self.config = kwargs
+        self.output_dir = kwargs.get("output_dir", "data")
+        
+        # Create output directory if it doesn't exist
+        Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
-
-    @abstractmethod
-    def fetch_data(
-        self, topic: str, query: str, max_results: int = 10
-    ) -> Dict[str, Any]:
-        """Fetch data from the source.
+    @classmethod
+    def from_config_file(cls, config_path: Path, **kwargs) -> 'BaseCrawler':
+        """Create a crawler instance from a configuration file.
 
         Parameters:
         ----------
-        topic : str
-            Topic name for categorization.
-        query : str
-            Search query string.
-        max_results : int, optional
-            Maximum number of results to fetch.
+        config_path : Path
+            Path to the configuration file
+        **kwargs : Any
+            Additional parameters to override config file settings
 
         Returns:
         -------
-        Dict[str, Any]
-            Dictionary containing the fetched data.
+        BaseCrawler
+            Configured crawler instance
         """
-        pass
+        if not config_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+
+        # Update config with any overrides
+        config.update(kwargs)
+        return cls(**config)
 
     @abstractmethod
-    def process_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process the fetched data.
+    def run(self, **kwargs) -> None:
+        """Execute the crawler workflow.
+
+        This is the only required method that subclasses must implement.
+        The implementation can be as simple or complex as needed.
 
         Parameters:
         ----------
-        data : Dict[str, Any]
-            Raw data fetched from the source.
-
-        Returns:
-        -------
-        Dict[str, Any]
-            Processed data.
+        **kwargs : Any
+            Optional parameters that can be used by subclasses.
         """
         pass
 
-    @abstractmethod
-    def save_data(self, data: Dict[str, Any], output_path: str) -> None:
-        """Save the processed data.
-
-        Parameters:
-        ----------
-        data : Dict[str, Any]
-            Processed data to save.
-        output_path : str
-            Path to save the data.
-        """
-        pass
-
-    def run(self) -> None:
-        """Execute the crawler workflow."""
-        logger.info(f"Starting crawler: {self.__class__.__name__}")
-
-        keywords = self.config.get("keywords", {})
-        max_results = self.config.get("max_results", 10)
-
-        logger.info("Fetching data begin")
-        for topic, keyword_info in keywords.items():
-            if isinstance(keyword_info, dict) and "filters" in keyword_info:
-                query = " OR ".join(keyword_info["filters"])
-            else:
-                query = topic
-
-            logger.info(f"Processing topic: {topic}, query: {query}")
-            data = self.fetch_data(topic, query, max_results)
-            processed_data = self.process_data(data)
-            self.data_collector.append(processed_data)
-
-        logger.info("Fetching data end")
-
-        # Save collected data
-        if self.data_collector:
-            today = datetime.date.today().strftime("%Y-%m-%d")
-            output_path = os.path.join(self.output_dir, f"{today}.json")
-            for data in self.data_collector:
-                self.save_data(data, output_path)
-            logger.info(f"Data saved to {output_path}")
-
-
-def load_config(config_file: str) -> Dict[str, Any]:
-    """Load configuration from a YAML file.
-
-    Parameters:
-    ----------
-    config_file : str
-        Path to the configuration file.
-
-    Returns:
-    -------
-    Dict[str, Any]
-        Dictionary containing configuration settings.
-    """
-    with open(config_file, "r") as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-        logger.info(f"Loaded config = {config}")
-    return config
-
-
-def main():
-    """Main function to parse arguments and run the crawler."""
-    parser = argparse.ArgumentParser(description="Generic data crawler")
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="config.yaml",
-        help="Path to the configuration file",
-    )
-    parser.add_argument(
-        "--crawler_type",
-        type=str,
-        required=True,
-        help="Type of crawler to use (e.g., arxiv, github, etc.)",
-    )
-    args = parser.parse_args()
-
-    config = load_config(args.config_path)
-
-    # Import and initialize the specified crawler type
-    try:
-        if args.crawler_type == "arxiv":
-            from arxiv_crawler import ArxivCrawler
-
-            crawler = ArxivCrawler(config)
-        elif args.crawler_type == "github":
-            from github_crawler import GithubCrawler
-
-            crawler = GithubCrawler(config)
-        # TODO: Add more crawler types as needed
-        else:
-            raise ValueError(f"Unsupported crawler type: {args.crawler_type}")
-
-        crawler.run()
-
-    except ImportError as e:
-        logger.error(f"Failed to import crawler module: {e}")
-    except Exception as e:
-        logger.error(f"Error running crawler: {e}")
-
-
-if __name__ == "__main__":
-    main()
