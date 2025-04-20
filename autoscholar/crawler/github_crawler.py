@@ -1,11 +1,18 @@
 import os
 import json
-import logging
 import datetime
 import requests
 from typing import Dict, List, Any, Optional
 
 from base_crawler import BaseCrawler
+from utils.logger import setup_logger
+
+# GitHub-specific constants
+GITHUB_API_URL = "https://api.github.com/search/repositories"
+GITHUB_URL = "https://github.com/"
+
+# Set up logger
+logger = setup_logger(__name__)
 
 
 class GithubCrawler(BaseCrawler):
@@ -24,8 +31,8 @@ class GithubCrawler(BaseCrawler):
             Dictionary containing configuration settings.
         """
         super().__init__(config)
-        self.GITHUB_API_URL = "https://api.github.com/search/repositories"
-        self.GITHUB_URL = "https://github.com/"
+        self.GITHUB_API_URL = GITHUB_API_URL
+        self.GITHUB_URL = GITHUB_URL
 
         # GitHub API token (optional)
         self.api_token = config.get("github_token", None)
@@ -76,7 +83,7 @@ class GithubCrawler(BaseCrawler):
             results = response.json()
 
             if results["total_count"] == 0:
-                logging.info(f"No repositories found for query: {query}")
+                logger.info(f"No repositories found for query: {query}")
                 return {topic: {}}
 
             # Process each repository
@@ -99,7 +106,7 @@ class GithubCrawler(BaseCrawler):
                 ]  # Format as YYYY-MM-DD
                 repo_updated = repo["updated_at"].split("T")[0]
 
-                logging.info(
+                logger.info(
                     f"Repository: {repo_name}, Stars: {repo_stars}, Language: {repo_language}"
                 )
 
@@ -118,7 +125,7 @@ class GithubCrawler(BaseCrawler):
                 )
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error fetching repositories: {e}")
+            logger.error(f"Error fetching repositories: {e}")
             return {topic: {}}
 
         return {topic: content}
@@ -183,4 +190,4 @@ class GithubCrawler(BaseCrawler):
         with open(output_path, "w") as f:
             json.dump(existing_data, f)
 
-        logging.info(f"Saved repository data to {output_path}")
+        logger.info(f"Saved repository data to {output_path}")

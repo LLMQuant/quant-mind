@@ -1,5 +1,4 @@
 import os
-import logging
 import argparse
 import datetime
 import requests
@@ -7,13 +6,10 @@ import yaml
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Any, Optional
 
+from utils.logger import setup_logger
 
-# Configure logging
-logging.basicConfig(
-    format="[%(asctime)s %(levelname)s] %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
-)
+# Set up logger
+logger = setup_logger(__name__)
 
 
 class BaseCrawler(ABC):
@@ -91,24 +87,24 @@ class BaseCrawler(ABC):
 
     def run(self) -> None:
         """Execute the crawler workflow."""
-        logging.info(f"Starting crawler: {self.__class__.__name__}")
+        logger.info(f"Starting crawler: {self.__class__.__name__}")
 
         keywords = self.config.get("keywords", {})
         max_results = self.config.get("max_results", 10)
 
-        logging.info("Fetching data begin")
+        logger.info("Fetching data begin")
         for topic, keyword_info in keywords.items():
             if isinstance(keyword_info, dict) and "filters" in keyword_info:
                 query = " OR ".join(keyword_info["filters"])
             else:
                 query = topic
 
-            logging.info(f"Processing topic: {topic}, query: {query}")
+            logger.info(f"Processing topic: {topic}, query: {query}")
             data = self.fetch_data(topic, query, max_results)
             processed_data = self.process_data(data)
             self.data_collector.append(processed_data)
 
-        logging.info("Fetching data end")
+        logger.info("Fetching data end")
 
         # Save collected data
         if self.data_collector:
@@ -116,7 +112,7 @@ class BaseCrawler(ABC):
             output_path = os.path.join(self.output_dir, f"{today}.json")
             for data in self.data_collector:
                 self.save_data(data, output_path)
-            logging.info(f"Data saved to {output_path}")
+            logger.info(f"Data saved to {output_path}")
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -134,7 +130,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
     """
     with open(config_file, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-        logging.info(f"Loaded config = {config}")
+        logger.info(f"Loaded config = {config}")
     return config
 
 
@@ -174,9 +170,9 @@ def main():
         crawler.run()
 
     except ImportError as e:
-        logging.error(f"Failed to import crawler module: {e}")
+        logger.error(f"Failed to import crawler module: {e}")
     except Exception as e:
-        logging.error(f"Error running crawler: {e}")
+        logger.error(f"Error running crawler: {e}")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,19 @@
 import os
 import json
 import arxiv
-import logging
 import datetime
 import requests
 from typing import Dict, List, Any, Optional
 
 from base_crawler import BaseCrawler
+from utils.logger import setup_logger
+
+# ArXiv-specific constants
+ARXIV_URL = "http://arxiv.org/"
+BASE_URL = "https://arxiv.paperswithcode.com/api/v0/papers/"
+
+# Set up logger
+logger = setup_logger(__name__)
 
 
 class ArxivCrawler(BaseCrawler):
@@ -25,9 +32,6 @@ class ArxivCrawler(BaseCrawler):
             Dictionary containing configuration settings.
         """
         super().__init__(config)
-        # ArXiv-specific constants
-        self.ARXIV_URL = "http://arxiv.org/"
-        self.BASE_URL = "https://arxiv.paperswithcode.com/api/v0/papers/"
 
     def get_authors(self, authors, partial_author: bool = False) -> str:
         """Retrieve a formatted string of authors.
@@ -90,7 +94,7 @@ class ArxivCrawler(BaseCrawler):
             paper_id = result.get_short_id()
             paper_title = result.title
             paper_url = result.entry_id
-            code_url = self.BASE_URL + paper_id  # API endpoint for code link
+            code_url = BASE_URL + paper_id  # API endpoint for code link
             paper_abstract = result.summary.replace("\n", " ")
             paper_authors = self.get_authors(result.authors)
             paper_first_author = self.get_authors(
@@ -105,7 +109,7 @@ class ArxivCrawler(BaseCrawler):
                 else ""
             )
 
-            logging.info(
+            logger.info(
                 f"Time = {update_time} title = {paper_title} author = {paper_first_author}"
             )
 
@@ -115,7 +119,7 @@ class ArxivCrawler(BaseCrawler):
                 paper_key = paper_id
             else:
                 paper_key = paper_id[0:ver_pos]
-            paper_url = self.ARXIV_URL + "abs/" + paper_key
+            paper_url = ARXIV_URL + "abs/" + paper_key
 
             # Download the PDF file if enabled in config
             if self.config.get("download_pdf", False):
@@ -126,7 +130,7 @@ class ArxivCrawler(BaseCrawler):
                 )
                 with open(pdf_filename, "wb") as pdf_file:
                     pdf_file.write(pdf_response.content)
-                logging.info(
+                logger.info(
                     f"Downloaded PDF for {paper_title} to {pdf_filename}"
                 )
 
@@ -137,7 +141,7 @@ class ArxivCrawler(BaseCrawler):
                 if "official" in r and r["official"]:
                     repo_url = r["official"]["url"]
             except Exception as e:
-                logging.error(f"Exception: {e} with id: {paper_key}")
+                logger.error(f"Exception: {e} with id: {paper_key}")
 
             # Format the paper data
             if repo_url is not None:
@@ -219,4 +223,4 @@ class ArxivCrawler(BaseCrawler):
         with open(output_path, "w") as f:
             json.dump(existing_data, f)
 
-        logging.info(f"Saved paper data to {output_path}")
+        logger.info(f"Saved paper data to {output_path}")
