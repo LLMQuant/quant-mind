@@ -140,8 +140,10 @@ class ArxivCrawler(BaseCrawler):
                 r = requests.get(code_url).json()
                 if "official" in r and r["official"]:
                     repo_url = r["official"]["url"]
-            except Exception as e:
-                logger.error(f"Exception: {e} with id: {paper_key}")
+            except requests.exceptions.RequestException as req_err:
+                logger.error(f"Request error: {req_err} with id: {paper_key}")
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON decode error: {json_err} with id: {paper_key}")
 
             # Format the paper data
             if repo_url is not None:
