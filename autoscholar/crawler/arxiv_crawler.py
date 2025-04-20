@@ -20,7 +20,7 @@ logger = setup_logger(__name__)
 @dataclass
 class ArxivCrawlerConfig:
     """Configuration class for ArxivCrawler.
-    
+
     Attributes:
     ----------
     output_dir : str
@@ -32,20 +32,21 @@ class ArxivCrawlerConfig:
     keywords : Dict[str, Any]
         Dictionary of search keywords and filters
     """
+
     output_dir: str = "data"
     max_results: int = 10
     download_pdf: bool = False
     keywords: Dict[str, Any] = None
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'ArxivCrawlerConfig':
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "ArxivCrawlerConfig":
         """Create an ArxivCrawlerConfig instance from a dictionary.
-        
+
         Parameters:
         ----------
         config_dict : Dict[str, Any]
             Dictionary containing configuration settings
-            
+
         Returns:
         -------
         ArxivCrawlerConfig
@@ -55,7 +56,7 @@ class ArxivCrawlerConfig:
             output_dir=config_dict.get("output_dir", "data"),
             max_results=config_dict.get("max_results", 10),
             download_pdf=config_dict.get("download_pdf", False),
-            keywords=config_dict.get("keywords", {})
+            keywords=config_dict.get("keywords", {}),
         )
 
 
@@ -78,12 +79,14 @@ class ArxivCrawler(BaseCrawler):
         self.config = ArxivCrawlerConfig.from_dict(kwargs)
         self.all_results = {}
 
-    def get_authors(self, authors, partial_author: bool = False) -> str:
+    def get_authors(
+        self, authors: List[str], partial_author: bool = False
+    ) -> str:
         """Retrieve a formatted string of authors.
 
         Parameters:
         ----------
-        authors : list
+        authors : List[str]
             List of author names.
         partial_author : bool, optional
             If True, return only the first three authors.
@@ -114,11 +117,18 @@ class ArxivCrawler(BaseCrawler):
             Path to the PDF folder
         """
         # Create folder structure: output_dir/arxiv/topic/YYYY-MM
-        folder_path = Path(self.config.output_dir) / "arxiv" / topic / date.strftime("%Y-%m")
+        folder_path = (
+            Path(self.config.output_dir)
+            / "arxiv"
+            / topic
+            / date.strftime("%Y-%m")
+        )
         folder_path.mkdir(parents=True, exist_ok=True)
         return folder_path
 
-    def _download_pdf(self, result: arxiv.Result, paper_key: str, topic: str) -> None:
+    def _download_pdf(
+        self, result: arxiv.Result, paper_key: str, topic: str
+    ) -> None:
         """Download PDF for a paper.
 
         Parameters:
@@ -134,7 +144,7 @@ class ArxivCrawler(BaseCrawler):
             # Get the appropriate folder based on topic and date
             pdf_folder = self._get_pdf_folder(topic, result.published.date())
             pdf_path = pdf_folder / f"{paper_key}.pdf"
-            
+
             pdf_response = requests.get(result.pdf_url)
             with open(pdf_path, "wb") as f:
                 f.write(pdf_response.content)
@@ -159,11 +169,16 @@ class ArxivCrawler(BaseCrawler):
             response = requests.get(f"{BASE_URL}{paper_id}").json()
             if "official" in response and response["official"]:
                 return response["official"]["url"]
-        except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        except (
+            requests.exceptions.RequestException,
+            json.JSONDecodeError,
+        ) as e:
             logger.error(f"Error getting code URL for {paper_id}: {e}")
         return None
 
-    def _process_paper(self, result: arxiv.Result, topic: str) -> Dict[str, Any]:
+    def _process_paper(
+        self, result: arxiv.Result, topic: str
+    ) -> Dict[str, Any]:
         """Process a single paper result.
 
         Parameters:
@@ -179,7 +194,7 @@ class ArxivCrawler(BaseCrawler):
             Processed paper data
         """
         paper_id = result.get_short_id()
-        paper_key = paper_id.split('v')[0]  # Remove version number
+        paper_key = paper_id.split("v")[0]  # Remove version number
         paper_url = f"{ARXIV_URL}abs/{paper_key}"
 
         # Get code repository URL if available
@@ -193,14 +208,18 @@ class ArxivCrawler(BaseCrawler):
             "topic": topic,
             "title": result.title,
             "authors": self.get_authors(result.authors),
-            "first_author": self.get_authors(result.authors, partial_author=True),
+            "first_author": self.get_authors(
+                result.authors, partial_author=True
+            ),
             "abstract": result.summary.replace("\n", " "),
             "url": paper_url,
             "code_url": repo_url,
             "category": result.primary_category,
             "publish_time": str(result.published.date()),
             "update_time": str(result.updated.date()),
-            "comments": result.comment.replace("\n", " ") if result.comment else ""
+            "comments": result.comment.replace("\n", " ")
+            if result.comment
+            else "",
         }
 
     def _fetch_papers(self, topic: str, query: str, max_results: int) -> None:
@@ -222,7 +241,7 @@ class ArxivCrawler(BaseCrawler):
         )
 
         for result in search.results():
-            paper_key = result.get_short_id().split('v')[0]
+            paper_key = result.get_short_id().split("v")[0]
             self.all_results[paper_key] = self._process_paper(result, topic)
             logger.info(f"Processed paper: {result.title}")
 
@@ -237,7 +256,7 @@ class ArxivCrawler(BaseCrawler):
 
         today = datetime.date.today().strftime("%Y-%m-%d")
         output_path = output_dir / f"arxiv_papers_{today}.json"
-        
+
         # Load existing data if any
         if output_path.exists():
             with open(output_path, "r") as f:

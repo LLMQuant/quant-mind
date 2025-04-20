@@ -18,7 +18,7 @@ logger = setup_logger(__name__)
 @dataclass
 class GithubCrawlerConfig:
     """Configuration class for GithubCrawler.
-    
+
     Attributes:
     ----------
     output_dir : str
@@ -30,20 +30,21 @@ class GithubCrawlerConfig:
     keywords : Dict[str, Any]
         Dictionary of search keywords and filters
     """
+
     output_dir: str = "data"
     max_results: int = 10
     github_token: str = None
     keywords: Dict[str, Any] = None
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'GithubCrawlerConfig':
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "GithubCrawlerConfig":
         """Create a GithubCrawlerConfig instance from a dictionary.
-        
+
         Parameters:
         ----------
         config_dict : Dict[str, Any]
             Dictionary containing configuration settings
-            
+
         Returns:
         -------
         GithubCrawlerConfig
@@ -53,7 +54,7 @@ class GithubCrawlerConfig:
             output_dir=config_dict.get("output_dir", "data"),
             max_results=config_dict.get("max_results", 10),
             github_token=config_dict.get("github_token"),
-            keywords=config_dict.get("keywords", {})
+            keywords=config_dict.get("keywords", {}),
         )
 
 
@@ -114,7 +115,6 @@ class GithubCrawler(BaseCrawler):
         max_results : int
             Maximum number of repositories to fetch
         """
-
         # Set up the search parameters
         params = {
             "q": query,
@@ -140,14 +140,24 @@ class GithubCrawler(BaseCrawler):
                 repo_id = str(repo["id"])
                 repo_name = repo["full_name"]
                 repo_url = repo["html_url"]
-                repo_description = repo["description"] if repo["description"] else "No description"
+                repo_description = (
+                    repo["description"]
+                    if repo["description"]
+                    else "No description"
+                )
                 repo_stars = repo["stargazers_count"]
                 repo_forks = repo["forks_count"]
-                repo_language = repo["language"] if repo["language"] else "Not specified"
-                repo_created = repo["created_at"].split("T")[0]  # Format as YYYY-MM-DD
+                repo_language = (
+                    repo["language"] if repo["language"] else "Not specified"
+                )
+                repo_created = repo["created_at"].split("T")[
+                    0
+                ]  # Format as YYYY-MM-DD
                 repo_updated = repo["updated_at"].split("T")[0]
 
-                logger.info(f"Repository: {repo_name}, Stars: {repo_stars}, Language: {repo_language}")
+                logger.info(
+                    f"Repository: {repo_name}, Stars: {repo_stars}, Language: {repo_language}"
+                )
 
                 # Store repository data
                 repo_data = {
@@ -159,7 +169,7 @@ class GithubCrawler(BaseCrawler):
                     "forks": repo_forks,
                     "language": repo_language,
                     "created_at": repo_created,
-                    "updated_at": repo_updated
+                    "updated_at": repo_updated,
                 }
 
                 self.all_results[repo_id] = repo_data
@@ -181,7 +191,7 @@ class GithubCrawler(BaseCrawler):
         # Save to a single JSON file with current date
         today = datetime.date.today().strftime("%Y-%m-%d")
         output_path = output_dir / f"github_repos_{today}.json"
-        
+
         # Load existing data if any
         if output_path.exists():
             with open(output_path, "r") as f:

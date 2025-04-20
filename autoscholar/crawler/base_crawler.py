@@ -26,12 +26,12 @@ class BaseCrawler(ABC):
         """
         self.config = kwargs
         self.output_dir = kwargs.get("output_dir", "data")
-        
+
         # Create output directory if it doesn't exist
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def from_config_file(cls, config_path: Path, **kwargs) -> 'BaseCrawler':
+    def from_config_file(cls, config_path: Path, **kwargs) -> "BaseCrawler":
         """Create a crawler instance from a configuration file.
 
         Parameters:
@@ -47,9 +47,11 @@ class BaseCrawler(ABC):
             Configured crawler instance
         """
         if not config_path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+            raise FileNotFoundError(
+                f"Configuration file not found: {config_path}"
+            )
 
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
 
         # Update config with any overrides
@@ -69,4 +71,3 @@ class BaseCrawler(ABC):
             Optional parameters that can be used by subclasses.
         """
         pass
-
