@@ -1,4 +1,4 @@
-<p align="center"><h1 align="center">🌟 QUANT-SCHOLAR 🌟</h1><h2 align="center">Automatically Quantitative Finance Papers List</h2></p> 
+<p align="center"><h1 align="center">🌟 QUANT-PAPER 🌟</h1><h2 align="center">Automatically Quantitative Finance Papers List</h2></p> 
 <p align="center"><img src="https://raw.githubusercontent.com/LLMQuant/quant-scholar/main/asset/icon.png" width="180"></p>
  
 ## 🚩 Updated on 2025.06.07 
