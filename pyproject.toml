@@ -23,12 +23,12 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [tool.setuptools]
-packages = ["autoscholar"]
+packages = ["autoscholar", "quantmind"]
 
 [project]
-name = "autoscholar"
-version = "0.1.0"
-description = "Quantitative Auto-Scholar"
+name = "quantmind"
+version = "0.2.0"
+description = "QuantMind - Intelligent Knowledge Extraction and Retrieval Framework"
 requires-python = ">=3.10"
 dependencies = [
     "requests",
@@ -46,4 +46,23 @@ dependencies = [
     "pillow>=11.1.0",
     "llama-cloud-services>=0.6.12",
     "ipykernel>=6.29.5",
+    "pydantic>=2.0.0",
+    "pymupdf>=1.23.0",
+]
+
+[project.scripts]
+quantmind = "quantmind_cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]
+full = [
+    "marker-pdf>=0.2.0",
+    "beautifulsoup4>=4.12.0",
+    "sentence-transformers>=2.2.0",
 ]
