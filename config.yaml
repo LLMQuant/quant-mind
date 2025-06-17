@@ -8,7 +8,7 @@ max_results: 20
 
 publish_readme: True
 paper_list_json_path: './docs/quant-scholar.json'
-paper_list_path: 'README.md'
+paper_list_path: 'docs/papers.md'
 
 keywords:
     "Machine Learning in Finance":

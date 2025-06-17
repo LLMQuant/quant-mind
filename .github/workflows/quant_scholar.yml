@@ -35,12 +35,12 @@ jobs:
       - name: Run quant_scholar.py
         run: |
           python quant_scholar.py
-          cp README.md wiki/index.md
+          cp docs/papers.md wiki/index.md
 
       - name: Commit and Push
         run: |
           git config --global user.name "${{ env.GITHUB_USER_NAME }}"
           git config --global user.email "${{ env.GITHUB_USER_EMAIL }}"
-          git add README.md docs/quant-scholar.json wiki/index.md
+          git add docs/papers.md docs/quant-scholar.json wiki/index.md
           git commit -m "[Workflow] Automatic Update Quant Scholar Paper List" || echo "No changes to commit"
           git push
