@@ -55,14 +55,14 @@ class Paper(BaseModel):
 
         json_encoders = {datetime: lambda v: v.isoformat()}
 
-    @field_validator("categories", "tags", model="before")
+    @field_validator("categories", "tags", mode="before")
     def ensure_list(cls, v):
         """Ensure categories and tags are always lists."""
         if isinstance(v, str):
             return [v]
         return v or []
 
-    @field_validator("authors", model="before")
+    @field_validator("authors", mode="before")
     def parse_authors(cls, v):
         """Parse authors from various formats."""
         if isinstance(v, str):
