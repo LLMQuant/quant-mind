@@ -2,9 +2,14 @@ import json
 import arxiv
 import datetime
 import requests
+import subprocess
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
+
+from camel.models import ModelFactory
+from camel.types import ModelPlatformType, ModelType
+from camel.agents import ChatAgent
 
 from autoscholar.crawler.base_crawler import BaseCrawler
 from autoscholar.utils.logger import setup_logger
@@ -129,7 +134,7 @@ class ArxivCrawler(BaseCrawler):
     def _download_pdf(
         self, result: arxiv.Result, paper_key: str, topic: str
     ) -> None:
-        """Download PDF for a paper.
+        """Download PDF for a paper and convert it to Markdown.
 
         Parameters:
         ----------
@@ -144,13 +149,25 @@ class ArxivCrawler(BaseCrawler):
             # Get the appropriate folder based on topic and date
             pdf_folder = self._get_pdf_folder(topic, result.published.date())
             pdf_path = pdf_folder / f"{paper_key}.pdf"
+            markdown_path = pdf_folder / f"{paper_key}.md"
 
+            # Download PDF
             pdf_response = requests.get(result.pdf_url)
             with open(pdf_path, "wb") as f:
                 f.write(pdf_response.content)
             logger.info(f"Downloaded PDF for {paper_key} to {pdf_path}")
+
+            # Convert PDF to Markdown
+            conversion_command = ["marker_single", str(pdf_path)]
+            conversion_command.extend(["--output_dir", str(pdf_folder)])
+
+            subprocess.run(conversion_command, check=True)
+            logger.info(f"Converted PDF to Markdown for {paper_key}")
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error downloading PDF for {paper_key}: {e}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error converting PDF to Markdown for {paper_key}: {e}")
 
     def _get_code_url(self, paper_id: str) -> Optional[str]:
         """Get code repository URL for a paper.
@@ -176,6 +193,86 @@ class ArxivCrawler(BaseCrawler):
             logger.error(f"Error getting code URL for {paper_id}: {e}")
         return None
 
+    def _classify_paper(self, title: str, abstract: str, markdown_content: str = "") -> Dict[str, Any]:
+        """Classify a paper using LLM to extract detailed information.
+
+        Parameters:
+        ----------
+        title : str
+            Paper title
+        abstract : str
+            Paper abstract
+        markdown_content : str, optional
+            Paper content in markdown format
+
+        Returns:
+        -------
+        Dict[str, Any]
+            Dictionary containing classification information
+        """
+        try:
+            model_instance = ModelFactory.create(
+                model_platform=ModelPlatformType.OPENAI,
+                model_type=ModelType.GPT_4O,
+                model_config_dict={"temperature": 0.0},
+            )
+            chat_agent = ChatAgent(model=model_instance)
+
+            prompt = f"""Analyze this academic paper and provide a detailed classification in JSON format:
+
+Title: {title}
+Abstract: {abstract}
+{f'Paper Content: {markdown_content}' if markdown_content else ''}
+
+Please classify the paper based on the following aspects:
+1. Trading Frequency: high_frequency, medium_frequency, or low_frequency
+2. Market Type: stock_market, crypto_market, forex_market, commodity_market, or other
+3. Models Used: list of specific models mentioned (e.g., LSTM, BERT, GPT, etc.)
+4. Data Types: list of data types used (e.g., price_data, news_data, sentiment_data, etc.)
+5. Trading Strategy: list of trading strategies mentioned (e.g., trend_following, mean_reversion, etc.)
+
+Return the classification in this exact JSON format:
+{{
+"trading_frequency": "string",
+"market_type": "string",
+"models_used": ["string"],
+"data_types": ["string"],
+"trading_strategies": ["string"]
+}}"""
+
+            # Get classification from LLM
+            response = chat_agent.step(prompt)
+            response_content = response.msgs[0].content.strip()
+            
+            # Log the raw response for debugging
+            logger.debug(f"Raw LLM response for paper '{title}': {response_content}")
+            
+            try:
+                classification = json.loads(response_content)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse LLM response as JSON for paper '{title}': {e}")
+                logger.error(f"Raw response content: {response_content}")
+                # Return default classification if JSON parsing fails
+                return {
+                    "trading_frequency": "unknown",
+                    "market_type": "unknown",
+                    "models_used": [],
+                    "data_types": [],
+                    "trading_strategies": []
+                }
+                
+            return classification
+
+        except Exception as e:
+            logger.error(f"Error classifying paper '{title}': {e}")
+            return {
+                "trading_frequency": "unknown",
+                "market_type": "unknown",
+                "models_used": [],
+                "data_types": [],
+                "trading_strategies": []
+            }
+
     def _process_paper(
         self, result: arxiv.Result, topic: str
     ) -> Dict[str, Any]:
@@ -200,9 +297,22 @@ class ArxivCrawler(BaseCrawler):
         # Get code repository URL if available
         repo_url = self._get_code_url(paper_id)
 
-        # Download PDF if enabled
+        # Download PDF and convert to markdown if enabled
+        markdown_content = ""
         if self.config.download_pdf:
             self._download_pdf(result, paper_key, topic)
+            # Read the converted markdown file
+            try:
+                markdown_path = self._get_pdf_folder(topic, result.published.date()) / f"{paper_key}.md"
+                if markdown_path.exists():
+                    with open(markdown_path, 'r', encoding='utf-8') as f:
+                        markdown_content = f.read()
+            except Exception as e:
+                logger.error(f"Error reading markdown file for {paper_key}: {e}")
+            
+        # Get detailed classification using LLM
+        classification = self._classify_paper(result.title, result.summary, markdown_content)
+        print(f"Classification: {classification}")
 
         return {
             "topic": topic,
@@ -220,6 +330,7 @@ class ArxivCrawler(BaseCrawler):
             "comments": result.comment.replace("\n", " ")
             if result.comment
             else "",
+            "classification": classification,
         }
 
     def _fetch_papers(self, topic: str, query: str, max_results: int) -> None:
