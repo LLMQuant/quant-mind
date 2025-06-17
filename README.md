@@ -1,5 +1,3 @@
-<p align="center">
-<b>From Knowledge to Alpha</b><br>
 
 <p align="center">
   <img src="asset/quant-mind-logo.png" width="160">
@@ -8,9 +6,9 @@
 
 <!-- 使用 asset/ 下的 svg -->
 
-<h1 align="center">
+<p align="center">
   <img src="asset/quant-mind.svg" width="400">
-</h1>
+</p>
 
 <p align="center">
   <b>Transform Financial Knowledge into Actionable Intelligence</b>
