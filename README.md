@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="asset/quant-mind-logo.png" width="160">
+  <img src="asset/quantmind-logo.png" width="160">
 </p>
 
 
