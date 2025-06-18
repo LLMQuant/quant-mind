@@ -107,7 +107,7 @@ class TestArxivSource(unittest.TestCase):
         source = ArxivSource(config=ArxivSourceConfig(requests_per_second=2.0))
 
         # Mock time to test rate limiting
-        with patch("time.time", side_effect=[1, 1.2, 1.5, 1.7]):
+        with patch("time.time", side_effect=[1, 1.2, 1.5, 1.7, 3.0]):
             with patch("time.sleep") as mock_sleep:
                 source._rate_limit()  # First call, no sleep
                 source._rate_limit()  # Second call, should sleep

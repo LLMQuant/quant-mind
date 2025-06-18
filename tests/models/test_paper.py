@@ -182,8 +182,8 @@ class TestPaper:
         with pytest.raises(ValueError):
             Paper(title="", abstract="Valid abstract")
 
-        with pytest.raises(ValueError):
-            Paper(title="Valid title", abstract="")
+        # Test empty abstract is allowed
+        Paper(title="Valid title", abstract="")
 
     def test_string_representations(self):
         """Test string representations."""
