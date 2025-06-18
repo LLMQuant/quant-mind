@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.black]
 line-length = 80
 
@@ -22,8 +26,12 @@ convention = "google"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
-[tool.setuptools]
-packages = ["autoscholar", "quantmind"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantmind*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json", "*.txt"]
 
 [project]
 name = "quantmind"
@@ -43,7 +51,7 @@ dependencies = [
     "plotly>=6.0.1",
     "openai>=1.68.2",
     "camel-ai>=0.2.42",
-    "pillow>=11.1.0",
+    "pillow>=10.1.0,<11.0.0",
     "llama-cloud-services>=0.6.12",
     "ipykernel>=6.29.5",
     "pydantic>=2.0.0",

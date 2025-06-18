@@ -1,68 +1,44 @@
 """Paper model for QuantMind knowledge representation."""
 
 import json
-import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, validator
+
+from quantmind.models.content import KnowledgeItem
 
 
-class Paper(BaseModel):
+class Paper(KnowledgeItem):
     """Research paper entity with structured metadata and validation.
 
     Core knowledge unit in the QuantMind system, representing a research paper
     with comprehensive metadata, content, and processing information.
     """
 
-    # Core identifiers
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    # Paper-specific identifiers
     paper_id: Optional[str] = None
     arxiv_id: Optional[str] = None
     doi: Optional[str] = None
 
-    # Core content
-    title: str = Field(..., min_length=1)
-    abstract: str = Field(..., min_length=1)
-    full_text: Optional[str] = None
+    # Override content type
+    content_type: str = Field(default="paper")
 
-    # Metadata
-    authors: List[str] = Field(default_factory=list)
-    published_date: Optional[datetime] = None
-    categories: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
+    # Paper-specific content (inherit title, abstract, content from parent)
+    full_text: Optional[str] = None  # Alias for content
 
-    # URLs and sources
-    url: Optional[str] = None
-    pdf_url: Optional[str] = None
+    # Additional paper URLs (inherit url, pdf_url from parent)
     code_url: Optional[str] = None
 
-    # Processing metadata
-    source: Optional[str] = None  # e.g., "arxiv", "pubmed"
-    extraction_method: Optional[str] = None  # e.g., "api", "pdf_parse"
-    processed_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Vector representation
-    embedding: Optional[List[float]] = None
-    embedding_model: Optional[str] = None
-
-    # Flexible metadata storage
-    meta_info: Dict[str, Any] = Field(default_factory=dict)
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
-
-    @field_validator("categories", "tags", mode="before")
+    @validator("categories", "tags", pre=True)
     def ensure_list(cls, v):
         """Ensure categories and tags are always lists."""
         if isinstance(v, str):
             return [v]
         return v or []
 
-    @field_validator("authors", mode="before")
+    @validator("authors", pre=True)
     def parse_authors(cls, v):
         """Parse authors from various formats."""
         if isinstance(v, str):
