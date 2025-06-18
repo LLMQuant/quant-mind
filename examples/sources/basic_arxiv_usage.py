@@ -189,12 +189,12 @@ def category_search_example():
 def main():
     """Run all examples."""
     examples = [
-        # basic_search_example,
-        # configured_search_example,
-        # get_by_id_example,
-        # recent_papers_example,
-        # batch_retrieval_example,
-        # category_search_example,
+        basic_search_example,
+        configured_search_example,
+        get_by_id_example,
+        recent_papers_example,
+        batch_retrieval_example,
+        category_search_example,
         download_example,  # This one creates files, so run it last
     ]
 
