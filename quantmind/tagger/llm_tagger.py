@@ -235,7 +235,7 @@ class LLMTagger(BaseTagger):
 
 Title: {title}
 Abstract: {abstract}
-{f'Content: {full_text[:2000]}...' if full_text else ''}
+{f"Content: {full_text[:2000]}..." if full_text else ""}
 
 Please classify the paper based on the following aspects:
 

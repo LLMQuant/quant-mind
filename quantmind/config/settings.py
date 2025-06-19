@@ -1,11 +1,16 @@
 """Configuration management for QuantMind."""
 
-import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 
+from quantmind.config.parsers import (
+    BaseParserConfig,
+    LlamaParserConfig,
+    PDFParserConfig,
+)
+from quantmind.utils.env import EnvConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,12 +27,14 @@ class SourceConfig:
 
 
 @dataclass
-class ParserConfig:
-    """Configuration for content parsers."""
+class ComponentConfig:
+    """Base configuration for a component."""
 
     name: str
     type: str
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: Union[BaseParserConfig, Dict[str, Any]] = field(
+        default_factory=dict
+    )
     enabled: bool = True
 
 
@@ -68,7 +75,7 @@ class Settings:
 
     # Component configurations
     sources: Dict[str, SourceConfig] = field(default_factory=dict)
-    parsers: Dict[str, ParserConfig] = field(default_factory=dict)
+    parsers: Dict[str, ComponentConfig] = field(default_factory=dict)
     taggers: Dict[str, TaggerConfig] = field(default_factory=dict)
     storages: Dict[str, StorageConfig] = field(default_factory=dict)
 
@@ -82,6 +89,7 @@ class Settings:
 
     # API configurations
     openai_api_key: Optional[str] = None
+    llama_cloud_api_key: Optional[str] = None
     arxiv_max_results: int = 100
 
     @classmethod
@@ -107,10 +115,22 @@ class Settings:
 
         # Load parsers
         for name, parser_data in config_dict.get("parsers", {}).items():
-            settings.parsers[name] = ParserConfig(
+            parser_type = parser_data.get("type", "unknown")
+            parser_config_data = parser_data.get("config", {})
+
+            # Create appropriate Pydantic config based on parser type
+            if parser_type == "LlamaParser":
+                parser_config = LlamaParserConfig(**parser_config_data)
+            elif parser_type == "PDFParser":
+                parser_config = PDFParserConfig(**parser_config_data)
+            else:
+                # For unknown types, keep as dict for backward compatibility
+                parser_config = parser_config_data
+
+            settings.parsers[name] = ComponentConfig(
                 name=name,
-                type=parser_data.get("type", "unknown"),
-                config=parser_data.get("config", {}),
+                type=parser_type,
+                config=parser_config,
                 enabled=parser_data.get("enabled", True),
             )
 
@@ -149,6 +169,7 @@ class Settings:
         settings.data_dir = config_dict.get("data_dir", "./data")
         settings.temp_dir = config_dict.get("temp_dir", "/tmp")
         settings.openai_api_key = config_dict.get("openai_api_key")
+        settings.llama_cloud_api_key = config_dict.get("llama_cloud_api_key")
         settings.arxiv_max_results = config_dict.get("arxiv_max_results", 100)
 
         return settings
@@ -171,7 +192,9 @@ class Settings:
             "parsers": {
                 name: {
                     "type": parser.type,
-                    "config": parser.config,
+                    "config": parser.config.model_dump()
+                    if hasattr(parser.config, "model_dump")
+                    else parser.config,
                     "enabled": parser.enabled,
                 }
                 for name, parser in self.parsers.items()
@@ -203,6 +226,7 @@ class Settings:
             "data_dir": self.data_dir,
             "temp_dir": self.temp_dir,
             "openai_api_key": self.openai_api_key,
+            "llama_cloud_api_key": self.llama_cloud_api_key,
             "arxiv_max_results": self.arxiv_max_results,
         }
 
@@ -218,7 +242,7 @@ class Settings:
             if config.enabled
         }
 
-    def get_enabled_parsers(self) -> Dict[str, ParserConfig]:
+    def get_enabled_parsers(self) -> Dict[str, ComponentConfig]:
         """Get enabled parser configurations.
 
         Returns:
@@ -311,12 +335,16 @@ def _apply_env_overrides(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Configuration with environment overrides applied
     """
+    # Ensure environment is loaded (including .env files)
+    EnvConfig.load_dotenv()
+
     # Define environment variable mappings
     env_mappings = {
         "QUANTMIND_LOG_LEVEL": "log_level",
         "QUANTMIND_DATA_DIR": "data_dir",
         "QUANTMIND_TEMP_DIR": "temp_dir",
         "OPENAI_API_KEY": "openai_api_key",
+        "LLAMA_CLOUD_API_KEY": "llama_cloud_api_key",
         "QUANTMIND_ARXIV_MAX_RESULTS": "arxiv_max_results",
         "QUANTMIND_MAX_WORKERS": "workflow.max_workers",
         "QUANTMIND_RETRY_ATTEMPTS": "workflow.retry_attempts",
@@ -324,7 +352,7 @@ def _apply_env_overrides(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     for env_var, config_key in env_mappings.items():
-        env_value = os.environ.get(env_var)
+        env_value = EnvConfig.get_env_var(env_var)
         if env_value is not None:
             # Handle nested keys
             keys = config_key.split(".")
@@ -366,15 +394,26 @@ def create_default_config() -> Settings:
         config={"max_results": 100, "sort_by": "SubmittedDate"},
     )
 
-    # Default parser configuration
-    settings.parsers["pdf"] = ParserConfig(
+    # Default parser configurations
+    settings.parsers["pdf"] = ComponentConfig(
         name="pdf",
         type="PDFParser",
-        config={
-            "method": "pymupdf",
-            "download_pdfs": True,
-            "max_file_size": 50,
-        },
+        config=PDFParserConfig(
+            method="pymupdf",
+            download_pdfs=True,
+            max_file_size_mb=50,
+        ),
+    )
+
+    settings.parsers["llama"] = ComponentConfig(
+        name="llama",
+        type="LlamaParser",
+        config=LlamaParserConfig(
+            result_type="markdown",
+            parsing_mode="fast",
+            max_file_size_mb=50,
+        ),
+        enabled=False,  # Disabled by default (requires API key)
     )
 
     # Default tagger configurations

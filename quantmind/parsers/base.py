@@ -1,8 +1,9 @@
 """Base parser interface for content extraction."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional, Union
 
+from quantmind.config.parsers import BaseParserConfig
 from quantmind.models.paper import Paper
 
 
@@ -13,13 +14,22 @@ class BaseParser(ABC):
     from various document formats (PDF, HTML, etc.).
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, config: Optional[Union[BaseParserConfig, Dict[str, Any]]] = None
+    ):
         """Initialize parser with configuration.
 
         Args:
-            config: Parser-specific configuration
+            config: Parser-specific configuration (Pydantic model or dict)
         """
-        self.config = config or {}
+        if isinstance(config, BaseParserConfig):
+            self.config = config
+        elif isinstance(config, dict):
+            # For backward compatibility, create BaseParserConfig from dict
+            self.config = BaseParserConfig(**config)
+        else:
+            self.config = BaseParserConfig()
+
         self.name = self.__class__.__name__.lower().replace("parser", "")
 
     @abstractmethod
@@ -91,20 +101,7 @@ class BaseParser(ABC):
         if not content or not isinstance(content, str):
             return False
 
-        # Basic quality checks
-        if len(content.strip()) < 100:  # Too short
-            return False
-
-        # Check for reasonable word count
-        words = content.split()
-        if len(words) < 20:  # Too few words
-            return False
-
-        # Check for excessive repeated characters (parsing errors)
-        for char in ["\n", " ", "\t"]:
-            if char * 10 in content:  # 10+ consecutive same characters
-                return False
-
+        # You can add more checks here.
         return True
 
     def clean_text(self, text: str) -> str:
@@ -160,7 +157,9 @@ class BaseParser(ABC):
         return {
             "name": self.name,
             "type": self.__class__.__name__,
-            "config": self.config,
+            "config": self.config.model_dump()
+            if hasattr(self.config, "model_dump")
+            else self.config,
         }
 
     def __str__(self) -> str:

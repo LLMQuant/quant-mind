@@ -3,7 +3,7 @@
 import os
 import tempfile
 import requests
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Union
 from pathlib import Path
 
 try:
@@ -21,6 +21,7 @@ try:
 except ImportError:
     MARKER_AVAILABLE = False
 
+from quantmind.config.parsers import PDFParserConfig
 from quantmind.models.paper import Paper
 from quantmind.parsers.base import BaseParser
 from quantmind.utils.logger import get_logger
@@ -36,23 +37,33 @@ class PDFParser(BaseParser):
     - Marker (AI-powered PDF to Markdown conversion)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, config: Optional[Union[PDFParserConfig, Dict[str, Any]]] = None
+    ):
         """Initialize PDF parser.
 
         Args:
-            config: Configuration dictionary with:
-                - method: 'pymupdf' or 'marker' (default: 'pymupdf')
-                - download_pdfs: Whether to download PDFs from URLs (default: True)
-                - cache_dir: Directory to cache downloaded PDFs (default: temp)
-                - max_file_size: Maximum PDF file size in MB (default: 50)
+            config: Parser configuration (PDFParserConfig or dict)
         """
-        super().__init__(config)
+        # Handle config conversion
+        if isinstance(config, PDFParserConfig):
+            pdf_config = config
+        elif isinstance(config, dict):
+            pdf_config = PDFParserConfig(**config)
+        else:
+            pdf_config = PDFParserConfig()
 
-        self.method = self.config.get("method", "pymupdf")
-        self.download_pdfs = self.config.get("download_pdfs", True)
-        self.cache_dir = self.config.get("cache_dir", tempfile.gettempdir())
+        # Initialize base parser with the config
+        super().__init__(pdf_config)
+
+        # Store typed config for easier access
+        self.pdf_config = pdf_config
+
+        self.method = self.pdf_config.method
+        self.download_pdfs = self.pdf_config.download_pdfs
+        self.cache_dir = tempfile.gettempdir()  # Use temp dir for caching
         self.max_file_size = (
-            self.config.get("max_file_size", 50) * 1024 * 1024
+            self.pdf_config.max_file_size_mb * 1024 * 1024
         )  # Convert to bytes
 
         # Ensure cache directory exists

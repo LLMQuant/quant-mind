@@ -274,7 +274,7 @@ def main():
 
     for i, example in enumerate(examples, 1):
         try:
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"Configuration Example {i}/{len(examples)}")
             example()
         except Exception as e:
@@ -286,7 +286,7 @@ def main():
 
             time.sleep(0.5)
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("All configuration examples completed!")
 
 
