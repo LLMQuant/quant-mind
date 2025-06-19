@@ -198,12 +198,23 @@ class TestDefaultConfig(unittest.TestCase):
 class TestConfigLoading(unittest.TestCase):
     """Test cases for configuration loading."""
 
+    @patch("quantmind.utils.env.EnvConfig.get_env_var")
+    @patch("quantmind.utils.env.EnvConfig.load_dotenv")
     @patch("builtins.open", new_callable=mock_open)
     @patch("quantmind.config.settings.yaml.safe_load")
     @patch("quantmind.config.settings.Path.exists")
-    def test_load_config_yaml(self, mock_exists, mock_yaml_load, mock_file):
+    def test_load_config_yaml(
+        self,
+        mock_exists,
+        mock_yaml_load,
+        mock_file,
+        mock_load_dotenv,
+        mock_get_env_var,
+    ):
         """Test loading configuration from YAML file."""
         mock_exists.return_value = True
+        mock_load_dotenv.return_value = True
+        mock_get_env_var.return_value = None  # No environment overrides
         mock_yaml_load.return_value = {
             "parsers": {
                 "llama": {
