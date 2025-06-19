@@ -143,6 +143,7 @@ class ArxivSource(BaseSource[Paper]):
         query = f"cat:{category}"
         return self.search(query, max_results)
 
+    # TODO: Should category and keyword be passed as parameters?
     def search_financial_topics(self, max_results: int = 100) -> List[Paper]:
         """Search for papers related to quantitative finance.
 
@@ -250,6 +251,7 @@ class ArxivSource(BaseSource[Paper]):
         self._last_request_time = time.time()
 
     def _should_include_paper(self, paper: Paper) -> bool:
+        # TODO: Consider introducing large language model judgment in the future
         """Check if paper should be included based on config filters."""
         # Check abstract length
         if (
