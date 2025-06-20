@@ -9,15 +9,13 @@ This module provides advanced analysis capabilities for research papers includin
 from quantmind.research.paper_analyzer import PaperAnalyzer
 from quantmind.research.tag_analyzer import LLMTagAnalyzer
 from quantmind.research.qa_generator import LLMQAGenerator
-from quantmind.research.models import (
-    AnalysisConfig, PaperTag, QuestionAnswer
-)
+from quantmind.research.models import AnalysisConfig, PaperTag, QuestionAnswer
 
 __all__ = [
-    "LLMTagAnalyzer", 
+    "LLMTagAnalyzer",
     "LLMQAGenerator",
     "PaperAnalysis",
-    "AnalysisConfig", 
+    "AnalysisConfig",
     "PaperTag",
-    "QuestionAnswer"
-] 
+    "QuestionAnswer",
+]
