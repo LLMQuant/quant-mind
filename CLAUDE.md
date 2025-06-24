@@ -171,3 +171,56 @@ When migrating from autoscholar to quantmind:
 3. Use the CLI for common operations
 4. Take advantage of new pipeline orchestration
 5. Leverage improved error handling and logging
+
+## User Development Guidance
+
+- Config should add in `quantmind/config`
+- Data models should add in `quantmind/models`
+- Initialize function can not use `Dict[str, Any]`, which is not type safe.
+- Do not overdesign the code, just implement the basic and straightforward code, since we can always refactor the code later.
+- For examples, add in `quantmind/examples`, and just demo the simple usage. (do not add too many use cases in single file)
+- For tests, add in `tests/<module_name>`, and inherit the `unittest.TestCase` class.
+
+## Tagger Module Refactoring (v0.0.1)
+
+### Simplified LLM Tagger Design
+The tagger module has been completely refactored to eliminate over-engineering:
+
+**Removed Components:**
+- `rule_tagger.py` - Removed rule-based tagger (obsolete in LLM era)
+- `PaperTag` class - Removed complex tag objects, use simple strings
+- `hierarchical_tags` feature - Removed unnecessary complexity
+- `confidence_score` calculations - LLM outputs are inherently probabilistic
+- Categories vs Tags distinction - Unified to use only tags
+
+**Simplified LLMTagger:**
+- **Type-safe configuration**: Uses `LLMTaggerConfig` Pydantic model instead of `Dict[str, Any]`
+- **Structured imports**: `from quantmind.config import LLMTaggerConfig` and `from quantmind.models import Paper`
+- **Clean interface**: Single `config` parameter with proper type hints
+- **Base tagger**: Simplified to only require `tag_paper()` and `extract_tags()` abstract methods
+- **Custom instructions**: Support for user-provided instructions via `config.custom_instructions`
+- **Flexible LLM support**: `config.llm_type` and `config.llm_name` for different providers
+- **Base URL support**: `config.base_url` for custom API endpoints
+
+**Configuration Structure:**
+```python
+from quantmind.config import LLMTaggerConfig
+
+config = LLMTaggerConfig(
+    llm_type="openai",
+    llm_name="gpt-4o",
+    max_tags=5,
+    custom_instructions="Focus on trading strategies",
+    api_key="your-api-key",
+    base_url="https://custom-endpoint.com"  # optional
+)
+
+tagger = LLMTagger(config=config)
+```
+
+**Design Principles:**
+- **No over-engineering**: Simple, direct implementation
+- **Type safety**: Proper Pydantic configuration models
+- **User-friendly**: Clear API with sensible defaults
+- **Extensible**: Easy to add new LLM providers through config
+- **Maintainable**: ~290 lines vs previous 800+ lines

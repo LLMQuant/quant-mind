@@ -258,12 +258,12 @@ class LLMQAGenerator:
 Paper Information:
 Title: {paper.title}
 Abstract: {paper.abstract}
-{f"Primary Tags: {', '.join(context.get('primary_tags', []))}" if context.get('primary_tags') else ""}
-{f"Secondary Tags: {', '.join(context.get('secondary_tags', []))}" if context.get('secondary_tags') else ""}
-{f"Content: {context.get('content', '')}" if context.get('content') else ""}
+{f"Primary Tags: {', '.join(context.get('primary_tags', []))}" if context.get("primary_tags") else ""}
+{f"Secondary Tags: {', '.join(context.get('secondary_tags', []))}" if context.get("secondary_tags") else ""}
+{f"Content: {context.get('content', '')}" if context.get("content") else ""}
 
 Difficulty Level: {difficulty}
-Focus Categories: {', '.join(categories)}
+Focus Categories: {", ".join(categories)}
 
 Generate questions that are {difficulty} level appropriate and deeply insightful.
 
