@@ -46,19 +46,6 @@ class BaseTagger(ABC):
         return [self.tag_paper(paper) for paper in papers]
 
     @abstractmethod
-    def extract_categories(self, text: str, title: str = "") -> List[str]:
-        """Extract categories from text content.
-
-        Args:
-            text: Text content to analyze
-            title: Optional title for additional context
-
-        Returns:
-            List of category strings
-        """
-        pass
-
-    @abstractmethod
     def extract_tags(self, text: str, title: str = "") -> List[str]:
         """Extract tags from text content.
 
@@ -70,18 +57,6 @@ class BaseTagger(ABC):
             List of tag strings
         """
         pass
-
-    def get_confidence_score(self, paper: Paper) -> float:
-        """Get confidence score for the tagging results.
-
-        Args:
-            paper: Tagged paper object
-
-        Returns:
-            Confidence score between 0.0 and 1.0
-        """
-        # Default implementation returns neutral confidence
-        return 0.5
 
     def validate_tags(self, tags: List[str]) -> List[str]:
         """Validate and clean extracted tags.

@@ -1,6 +1,6 @@
 """Data models for QuantMind knowledge representation."""
 
-from quantmind.models.paper import Paper
-from quantmind.models.knowledge_graph import KnowledgeGraph
+from .content import BaseContent
+from .paper import Paper
 
-__all__ = ["Paper", "KnowledgeGraph"]
+__all__ = ["Paper", "BaseContent"]
