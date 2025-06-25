@@ -13,7 +13,7 @@ except ImportError:
     CAMEL_AVAILABLE = False
 
 from quantmind.models.paper import Paper
-from quantmind.research.models import QuestionAnswer, AnalysisConfig
+from quantmind.models.analysis import QuestionAnswer, AnalysisConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
