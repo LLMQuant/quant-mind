@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from quantmind.models.paper import Paper
-from quantmind.research.models import PaperAnalysis, AnalysisConfig
+from quantmind.models.analysis import PaperAnalysis, AnalysisConfig
 from quantmind.research.tag_analyzer import LLMTagAnalyzer
 from quantmind.research.qa_generator import LLMQAGenerator
 from quantmind.utils.logger import get_logger
