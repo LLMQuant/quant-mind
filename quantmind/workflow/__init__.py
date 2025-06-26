@@ -1,7 +1,11 @@
-"""Workflow and orchestration components."""
+"""Workflow framework components."""
 
-from quantmind.workflow.agent import WorkflowAgent
-from quantmind.workflow.pipeline import Pipeline
-from quantmind.workflow.tasks import Task
+from quantmind.workflow.base import BaseWorkflow
+from quantmind.workflow.qa_workflow import QAWorkflow
+from quantmind.workflow.analyzer_workflow import AnalyzerWorkflow
 
-__all__ = ["WorkflowAgent", "Pipeline", "Task"]
+__all__ = [
+    "BaseWorkflow",
+    "QAWorkflow",
+    "AnalyzerWorkflow",
+]
