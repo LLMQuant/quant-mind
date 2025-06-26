@@ -1,19 +1,15 @@
 """Analysis and research-specific data models for QuantMind."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
+
 from pydantic import BaseModel, Field
 
-class PaperTag(BaseModel):
-    """Paper tag with confidence score."""
-    tag: str = Field(..., description="Tag name/category")
-    value: str = Field(..., description="Tag value")
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class QuestionAnswer(BaseModel):
     """Question and answer pair."""
+
     question: str = Field(..., description="Generated question")
     answer: str = Field(..., description="Generated answer")
     difficulty: str = Field(default="medium", description="Question difficulty")
@@ -25,15 +21,19 @@ class QuestionAnswer(BaseModel):
     confidence: float = Field(
         ge=0.0, le=1.0, default=0.8, description="Answer confidence"
     )
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
 
 class PaperAnalysis(BaseModel):
     """Comprehensive paper analysis results."""
+
     paper_id: str
     analysis_id: str = Field(default_factory=lambda: str(uuid4()))
     # Tags
-    primary_tags: List[PaperTag] = Field(default_factory=list)
-    secondary_tags: List[PaperTag] = Field(default_factory=list)
+    primary_tags: List[str] = Field(default_factory=list)
+    secondary_tags: List[str] = Field(default_factory=list)
     # Q&A
     questions_answers: List[QuestionAnswer] = Field(default_factory=list)
     # Summary
@@ -42,13 +42,20 @@ class PaperAnalysis(BaseModel):
     results_summary: Optional[str] = None
     # Metadata
     analysis_version: str = "1.0"
-    analysis_timestamp: datetime = Field(default_factory=datetime.utcnow)
+    analysis_timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     analysis_duration: Optional[float] = None  # seconds
+
     class Config:
+        """Pydantic model configuration."""
+
         json_encoders = {datetime: lambda v: v.isoformat()}
+
 
 class AnalysisConfig(BaseModel):
     """Configuration for paper analysis."""
+
     # Tag analysis
     enable_tag_analysis: bool = True
     tag_confidence_threshold: float = 0.7
@@ -69,4 +76,4 @@ class AnalysisConfig(BaseModel):
     temperature: float = 0.3
     # Processing
     parallel_processing: bool = True
-    cache_results: bool = True 
+    cache_results: bool = True
