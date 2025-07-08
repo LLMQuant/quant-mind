@@ -1,18 +1,18 @@
-"""Tests for PaperSummaryWorkflow."""
+"""Tests for SummaryWorkflow."""
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
-from quantmind.models.paper import Paper
-from quantmind.workflow.paper_summary_workflow import PaperSummaryWorkflow
-from quantmind.config.workflows import PaperSummaryWorkflowConfig
+from quantmind.models import Paper
+from quantmind.workflow import SummaryWorkflow
+from quantmind.config import SummaryWorkflowConfig
 
 
-class TestPaperSummaryWorkflow(unittest.TestCase):
-    """Test cases for PaperSummaryWorkflow."""
+class TestSummaryWorkflow(unittest.TestCase):
+    """Test cases for SummaryWorkflow."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.config = PaperSummaryWorkflowConfig(
+        self.config = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
@@ -34,13 +34,13 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_workflow_initialization(self):
         """Test workflow initialization."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         self.assertEqual(workflow.config, self.config)
         self.assertEqual(workflow.config.summary_type, "comprehensive")
 
     def test_build_prompt(self):
         """Test prompt building."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         prompt = workflow.build_prompt(self.paper)
 
         # Check that prompt contains paper information
@@ -52,26 +52,24 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_build_prompt_with_custom_instructions(self):
         """Test prompt building with custom instructions."""
-        config = PaperSummaryWorkflowConfig(
+        config = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
             custom_instructions="Focus on trading strategies",
         )
 
-        workflow = PaperSummaryWorkflow(config)
+        workflow = SummaryWorkflow(config)
         prompt = workflow.build_prompt(self.paper)
 
         self.assertIn("Focus on trading strategies", prompt)
 
-    @patch(
-        "quantmind.workflow.paper_summary_workflow.PaperSummaryWorkflow._call_llm"
-    )
+    @patch("quantmind.workflow.summary_workflow.SummaryWorkflow._call_llm")
     def test_execute_success(self, mock_call_llm):
         """Test successful execution."""
         mock_call_llm.return_value = "This is a test summary of the paper."
 
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         result = workflow.execute(self.paper)
 
         self.assertFalse(result.get("error"))
@@ -79,14 +77,12 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
         self.assertEqual(result["paper_title"], "Test Paper")
         self.assertEqual(result["summary_type"], "comprehensive")
 
-    @patch(
-        "quantmind.workflow.paper_summary_workflow.PaperSummaryWorkflow._call_llm"
-    )
+    @patch("quantmind.workflow.summary_workflow.SummaryWorkflow._call_llm")
     def test_execute_no_response(self, mock_call_llm):
         """Test execution with no LLM response."""
         mock_call_llm.return_value = None
 
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         result = workflow.execute(self.paper)
 
         self.assertTrue(result.get("error"))
@@ -94,7 +90,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_parse_structured_response(self):
         """Test parsing structured JSON response."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
 
         json_response = """
         {
@@ -114,7 +110,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_parse_structured_response_with_code_blocks(self):
         """Test parsing structured response with code blocks."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
 
         response_with_blocks = """
         Here is the response:
@@ -133,7 +129,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_parse_narrative_response(self):
         """Test parsing narrative response."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
 
         narrative_response = """
         This is the main summary.
@@ -154,7 +150,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_parse_bullet_points_response(self):
         """Test parsing bullet points response."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
 
         bullet_response = """
         Main summary here.
@@ -175,7 +171,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_create_error_result(self):
         """Test error result creation."""
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
 
         error_result = workflow._create_error_result("Test error message")
 
@@ -183,26 +179,22 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
         self.assertEqual(error_result["error_message"], "Test error message")
         self.assertEqual(error_result["summary"], "")
 
-    @patch(
-        "quantmind.workflow.paper_summary_workflow.PaperSummaryWorkflow._call_llm"
-    )
+    @patch("quantmind.workflow.summary_workflow.SummaryWorkflow._call_llm")
     def test_generate_brief_summary(self, mock_call_llm):
         """Test brief summary generation."""
         mock_call_llm.return_value = "Brief summary of the paper."
 
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         brief_summary = workflow.generate_brief_summary(self.paper)
 
         self.assertEqual(brief_summary, "Brief summary of the paper.")
 
-    @patch(
-        "quantmind.workflow.paper_summary_workflow.PaperSummaryWorkflow._call_llm"
-    )
+    @patch("quantmind.workflow.summary_workflow.SummaryWorkflow._call_llm")
     def test_generate_executive_summary(self, mock_call_llm):
         """Test executive summary generation."""
         mock_call_llm.return_value = "Executive summary of the paper."
 
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         exec_summary = workflow.generate_executive_summary(self.paper)
 
         self.assertFalse(exec_summary.get("error"))
@@ -211,7 +203,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
     def test_config_validation(self):
         """Test configuration validation."""
         # Test valid config
-        valid_config = PaperSummaryWorkflowConfig(
+        valid_config = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
@@ -219,11 +211,11 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
             max_summary_length=600,
         )
 
-        workflow = PaperSummaryWorkflow(valid_config)
+        workflow = SummaryWorkflow(valid_config)
         self.assertEqual(workflow.config.summary_type, "comprehensive")
 
         # Test invalid summary type (should still work as it's just a string)
-        config_with_custom_type = PaperSummaryWorkflowConfig(
+        config_with_custom_type = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
@@ -231,7 +223,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
             max_summary_length=600,
         )
 
-        workflow = PaperSummaryWorkflow(config_with_custom_type)
+        workflow = SummaryWorkflow(config_with_custom_type)
         self.assertEqual(workflow.config.summary_type, "custom_type")
 
     def test_paper_with_minimal_content(self):
@@ -240,7 +232,7 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
             title="Minimal Paper", abstract="Short abstract", source="test"
         )
 
-        workflow = PaperSummaryWorkflow(self.config)
+        workflow = SummaryWorkflow(self.config)
         prompt = workflow.build_prompt(minimal_paper)
 
         self.assertIn("Minimal Paper", prompt)
@@ -249,30 +241,30 @@ class TestPaperSummaryWorkflow(unittest.TestCase):
 
     def test_output_format_handling(self):
         """Test different output format handling."""
-        config_structured = PaperSummaryWorkflowConfig(
+        config_structured = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
             output_format="structured",
         )
 
-        config_narrative = PaperSummaryWorkflowConfig(
+        config_narrative = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
             output_format="narrative",
         )
 
-        config_bullet = PaperSummaryWorkflowConfig(
+        config_bullet = SummaryWorkflowConfig(
             llm_type="openai",
             llm_name="gpt-4o",
             api_key="test-key",
             output_format="bullet_points",
         )
 
-        workflow_structured = PaperSummaryWorkflow(config_structured)
-        workflow_narrative = PaperSummaryWorkflow(config_narrative)
-        workflow_bullet = PaperSummaryWorkflow(config_bullet)
+        workflow_structured = SummaryWorkflow(config_structured)
+        workflow_narrative = SummaryWorkflow(config_narrative)
+        workflow_bullet = SummaryWorkflow(config_bullet)
 
         self.assertEqual(workflow_structured.config.output_format, "structured")
         self.assertEqual(workflow_narrative.config.output_format, "narrative")

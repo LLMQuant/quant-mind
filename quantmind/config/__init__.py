@@ -8,6 +8,7 @@ from .workflows import (
     BaseWorkflowConfig,
     QAWorkflowConfig,
     AnalyzerWorkflowConfig,
+    SummaryWorkflowConfig,
 )
 
 __all__ = [
@@ -21,7 +22,7 @@ __all__ = [
     "Settings",
     "BaseWorkflowConfig",
     "QAWorkflowConfig",
-    "AnalyzerWorkflowConfig",
+    "SummaryWorkflowConfig",
     "create_default_config",
     "load_config",
     "save_config",

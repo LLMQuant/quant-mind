@@ -125,13 +125,13 @@ class AnalyzerWorkflowConfig(BaseWorkflowConfig):
     )
 
 
-class PaperSummaryWorkflowConfig(BaseWorkflowConfig):
+class SummaryWorkflowConfig(BaseWorkflowConfig):
     """Configuration for paper summary generation workflow."""
 
     # Summary settings
     summary_type: str = Field(
         default="comprehensive",
-        description="Type of summary to generate: 'brief', 'comprehensive', 'technical', 'executive'"
+        description="Type of summary to generate: 'brief', 'comprehensive', 'technical', 'executive'",
     )
     max_summary_length: int = Field(
         default=800, ge=100, description="Maximum length for summary"
@@ -148,7 +148,7 @@ class PaperSummaryWorkflowConfig(BaseWorkflowConfig):
     include_implications: bool = Field(
         default=True, description="Include practical implications"
     )
-    
+
     # Content focus
     focus_on_quantitative_aspects: bool = Field(
         default=True, description="Focus on quantitative and technical aspects"
@@ -159,11 +159,11 @@ class PaperSummaryWorkflowConfig(BaseWorkflowConfig):
     include_limitations: bool = Field(
         default=True, description="Include limitations and caveats"
     )
-    
+
     # Output format
     output_format: str = Field(
-        default="structured", 
-        description="Output format: 'structured' (JSON), 'narrative' (text), 'bullet_points'"
+        default="structured",
+        description="Output format: 'structured' (JSON), 'narrative' (text), 'bullet_points'",
     )
     include_confidence_score: bool = Field(
         default=False, description="Include confidence score in output"

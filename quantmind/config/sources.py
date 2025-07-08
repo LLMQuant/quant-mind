@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import List, Optional, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import arxiv
 
 
@@ -42,7 +42,7 @@ class ArxivSourceConfig(BaseSourceConfig):
     # Language filtering
     languages: Optional[List[str]] = Field(default=None)
 
-    @validator("sort_by")
+    @field_validator("sort_by")
     def validate_sort_by(cls, v):
         """Validate sort_by field."""
         valid_sorts = ["relevance", "lastUpdatedDate", "submittedDate"]
@@ -50,14 +50,14 @@ class ArxivSourceConfig(BaseSourceConfig):
             raise ValueError(f"sort_by must be one of {valid_sorts}")
         return v
 
-    @validator("sort_order")
+    @field_validator("sort_order")
     def validate_sort_order(cls, v):
         """Validate sort_order field."""
         if v not in ["ascending", "descending"]:
             raise ValueError("sort_order must be 'ascending' or 'descending'")
         return v
 
-    @validator("download_dir")
+    @field_validator("download_dir")
     def validate_download_dir(cls, v):
         """Validate and create download directory if needed."""
         if v is not None:
@@ -68,7 +68,7 @@ class ArxivSourceConfig(BaseSourceConfig):
                 raise ValueError(f"download_dir must be a directory: {v}")
         return v
 
-    @validator("include_categories", "exclude_categories")
+    @field_validator("include_categories", "exclude_categories")
     def validate_categories(cls, v):
         """Validate arXiv categories."""
         if v is not None:
@@ -142,7 +142,7 @@ class NewsSourceConfig(BaseSourceConfig):
     language: str = Field(default="en")
     country: Optional[str] = Field(default=None)
 
-    @validator("language")
+    @field_validator("language")
     def validate_language(cls, v):
         """Validate language code."""
         # ISO 639-1 language codes
@@ -181,7 +181,7 @@ class WebSourceConfig(BaseSourceConfig):
     # Rate limiting
     delay_between_requests: float = Field(default=1.0, ge=0.0)
 
-    @validator("delay_between_requests")
+    @field_validator("delay_between_requests")
     def validate_delay(cls, v):
         """Ensure reasonable delay between requests."""
         if v < 0.1:

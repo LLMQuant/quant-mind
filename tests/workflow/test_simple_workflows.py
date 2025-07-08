@@ -5,11 +5,9 @@ from unittest.mock import Mock, patch
 
 from quantmind.workflow.base import BaseWorkflow
 from quantmind.workflow.qa_workflow import QAWorkflow
-from quantmind.workflow.analyzer_workflow import AnalyzerWorkflow
 from quantmind.config.workflows import (
     BaseWorkflowConfig,
     QAWorkflowConfig,
-    AnalyzerWorkflowConfig,
 )
 from quantmind.models.paper import Paper
 from quantmind.models.analysis import QuestionAnswer
@@ -184,104 +182,6 @@ class TestQAWorkflow(unittest.TestCase):
         self.assertIn("1 questions", summary)  # Updated assertion
 
 
-class TestAnalyzerWorkflow(unittest.TestCase):
-    """Test analyzer workflow functionality."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.config = AnalyzerWorkflowConfig(
-            llm_type="test", max_tags=5, tag_confidence_threshold=0.7
-        )
-
-        self.paper = Paper(
-            title="Machine Learning for Portfolio Optimization",
-            abstract="This paper explores deep learning techniques for portfolio management",
-            authors=["Test Author"],
-            source="test",
-            full_text="Content about neural networks, LSTM, and portfolio optimization strategies.",
-        )
-
-        self.workflow = AnalyzerWorkflow(self.config)
-
-    def test_build_prompt(self):
-        """Test prompt building for analysis."""
-        prompt = self.workflow.build_prompt(self.paper, tag_type="primary")
-
-        self.assertIn("Machine Learning", prompt)
-        self.assertIn("primary", prompt)
-        self.assertIn("market_type", prompt)
-        self.assertIn("JSON", prompt)
-
-    @patch.object(AnalyzerWorkflow, "_call_llm")
-    def test_execute_success(self, mock_call_llm):
-        """Test successful analysis execution."""
-        # Mock LLM response for tags
-        mock_response = """
-        {
-            "tags": [
-                "methodology:machine_learning",
-                "market_type:equity"
-            ]
-        }
-        """
-        mock_call_llm.return_value = mock_response
-
-        # Mock client
-        self.workflow.client = Mock()
-
-        primary_tags, secondary_tags = self.workflow.execute(self.paper)
-
-        # Should return lists of strings (simplified tags)
-        self.assertIsInstance(primary_tags, list)
-        self.assertIsInstance(secondary_tags, list)
-
-    def test_execute_no_client(self):
-        """Test execution with no LLM client."""
-        self.workflow.client = None
-
-        primary_tags, secondary_tags = self.workflow.execute(self.paper)
-
-        self.assertEqual(primary_tags, [])
-        self.assertEqual(secondary_tags, [])
-
-    def test_execute_no_content(self):
-        """Test execution with no paper content."""
-        empty_paper = Paper(
-            title="Empty Paper", authors=["Test"], source="test"
-        )
-
-        primary_tags, secondary_tags = self.workflow.execute(empty_paper)
-
-        self.assertEqual(primary_tags, [])
-        self.assertEqual(secondary_tags, [])
-
-    @patch.object(AnalyzerWorkflow, "_call_llm")
-    def test_generate_methodology_summary(self, mock_call_llm):
-        """Test methodology summary generation."""
-        mock_call_llm.return_value = (
-            "The paper uses LSTM networks for time series prediction."
-        )
-        self.workflow.client = Mock()
-
-        summary = self.workflow.generate_methodology_summary(self.paper)
-
-        self.assertIsNotNone(summary)
-        self.assertIn("LSTM", summary)
-
-    def test_generate_tag_summary(self):
-        """Test tag summary generation."""
-        primary_tags = ["methodology:machine_learning"]
-        secondary_tags = ["algorithm:lstm"]
-
-        summary = self.workflow.generate_tag_summary(
-            primary_tags, secondary_tags
-        )
-
-        self.assertIn("Primary", summary)
-        self.assertIn("Secondary", summary)
-        self.assertIn("methodology:machine_learning", summary)
-
-
 class TestWorkflowIntegration(unittest.TestCase):
     """Integration tests for workflow components."""
 
@@ -294,14 +194,8 @@ class TestWorkflowIntegration(unittest.TestCase):
             llm_type="openai", temperature=0.3, num_questions=5
         )
 
-        analyzer_config = AnalyzerWorkflowConfig(
-            llm_type="openai", max_tags=8, tag_confidence_threshold=0.8
-        )
-
         # Verify configurations
         self.assertEqual(qa_config.num_questions, 5)
-        self.assertEqual(analyzer_config.max_tags, 8)
-        self.assertEqual(analyzer_config.tag_confidence_threshold, 0.8)
 
     def test_paper_processing_pipeline(self):
         """Test end-to-end paper processing pipeline."""
@@ -314,14 +208,11 @@ class TestWorkflowIntegration(unittest.TestCase):
 
         # Test that workflows can be initialized
         qa_config = QAWorkflowConfig(llm_type="test")
-        analyzer_config = AnalyzerWorkflowConfig(llm_type="test")
 
         qa_workflow = QAWorkflow(qa_config)
-        analyzer_workflow = AnalyzerWorkflow(analyzer_config)
 
         # Verify workflows can be initialized and have expected components
         self.assertEqual(qa_workflow.config.llm_type, "test")
-        self.assertEqual(analyzer_workflow.config.llm_type, "test")
 
 
 if __name__ == "__main__":
