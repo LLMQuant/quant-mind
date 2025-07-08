@@ -38,7 +38,7 @@ class PaperSummaryWorkflow(BaseWorkflow):
             Formatted prompt string for summary generation
         """
         # Base prompt template
-        prompt = f"""You are an expert research analyst specializing in quantitative finance and machine learning. 
+        prompt = f"""You are an expert research analyst specializing in quantitative finance and machine learning.
 Please analyze the following research paper and generate a {self.config.summary_type} summary.
 
 Paper Information:
@@ -68,7 +68,7 @@ Please provide a clear, well-structured summary that captures the essence of the
 
         # Append custom instructions if provided
         prompt = self._append_custom_instructions(prompt)
-        
+
         return prompt
 
     def execute(self, paper: Paper, **kwargs) -> Dict[str, Any]:
@@ -82,17 +82,17 @@ Please provide a clear, well-structured summary that captures the essence of the
             Dictionary containing summary results
         """
         logger.info(f"Generating summary for paper: {paper.title}")
-        
+
         # Build prompt
         prompt = self.build_prompt(paper, **kwargs)
-        
+
         # Call LLM
         response = self._call_llm(prompt)
-        
+
         if not response:
             logger.error("Failed to generate summary - no LLM response")
             return self._create_error_result("Failed to generate summary")
-        
+
         # Parse response based on output format
         try:
             if self.config.output_format == "structured":
@@ -101,23 +101,27 @@ Please provide a clear, well-structured summary that captures the essence of the
                 summary_data = self._parse_bullet_points_response(response)
             else:  # narrative
                 summary_data = self._parse_narrative_response(response)
-            
+
             # Add metadata
-            summary_data.update({
-                "paper_id": paper.get_primary_id(),
-                "paper_title": paper.title,
-                "summary_type": self.config.summary_type,
-                "output_format": self.config.output_format,
-                "word_count": len(response.split()),
-                "max_length": self.config.max_summary_length
-            })
-            
+            summary_data.update(
+                {
+                    "paper_id": paper.get_primary_id(),
+                    "paper_title": paper.title,
+                    "summary_type": self.config.summary_type,
+                    "output_format": self.config.output_format,
+                    "word_count": len(response.split()),
+                    "max_length": self.config.max_summary_length,
+                }
+            )
+
             logger.info(f"Successfully generated summary for {paper.title}")
             return summary_data
-            
+
         except Exception as e:
             logger.error(f"Failed to parse summary response: {e}")
-            return self._create_error_result(f"Failed to parse summary: {str(e)}")
+            return self._create_error_result(
+                f"Failed to parse summary: {str(e)}"
+            )
 
     def _parse_structured_response(self, response: str) -> Dict[str, Any]:
         """Parse structured JSON response from LLM.
@@ -140,20 +144,27 @@ Please provide a clear, well-structured summary that captures the essence of the
                 json_str = response[json_start:json_end].strip()
             else:
                 json_str = response.strip()
-            
+
             data = json.loads(json_str)
-            
+
             # Ensure required fields exist
-            required_fields = ["summary", "key_findings", "methodology", "results"]
+            required_fields = [
+                "summary",
+                "key_findings",
+                "methodology",
+                "results",
+            ]
             for field in required_fields:
                 if field not in data:
                     data[field] = ""
-            
+
             return data
-            
+
         except json.JSONDecodeError:
             # Fallback to narrative parsing if JSON parsing fails
-            logger.warning("Failed to parse JSON response, falling back to narrative parsing")
+            logger.warning(
+                "Failed to parse JSON response, falling back to narrative parsing"
+            )
             return self._parse_narrative_response(response)
 
     def _parse_narrative_response(self, response: str) -> Dict[str, Any]:
@@ -167,7 +178,7 @@ Please provide a clear, well-structured summary that captures the essence of the
         """
         # Clean up response
         response = response.strip()
-        
+
         # Try to extract sections if they exist
         sections = {
             "summary": response,
@@ -175,34 +186,38 @@ Please provide a clear, well-structured summary that captures the essence of the
             "methodology": "",
             "results": "",
             "implications": "",
-            "limitations": ""
+            "limitations": "",
         }
-        
+
         # Look for common section headers
         section_headers = {
             "key_findings": ["Key Findings:", "Main Findings:", "Findings:"],
             "methodology": ["Methodology:", "Methods:", "Approach:"],
             "results": ["Results:", "Findings:", "Outcomes:"],
             "implications": ["Implications:", "Impact:", "Applications:"],
-            "limitations": ["Limitations:", "Caveats:", "Constraints:"]
+            "limitations": ["Limitations:", "Caveats:", "Constraints:"],
         }
-        
+
         for section, headers in section_headers.items():
             for header in headers:
                 if header in response:
                     # Extract section content
                     start_idx = response.find(header) + len(header)
                     end_idx = len(response)
-                    
+
                     # Find next section
-                    for next_header in [h for headers_list in section_headers.values() for h in headers_list]:
+                    for next_header in [
+                        h
+                        for headers_list in section_headers.values()
+                        for h in headers_list
+                    ]:
                         next_idx = response.find(next_header, start_idx)
                         if next_idx != -1 and next_idx < end_idx:
                             end_idx = next_idx
-                    
+
                     sections[section] = response[start_idx:end_idx].strip()
                     break
-        
+
         return sections
 
     def _parse_bullet_points_response(self, response: str) -> Dict[str, Any]:
@@ -216,18 +231,18 @@ Please provide a clear, well-structured summary that captures the essence of the
         """
         # Clean up response
         response = response.strip()
-        
+
         # Split into lines and extract bullet points
-        lines = response.split('\n')
+        lines = response.split("\n")
         bullet_points = []
-        
+
         for line in lines:
             line = line.strip()
-            if line.startswith(('-', '•', '*', '→', '▶')):
+            if line.startswith(("-", "•", "*", "→", "▶")):
                 bullet_points.append(line[1:].strip())
-            elif line and not line.startswith('#'):  # Skip headers
+            elif line and not line.startswith("#"):  # Skip headers
                 bullet_points.append(line)
-        
+
         return {
             "summary": response,
             "bullet_points": bullet_points,
@@ -235,7 +250,7 @@ Please provide a clear, well-structured summary that captures the essence of the
             "methodology": "",
             "results": "",
             "implications": "",
-            "limitations": ""
+            "limitations": "",
         }
 
     def _create_error_result(self, error_message: str) -> Dict[str, Any]:
@@ -255,7 +270,7 @@ Please provide a clear, well-structured summary that captures the essence of the
             "methodology": "",
             "results": "",
             "implications": "",
-            "limitations": ""
+            "limitations": "",
         }
 
     def generate_brief_summary(self, paper: Paper) -> str:
@@ -270,18 +285,18 @@ Please provide a clear, well-structured summary that captures the essence of the
         # Temporarily modify config for brief summary
         original_type = self.config.summary_type
         original_length = self.config.max_summary_length
-        
+
         self.config.summary_type = "brief"
         self.config.max_summary_length = 200
-        
+
         try:
             result = self.execute(paper)
             summary = result.get("summary", "")
-            
+
             # Restore original config
             self.config.summary_type = original_type
             self.config.max_summary_length = original_length
-            
+
             return summary
         except Exception as e:
             logger.error(f"Failed to generate brief summary: {e}")
@@ -302,21 +317,23 @@ Please provide a clear, well-structured summary that captures the essence of the
         # Temporarily modify config for executive summary
         original_type = self.config.summary_type
         original_length = self.config.max_summary_length
-        
+
         self.config.summary_type = "executive"
         self.config.max_summary_length = 500
-        
+
         try:
             result = self.execute(paper)
-            
+
             # Restore original config
             self.config.summary_type = original_type
             self.config.max_summary_length = original_length
-            
+
             return result
         except Exception as e:
             logger.error(f"Failed to generate executive summary: {e}")
             # Restore original config
             self.config.summary_type = original_type
             self.config.max_summary_length = original_length
-            return self._create_error_result(f"Failed to generate executive summary: {str(e)}") 
+            return self._create_error_result(
+                f"Failed to generate executive summary: {str(e)}"
+            )
