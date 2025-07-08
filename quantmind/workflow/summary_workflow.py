@@ -5,20 +5,20 @@ from typing import Any, Dict, List, Optional
 
 from quantmind.models.paper import Paper
 from quantmind.workflow.base import BaseWorkflow
-from quantmind.config.workflows import PaperSummaryWorkflowConfig
+from quantmind.config.workflows import SummaryWorkflowConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class PaperSummaryWorkflow(BaseWorkflow):
+class SummaryWorkflow(BaseWorkflow):
     """Workflow for generating comprehensive paper summaries using LLM.
 
     This workflow analyzes research papers and generates structured summaries
     focusing on key findings, methodology, results, and implications.
     """
 
-    def __init__(self, config: PaperSummaryWorkflowConfig):
+    def __init__(self, config: SummaryWorkflowConfig):
         """Initialize paper summary workflow.
 
         Args:
