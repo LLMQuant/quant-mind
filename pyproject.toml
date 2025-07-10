@@ -60,6 +60,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx[socks]>=0.28.1",
     "litellm>=1.74.0.post1",
+    "jinja2>=3.0.0",
 ]
 
 [project.scripts]
