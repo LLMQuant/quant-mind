@@ -1,13 +1,13 @@
 
 <p align="center">
-  <img src="asset/quantmind-logo.png" width="160">
+  <img src="assets/quantmind-logo.png" width="160">
 </p>
 
 
-<!-- 使用 asset/ 下的 svg -->
+<!-- 使用 assets/ 下的 svg -->
 
 <p align="center">
-  <img src="asset/quant-mind.svg" width="400">
+  <img src="assets/quant-mind.svg" width="400">
 </p>
 
 <p align="center">
@@ -50,7 +50,7 @@ The financial research landscape is overwhelming. Every day, hundreds of papers,
 
 ### System Architecture
 
-![quantmind-outline](asset/quantmind-stage-outline.png)
+![quantmind-outline](assets/quantmind-stage-outline.png)
 
 QuantMind is built on a decoupled, two-stage architecture. This design separates the concerns of data ingestion from intelligent retrieval, ensuring both robustness and flexibility.
 
