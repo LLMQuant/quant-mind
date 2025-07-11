@@ -1,9 +1,10 @@
 """Base source interface for content acquisition."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Iterator, List, Optional, Any, TypeVar, Generic
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-from quantmind.models.content import BaseContent
+from quantmind.models import BaseContent
+from quantmind.config import BaseSourceConfig
 
 # Generic type for content
 ContentType = TypeVar("ContentType", bound=BaseContent)
@@ -19,22 +20,24 @@ class BaseSource(Generic[ContentType], ABC):
     different content types while maintaining type safety.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[BaseSourceConfig] = None):
         """Initialize source with configuration.
 
         Args:
             config: Source-specific configuration
         """
-        self.config = config or {}
+        self.config = config or BaseSourceConfig()
         self.name = self.__class__.__name__.lower().replace("source", "")
 
     @abstractmethod
-    def search(self, query: str, max_results: int = 10) -> List[ContentType]:
+    def search(
+        self, query: str, max_results: Optional[int] = None
+    ) -> List[ContentType]:
         """Search for content matching the query.
 
         Args:
             query: Search query string
-            max_results: Maximum number of results to return
+            max_results: Maximum number of results to return, defaults to config.max_results
 
         Returns:
             List of content objects
