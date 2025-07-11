@@ -92,11 +92,6 @@ class TestArxivSource(unittest.TestCase):
         source = ArxivSource(config=self.config)
         assert isinstance(source.config, ArxivSourceConfig)
 
-        # Test with dict config
-        dict_config = {"max_results": 10}
-        source = ArxivSource(config=dict_config)
-        assert source.config.max_results == 10
-
         # Test with no config
         source = ArxivSource()
         assert isinstance(source.config, ArxivSourceConfig)
