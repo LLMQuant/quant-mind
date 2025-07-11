@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 
+from quantmind.config.llm import LLMConfig
 from quantmind.config.parsers import (
     BaseParserConfig,
     LlamaParserConfig,
@@ -82,12 +83,15 @@ class Settings:
     # Workflow configuration
     workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
 
+    # LLM configuration
+    llm: LLMConfig = field(default_factory=LLMConfig)
+
     # Global settings
     log_level: str = "INFO"
     data_dir: str = "./data"
     temp_dir: str = "/tmp"
 
-    # API configurations
+    # API configurations (legacy, prefer LLM config)
     openai_api_key: Optional[str] = None
     llama_cloud_api_key: Optional[str] = None
     arxiv_max_results: int = 100
@@ -164,6 +168,15 @@ class Settings:
             quality_threshold=workflow_data.get("quality_threshold", 0.5),
         )
 
+        # Load LLM configuration
+        llm_data = config_dict.get("llm", {})
+
+        # Support legacy API key configuration
+        if "openai_api_key" in config_dict and "api_key" not in llm_data:
+            llm_data["api_key"] = config_dict["openai_api_key"]
+
+        settings.llm = LLMConfig(**llm_data)
+
         # Load global settings
         settings.log_level = config_dict.get("log_level", "INFO")
         settings.data_dir = config_dict.get("data_dir", "./data")
@@ -222,6 +235,7 @@ class Settings:
                 "enable_deduplication": self.workflow.enable_deduplication,
                 "quality_threshold": self.workflow.quality_threshold,
             },
+            "llm": self.llm.model_dump(),
             "log_level": self.log_level,
             "data_dir": self.data_dir,
             "temp_dir": self.temp_dir,

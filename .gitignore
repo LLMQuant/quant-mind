@@ -18,4 +18,5 @@ log/
 papers/
 
 data/
+demo_data/
 *.html

@@ -10,9 +10,9 @@ from urllib.parse import urlparse
 import arxiv
 import requests
 
-from quantmind.config.sources import ArxivSourceConfig
-from quantmind.models.paper import Paper
-from quantmind.sources.base import BaseSource
+from quantmind.config import ArxivSourceConfig
+from quantmind.models import Paper
+from quantmind.sources import BaseSource
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,40 +25,39 @@ class ArxivSource(BaseSource[Paper]):
     for searching, filtering, and retrieving paper metadata with optional PDF downloads.
     """
 
-    def __init__(self, config: Optional[Union[ArxivSourceConfig, dict]] = None):
+    def __init__(self, config: Optional[ArxivSourceConfig] = None):
         """Initialize ArXiv source.
 
         Args:
             config: ArxivSourceConfig instance or dictionary with settings
         """
-        # Convert dict to config if necessary
-        if isinstance(config, dict):
-            config = ArxivSourceConfig(**config)
-        elif config is None:
-            config = ArxivSourceConfig()
-
-        super().__init__(config.model_dump())
+        super().__init__(config)
         self.config = config
         self.client = arxiv.Client()
         # As the last request time is not set, the first request will not be rate limited
         self._last_request_time = 0.0
 
-    def search(self, query: str, max_results: int = 10) -> List[Paper]:
+    def search(
+        self, query: str, max_results: Optional[int] = None
+    ) -> List[Paper]:
         """Search arXiv for papers matching the query.
 
         Args:
             query: Search query string (supports arXiv query syntax)
-            max_results: Maximum number of results to return
+            max_results: Maximum number of results to return, defaults to config.max_results
 
         Returns:
             List of Paper objects
         """
         try:
+            if max_results:
+                self.config.max_results = max_results
+
             self._rate_limit()
 
             search = arxiv.Search(
                 query=query,
-                max_results=min(max_results, self.config.max_results),
+                max_results=self.config.max_results,
                 sort_by=self.config.get_arxiv_sort_criterion(),
                 sort_order=self.config.get_arxiv_sort_order(),
             )
