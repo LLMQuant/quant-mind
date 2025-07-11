@@ -31,8 +31,8 @@ class ArxivSource(BaseSource[Paper]):
         Args:
             config: ArxivSourceConfig instance or dictionary with settings
         """
-        super().__init__(config)
-        self.config = config
+        self.config = config or ArxivSourceConfig()
+        super().__init__(self.config)
         self.client = arxiv.Client()
         # As the last request time is not set, the first request will not be rate limited
         self._last_request_time = 0.0
