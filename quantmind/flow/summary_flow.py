@@ -1,25 +1,26 @@
-"""Paper summary generation workflow for QuantMind framework."""
+"""Content summary generation flow for QuantMind framework."""
 
 import json
 from typing import Any, Dict, List, Optional
 
-from quantmind.models.paper import Paper
-from quantmind.workflow.base import BaseWorkflow
-from quantmind.config.workflows import SummaryWorkflowConfig
+from quantmind.models.content import KnowledgeItem
+from quantmind.flow.base import BaseFlow
+from quantmind.config.flows import SummaryFlowConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class SummaryWorkflow(BaseWorkflow):
-    """Workflow for generating comprehensive paper summaries using LLM.
+class SummaryFlow(BaseFlow):
+    """Flow for generating comprehensive content summaries using LLM.
 
-    This workflow analyzes research papers and generates structured summaries
+    This flow analyzes knowledge items and generates structured summaries
     focusing on key findings, methodology, results, and implications.
+    Leverages the enhanced prompt engineering framework for flexible templates.
     """
 
-    def __init__(self, config: SummaryWorkflowConfig):
-        """Initialize paper summary workflow.
+    def __init__(self, config: SummaryFlowConfig):
+        """Initialize content summary flow.
 
         Args:
             config: Configuration for summary generation
@@ -27,64 +28,22 @@ class SummaryWorkflow(BaseWorkflow):
         super().__init__(config)
         self.config = config
 
-    def build_prompt(self, paper: Paper, **kwargs) -> str:
-        """Build prompt for paper summary generation.
+    def execute(
+        self, knowledge_item: KnowledgeItem, **kwargs
+    ) -> Dict[str, Any]:
+        """Execute content summary flow.
 
         Args:
-            paper: Paper object containing content
-            **kwargs: Additional context or parameters
-
-        Returns:
-            Formatted prompt string for summary generation
-        """
-        # Base prompt template
-        prompt = f"""You are an expert research analyst specializing in quantitative finance and machine learning.
-Please analyze the following research paper and generate a {self.config.summary_type} summary.
-
-Paper Information:
-- Title: {paper.title}
-- Authors: {', '.join(paper.authors) if paper.authors else 'Unknown'}
-- Abstract: {paper.abstract}
-- Categories: {', '.join(paper.categories) if paper.categories else 'None'}
-- Tags: {', '.join(paper.tags) if paper.tags else 'None'}
-
-Full Text Content:
-{paper.full_text if paper.full_text else paper.abstract}
-
-Please generate a summary with the following requirements:
-- Summary type: {self.config.summary_type}
-- Maximum length: {self.config.max_summary_length} words
-- Focus on quantitative aspects: {self.config.focus_on_quantitative_aspects}
-- Include key findings: {self.config.include_key_findings}
-- Include methodology: {self.config.include_methodology}
-- Include results: {self.config.include_results}
-- Include implications: {self.config.include_implications}
-- Highlight innovations: {self.config.highlight_innovations}
-- Include limitations: {self.config.include_limitations}
-
-Output format: {self.config.output_format}
-
-Please provide a clear, well-structured summary that captures the essence of the research."""
-
-        # Append custom instructions if provided
-        prompt = self._append_custom_instructions(prompt)
-
-        return prompt
-
-    def execute(self, paper: Paper, **kwargs) -> Dict[str, Any]:
-        """Execute paper summary workflow.
-
-        Args:
-            paper: Paper object to summarize
+            knowledge_item: KnowledgeItem object to summarize
             **kwargs: Additional parameters
 
         Returns:
             Dictionary containing summary results
         """
-        logger.info(f"Generating summary for paper: {paper.title}")
+        logger.info(f"Generating summary for content: {knowledge_item.title}")
 
-        # Build prompt
-        prompt = self.build_prompt(paper, **kwargs)
+        # Build prompt using template system
+        prompt = self.build_prompt(knowledge_item, **kwargs)
 
         # Call LLM
         response = self._call_llm(prompt)
@@ -105,8 +64,11 @@ Please provide a clear, well-structured summary that captures the essence of the
             # Add metadata
             summary_data.update(
                 {
-                    "paper_id": paper.get_primary_id(),
-                    "paper_title": paper.title,
+                    "content_id": knowledge_item.get_primary_id(),
+                    "content_title": knowledge_item.title,
+                    "content_type": getattr(
+                        knowledge_item, "content_type", "generic"
+                    ),
                     "summary_type": self.config.summary_type,
                     "output_format": self.config.output_format,
                     "word_count": len(response.split()),
@@ -114,7 +76,9 @@ Please provide a clear, well-structured summary that captures the essence of the
                 }
             )
 
-            logger.info(f"Successfully generated summary for {paper.title}")
+            logger.info(
+                f"Successfully generated summary for {knowledge_item.title}"
+            )
             return summary_data
 
         except Exception as e:
@@ -273,11 +237,11 @@ Please provide a clear, well-structured summary that captures the essence of the
             "limitations": "",
         }
 
-    def generate_brief_summary(self, paper: Paper) -> str:
+    def generate_brief_summary(self, knowledge_item: KnowledgeItem) -> str:
         """Generate a brief summary (convenience method).
 
         Args:
-            paper: Paper to summarize
+            knowledge_item: KnowledgeItem to summarize
 
         Returns:
             Brief summary text
@@ -290,7 +254,7 @@ Please provide a clear, well-structured summary that captures the essence of the
         self.config.max_summary_length = 200
 
         try:
-            result = self.execute(paper)
+            result = self.execute(knowledge_item)
             summary = result.get("summary", "")
 
             # Restore original config
@@ -305,11 +269,13 @@ Please provide a clear, well-structured summary that captures the essence of the
             self.config.max_summary_length = original_length
             return ""
 
-    def generate_executive_summary(self, paper: Paper) -> Dict[str, Any]:
+    def generate_executive_summary(
+        self, knowledge_item: KnowledgeItem
+    ) -> Dict[str, Any]:
         """Generate an executive summary (convenience method).
 
         Args:
-            paper: Paper to summarize
+            knowledge_item: KnowledgeItem to summarize
 
         Returns:
             Executive summary data
@@ -322,7 +288,7 @@ Please provide a clear, well-structured summary that captures the essence of the
         self.config.max_summary_length = 500
 
         try:
-            result = self.execute(paper)
+            result = self.execute(knowledge_item)
 
             # Restore original config
             self.config.summary_type = original_type
