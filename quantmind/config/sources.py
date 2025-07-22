@@ -1,9 +1,10 @@
 """Configuration models for sources."""
 
 from pathlib import Path
-from typing import List, Optional, Union
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Dict, List, Optional, Union
+
 import arxiv
+from pydantic import BaseModel, Field, field_validator
 
 
 class BaseSourceConfig(BaseModel):
@@ -199,18 +200,23 @@ SOURCE_CONFIGS = {
 }
 
 
-def get_source_config(source_type: str) -> type:
-    """Get configuration class for source type.
+def get_source_config(
+    source_type: str, config_data: Dict[str, Any]
+) -> BaseSourceConfig:
+    """Get configured source instance for source type.
 
     Args:
         source_type: Type of source (e.g., 'arxiv', 'news')
+        config_data: Configuration data dictionary
 
     Returns:
-        Configuration class for the source type
+        Configured source instance
 
     Raises:
         ValueError: If source type is not supported
     """
     if source_type not in SOURCE_CONFIGS:
         raise ValueError(f"Unsupported source type: {source_type}")
-    return SOURCE_CONFIGS[source_type]
+
+    config_class = SOURCE_CONFIGS[source_type]
+    return config_class(**config_data)
