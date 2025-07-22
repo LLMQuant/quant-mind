@@ -1,142 +1,47 @@
-"""Q&A generation workflow for research papers."""
+"""Q&A generation flow for knowledge items."""
 
 import json
 from typing import List, Dict, Any, Optional
 
-from quantmind.workflow.base import BaseWorkflow
-from quantmind.config.workflows import QAWorkflowConfig
-from quantmind.models.paper import Paper
+from quantmind.flow.base import BaseFlow
+from quantmind.config.flows import QAFlowConfig
+from quantmind.models.content import KnowledgeItem
 from quantmind.models.analysis import QuestionAnswer
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class QAWorkflow(BaseWorkflow):
-    """Workflow for generating questions and answers from research papers.
+class QAFlow(BaseFlow):
+    """Flow for generating questions and answers from knowledge items.
 
     Uses LLM to generate insightful Q&A pairs covering different difficulty levels
     and categories including methodology, technical details, and critical analysis.
+    Leverages the enhanced prompt engineering framework for flexible template-based prompts.
     """
 
-    def __init__(self, config: QAWorkflowConfig):
-        """Initialize Q&A workflow.
+    def __init__(self, config: QAFlowConfig):
+        """Initialize Q&A flow.
 
         Args:
-            config: Q&A workflow configuration
+            config: Q&A flow configuration
         """
         super().__init__(config)
-        if not isinstance(config, QAWorkflowConfig):
-            raise TypeError("config must be QAWorkflowConfig instance")
-        self.config: QAWorkflowConfig = config
-
-    def build_prompt(
-        self,
-        paper: Paper,
-        difficulty: str = "intermediate",
-        categories: Optional[List[str]] = None,
-        **kwargs,
-    ) -> str:
-        """Build Q&A generation prompt.
-
-        Args:
-            paper: Paper object containing content
-            difficulty: Difficulty level for questions
-            categories: Specific categories to focus on
-            **kwargs: Additional context
-
-        Returns:
-            Formatted prompt string
-        """
-        # Use provided categories or default from config
-        if categories is None:
-            categories = self.config.question_categories
-
-        # Prepare paper content (truncated for LLM context)
-        content = ""
-        if paper.full_text:
-            content = paper.full_text[:3000]  # Limit for LLM context
-        elif paper.abstract:
-            content = paper.abstract
-
-        # Build base prompt
-        prompt = f"""You are a research paper Q&A generator. Generate questions and answers for this paper in JSON format ONLY.
-
-Paper Information:
-Title: {paper.title}
-Abstract: {paper.abstract}
-Authors: {', '.join(paper.authors) if paper.authors else 'Not specified'}
-{f"Content: {content}" if content else ""}
-
-Task: Generate {self.config.num_questions} questions and answers at {difficulty} difficulty level.
-
-Focus Categories: {', '.join(categories)}
-
-Guidelines for {difficulty} level:
-"""
-
-        # Add difficulty-specific guidelines
-        if difficulty == "beginner":
-            prompt += """- Basic understanding and concept clarification
-- Overview of methodology and approach
-- Simple explanations of key terms
-- General context and background"""
-        elif difficulty == "intermediate":
-            prompt += """- Technical details and implementation
-- Analysis of methodology and results
-- Comparison with existing approaches
-- Practical applications and implications"""
-        elif difficulty == "advanced":
-            prompt += """- Theoretical depth and mathematical foundations
-- Critical analysis of limitations and assumptions
-- Novel contributions and innovations
-- Complex relationships and dependencies"""
-        else:  # expert
-            prompt += """- Theoretical implications and future research directions
-- Broader impact on the field
-- Integration with cutting-edge research
-- Advanced methodological considerations"""
-
-        prompt += f"""
-
-Return the Q&A in this EXACT JSON format (no other text, just JSON):
-
-{{
-    "questions_answers": [
-        {{
-            "question": "What is the main contribution of this research?",
-            "answer": "The main contribution is...",
-            "category": "methodology",
-            "difficulty": "{difficulty}",
-            "confidence": 0.9
-        }}
-    ]
-}}
-
-Requirements:
-- Questions should be specific to this paper's content
-- Answers should be comprehensive and educational
-- Include practical insights and implementation considerations
-- Address both strengths and limitations
-- Focus on the most important aspects
-- Return ONLY valid JSON, no explanations or additional text
-
-Respond with JSON only:"""
-
-        # Append custom instructions if configured
-        return self._append_custom_instructions(prompt)
+        if not isinstance(config, QAFlowConfig):
+            raise TypeError("config must be QAFlowConfig instance")
+        self.config: QAFlowConfig = config
 
     def execute(
         self,
-        paper: Paper,
+        knowledge_item: KnowledgeItem,
         primary_tags: Optional[List] = None,
         secondary_tags: Optional[List] = None,
         **kwargs,
     ) -> List[QuestionAnswer]:
-        """Execute Q&A generation workflow.
+        """Execute Q&A generation flow.
 
         Args:
-            paper: Paper object to process
+            knowledge_item: KnowledgeItem object to process
             primary_tags: Primary tags for additional context
             secondary_tags: Secondary tags for additional context
             **kwargs: Additional parameters
@@ -144,13 +49,13 @@ Respond with JSON only:"""
         Returns:
             List of generated QuestionAnswer objects
         """
-        logger.info(f"Generating Q&A for paper: {paper.title}")
+        logger.info(f"Generating Q&A for content: {knowledge_item.title}")
 
         if not self.client:
             logger.warning("No LLM client available, returning empty Q&A")
             return []
 
-        if not paper.full_text and not paper.abstract:
+        if not knowledge_item.content and not knowledge_item.abstract:
             logger.warning("No content available for Q&A generation")
             return []
 
@@ -174,7 +79,7 @@ Respond with JSON only:"""
 
                 logger.debug(f"Generating {difficulty} level questions...")
                 difficulty_qa = self._generate_difficulty_qa(
-                    paper, difficulty, questions_per_difficulty
+                    knowledge_item, difficulty, questions_per_difficulty
                 )
                 qa_pairs.extend(difficulty_qa)
 
@@ -189,20 +94,26 @@ Respond with JSON only:"""
             return []
 
     def _generate_difficulty_qa(
-        self, paper: Paper, difficulty: str, num_questions: int
+        self, knowledge_item: KnowledgeItem, difficulty: str, num_questions: int
     ) -> List[QuestionAnswer]:
         """Generate Q&A pairs for specific difficulty level.
 
         Args:
-            paper: Paper object
+            knowledge_item: KnowledgeItem object
             difficulty: Difficulty level
             num_questions: Number of questions to generate
 
         Returns:
             List of QuestionAnswer objects
         """
-        # Build prompt for this difficulty level
-        prompt = self.build_prompt(paper, difficulty=difficulty)
+        # Build prompt using the template system
+        prompt = self.build_prompt(
+            knowledge_item,
+            difficulty=difficulty,
+            question_categories=", ".join(self.config.question_categories),
+            difficulty_levels=", ".join(self.config.difficulty_levels),
+            num_questions=num_questions,
+        )
 
         # Call LLM
         response = self._call_llm(prompt)
@@ -270,12 +181,15 @@ Respond with JSON only:"""
             return []
 
     def generate_focused_qa(
-        self, paper: Paper, focus_area: str, num_questions: int = 3
+        self,
+        knowledge_item: KnowledgeItem,
+        focus_area: str,
+        num_questions: int = 3,
     ) -> List[QuestionAnswer]:
         """Generate focused Q&A for specific research area.
 
         Args:
-            paper: Paper object
+            knowledge_item: KnowledgeItem object
             focus_area: Specific area to focus on
             num_questions: Number of questions to generate
 
@@ -287,37 +201,13 @@ Respond with JSON only:"""
         if not self.client:
             return []
 
-        # Build focused prompt
-        prompt = f"""Generate {num_questions} focused questions and answers about the {focus_area} of this research paper.
-
-Paper Information:
-Title: {paper.title}
-Abstract: {paper.abstract}
-{f"Content: {paper.full_text[:2000]}..." if paper.full_text else ""}
-
-Focus Area: {focus_area}
-
-Generate questions that specifically address:
-- Key aspects of the {focus_area}
-- Practical implications
-- Potential improvements or extensions
-- Critical analysis of the {focus_area}
-
-Return the Q&A in this exact JSON format:
-{{
-    "questions_answers": [
-        {{
-            "question": "string",
-            "answer": "string",
-            "category": "{focus_area}",
-            "difficulty": "advanced",
-            "confidence": 0.8
-        }}
-    ]
-}}"""
-
-        # Append custom instructions
-        prompt = self._append_custom_instructions(prompt)
+        # Build focused prompt using template system
+        prompt = self.build_prompt(
+            knowledge_item,
+            focus_area=focus_area,
+            num_questions=num_questions,
+            specialized_focus=True,
+        )
 
         # Call LLM and parse response
         response = self._call_llm(prompt)
