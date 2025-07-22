@@ -1,234 +1,335 @@
 """Unit tests for settings configuration system."""
 
+import os
+import tempfile
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 
+from quantmind.config.llm import LLMConfig
 from quantmind.config.parsers import LlamaParserConfig, PDFParserConfig
 from quantmind.config.settings import (
-    ComponentConfig,
-    Settings,
+    Setting,
     create_default_config,
     load_config,
 )
+from quantmind.config.sources import ArxivSourceConfig
+from quantmind.config.storage import LocalStorageConfig
+from quantmind.config.taggers import LLMTaggerConfig
 
 
-class TestComponentConfig(unittest.TestCase):
-    """Test cases for ComponentConfig."""
+class TestSetting(unittest.TestCase):
+    """Comprehensive test cases for Setting configuration system."""
 
-    def test_component_config_creation(self):
-        """Test creating ComponentConfig with different config types."""
-        # Test with Pydantic config
-        pydantic_config = LlamaParserConfig(
-            result_type="markdown", parsing_mode="fast"
+    def test_default_setting(self):
+        """Test creating Setting with default values."""
+        setting = Setting()
+
+        self.assertEqual(setting.log_level, "INFO")
+        self.assertEqual(setting.data_dir, "./data")
+        self.assertEqual(setting.temp_dir, "/tmp")
+        self.assertIsNone(setting.source)
+        self.assertIsNone(setting.parser)
+        self.assertIsNone(setting.tagger)
+        self.assertIsInstance(setting.storage, LocalStorageConfig)
+        self.assertIsInstance(setting.llm, LLMConfig)
+
+    def test_setting_with_components(self):
+        """Test creating Setting with component configurations."""
+        # Create component configs
+        source_config = ArxivSourceConfig(max_results=50)
+        parser_config = PDFParserConfig(method="pdfplumber")
+        tagger_config = LLMTaggerConfig(max_tags=10)
+
+        setting = Setting(
+            source=source_config, parser=parser_config, tagger=tagger_config
         )
-        component = ComponentConfig(
-            name="llama", type="LlamaParser", config=pydantic_config
-        )
 
-        self.assertEqual(component.name, "llama")
-        self.assertEqual(component.type, "LlamaParser")
-        self.assertIsInstance(component.config, LlamaParserConfig)
-        self.assertTrue(component.enabled)
+        self.assertIsInstance(setting.source, ArxivSourceConfig)
+        self.assertEqual(setting.source.max_results, 50)
 
-        # Test with dict config
-        dict_config = {"method": "pymupdf", "download_pdfs": True}
-        component = ComponentConfig(
-            name="pdf", type="PDFParser", config=dict_config
-        )
+        self.assertIsInstance(setting.parser, PDFParserConfig)
+        self.assertEqual(setting.parser.method, "pdfplumber")
 
-        self.assertEqual(component.name, "pdf")
-        self.assertEqual(component.type, "PDFParser")
-        self.assertEqual(component.config, dict_config)
+        self.assertIsInstance(setting.tagger, LLMTaggerConfig)
+        self.assertEqual(setting.tagger.max_tags, 10)
 
-
-class TestSettings(unittest.TestCase):
-    """Test cases for Settings."""
-
-    def test_default_settings(self):
-        """Test default settings creation."""
-        settings = Settings()
-
-        self.assertEqual(settings.log_level, "INFO")
-        self.assertEqual(settings.data_dir, "./data")
-        self.assertEqual(settings.temp_dir, "/tmp")
-        self.assertEqual(len(settings.sources), 0)
-        self.assertEqual(len(settings.parsers), 0)
-
-    def test_from_dict_with_parsers(self):
-        """Test creating Settings from dict with parser configurations."""
+    def test_parse_config_with_components(self):
+        """Test parsing configuration dictionary with various components."""
         config_dict = {
-            "parsers": {
-                "llama": {
-                    "type": "LlamaParser",
-                    "config": {
-                        "result_type": "markdown",
-                        "parsing_mode": "premium",
-                        "max_file_size_mb": 25,
-                    },
-                    "enabled": True,
+            "source": {
+                "type": "arxiv",
+                "config": {"max_results": 50, "sort_by": "relevance"},
+            },
+            "parser": {
+                "type": "pdf",
+                "config": {
+                    "method": "pdfplumber",
+                    "download_pdfs": True,
+                    "max_file_size_mb": 25,
                 },
-                "pdf": {
-                    "type": "PDFParser",
-                    "config": {
-                        "method": "pdfplumber",
-                        "download_pdfs": False,
-                        "max_file_size_mb": 30,
-                    },
-                    "enabled": True,
-                },
-                "unknown": {
-                    "type": "UnknownParser",
-                    "config": {"custom_setting": "value"},
-                    "enabled": False,
-                },
-            }
+            },
+            "tagger": {
+                "type": "llm",
+                "config": {"max_tags": 8, "model": "gpt-4o"},
+            },
+            "log_level": "DEBUG",
+            "data_dir": "./test_data",
         }
 
-        settings = Settings.from_dict(config_dict)
+        setting = Setting._parse_config(config_dict)
 
-        # Test LlamaParser config
-        llama_parser = settings.parsers["llama"]
-        self.assertEqual(llama_parser.type, "LlamaParser")
-        self.assertIsInstance(llama_parser.config, LlamaParserConfig)
-        self.assertEqual(llama_parser.config.result_type, "markdown")
-        self.assertEqual(llama_parser.config.parsing_mode, "premium")
-        self.assertEqual(llama_parser.config.max_file_size_mb, 25)
+        # Test source parsing
+        self.assertIsInstance(setting.source, ArxivSourceConfig)
+        self.assertEqual(setting.source.max_results, 50)
+        self.assertEqual(setting.source.sort_by, "relevance")
 
-        # Test PDFParser config
-        pdf_parser = settings.parsers["pdf"]
-        self.assertEqual(pdf_parser.type, "PDFParser")
-        self.assertIsInstance(pdf_parser.config, PDFParserConfig)
-        self.assertEqual(pdf_parser.config.method, "pdfplumber")
-        self.assertFalse(pdf_parser.config.download_pdfs)
-        self.assertEqual(pdf_parser.config.max_file_size_mb, 30)
+        # Test parser parsing
+        self.assertIsInstance(setting.parser, PDFParserConfig)
+        self.assertEqual(setting.parser.method, "pdfplumber")
+        self.assertTrue(setting.parser.download_pdfs)
+        self.assertEqual(setting.parser.max_file_size_mb, 25)
 
-        # Test unknown parser (should keep as dict)
-        unknown_parser = settings.parsers["unknown"]
-        self.assertEqual(unknown_parser.type, "UnknownParser")
-        self.assertIsInstance(unknown_parser.config, dict)
-        self.assertEqual(unknown_parser.config["custom_setting"], "value")
-        self.assertFalse(unknown_parser.enabled)
+        # Test tagger parsing
+        self.assertIsInstance(setting.tagger, LLMTaggerConfig)
+        self.assertEqual(setting.tagger.max_tags, 8)
+        self.assertEqual(setting.tagger.llm_config.model, "gpt-4o")
 
-    def test_to_dict_with_parsers(self):
-        """Test converting Settings to dict with parser configurations."""
-        settings = Settings()
+        # Test simple fields
+        self.assertEqual(setting.log_level, "DEBUG")
+        self.assertEqual(setting.data_dir, "./test_data")
 
-        # Add parser configurations
-        settings.parsers["llama"] = ComponentConfig(
-            name="llama",
-            type="LlamaParser",
-            config=LlamaParserConfig(
-                result_type="text", parsing_mode="fast", max_file_size_mb=40
-            ),
-        )
+    def test_parse_config_unknown_types(self):
+        """Test parsing configuration with unknown component types."""
+        config_dict = {
+            "source": {
+                "type": "unknown_source",
+                "config": {"some_param": "value"},
+            },
+            "parser": {"type": "llama", "config": {"result_type": "markdown"}},
+        }
 
-        settings.parsers["pdf"] = ComponentConfig(
-            name="pdf",
-            type="PDFParser",
-            config=PDFParserConfig(method="pymupdf", download_pdfs=True),
-        )
+        setting = Setting._parse_config(config_dict)
 
-        config_dict = settings.to_dict()
+        # Unknown source should be ignored
+        self.assertIsNone(setting.source)
 
-        # Test LlamaParser in dict
-        llama_config = config_dict["parsers"]["llama"]
-        self.assertEqual(llama_config["type"], "LlamaParser")
-        self.assertEqual(llama_config["config"]["result_type"], "text")
-        self.assertEqual(llama_config["config"]["parsing_mode"], "fast")
-        self.assertEqual(llama_config["config"]["max_file_size_mb"], 40)
-
-        # Test PDFParser in dict
-        pdf_config = config_dict["parsers"]["pdf"]
-        self.assertEqual(pdf_config["type"], "PDFParser")
-        self.assertEqual(pdf_config["config"]["method"], "pymupdf")
-        self.assertTrue(pdf_config["config"]["download_pdfs"])
-
-    def test_get_enabled_parsers(self):
-        """Test getting enabled parsers."""
-        settings = Settings()
-
-        # Add enabled and disabled parsers
-        settings.parsers["enabled"] = ComponentConfig(
-            name="enabled",
-            type="LlamaParser",
-            config=LlamaParserConfig(),
-            enabled=True,
-        )
-
-        settings.parsers["disabled"] = ComponentConfig(
-            name="disabled",
-            type="PDFParser",
-            config=PDFParserConfig(),
-            enabled=False,
-        )
-
-        enabled_parsers = settings.get_enabled_parsers()
-
-        self.assertEqual(len(enabled_parsers), 1)
-        self.assertIn("enabled", enabled_parsers)
-        self.assertNotIn("disabled", enabled_parsers)
-
-
-class TestDefaultConfig(unittest.TestCase):
-    """Test cases for default configuration creation."""
+        # Known parser should be parsed
+        self.assertIsInstance(setting.parser, LlamaParserConfig)
+        self.assertEqual(setting.parser.result_type, "markdown")
 
     def test_create_default_config(self):
         """Test creating default configuration."""
-        settings = create_default_config()
+        setting = create_default_config()
 
-        # Should have default parsers
-        self.assertIn("pdf", settings.parsers)
-        self.assertIn("llama", settings.parsers)
+        # Test default source
+        self.assertIsInstance(setting.source, ArxivSourceConfig)
+        self.assertEqual(setting.source.max_results, 100)
+        self.assertEqual(setting.source.sort_by, "submittedDate")
+        self.assertEqual(setting.source.sort_order, "descending")
 
-        # Test PDF parser config
-        pdf_parser = settings.parsers["pdf"]
-        self.assertEqual(pdf_parser.type, "PDFParser")
-        self.assertIsInstance(pdf_parser.config, PDFParserConfig)
-        self.assertEqual(pdf_parser.config.method, "pymupdf")
-        self.assertTrue(pdf_parser.enabled)
+        # Test default parser
+        self.assertIsInstance(setting.parser, PDFParserConfig)
+        self.assertEqual(setting.parser.method, "pymupdf")
+        self.assertTrue(setting.parser.download_pdfs)
+        self.assertTrue(setting.parser.extract_tables)
 
-        # Test Llama parser config
-        llama_parser = settings.parsers["llama"]
-        self.assertEqual(llama_parser.type, "LlamaParser")
-        self.assertIsInstance(llama_parser.config, LlamaParserConfig)
-        self.assertEqual(llama_parser.config.result_type, "markdown")
-        self.assertFalse(llama_parser.enabled)  # Disabled by default
+        # Test default storage
+        self.assertIsInstance(setting.storage, LocalStorageConfig)
 
+        # Test default values
+        self.assertEqual(setting.log_level, "INFO")
+        self.assertIsInstance(setting.llm, LLMConfig)
 
-class TestConfigLoading(unittest.TestCase):
-    """Test cases for configuration loading."""
-
-    @patch("quantmind.utils.env.EnvConfig.get_env_var")
-    @patch("quantmind.utils.env.EnvConfig.load_dotenv")
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("quantmind.config.settings.yaml.safe_load")
-    @patch("quantmind.config.settings.Path.exists")
-    def test_load_config_yaml(
-        self,
-        mock_exists,
-        mock_yaml_load,
-        mock_file,
-        mock_load_dotenv,
-        mock_get_env_var,
-    ):
+    def test_load_config_yaml_file(self):
         """Test loading configuration from YAML file."""
-        mock_exists.return_value = True
-        mock_load_dotenv.return_value = True
-        mock_get_env_var.return_value = None  # No environment overrides
-        mock_yaml_load.return_value = {
-            "parsers": {
-                "llama": {
-                    "type": "LlamaParser",
-                    "config": {"result_type": "markdown"},
+        config_dict = {
+            "source": {
+                "type": "arxiv",
+                "config": {"max_results": 25, "sort_by": "relevance"},
+            },
+            "parser": {
+                "type": "pdf",
+                "config": {"method": "pdfplumber", "download_pdfs": False},
+            },
+            "log_level": "WARNING",
+        }
+
+        # Test the actual YAML loading with temporary file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            import yaml
+
+            yaml.dump(config_dict, f)
+            temp_path = f.name
+
+        try:
+            setting = load_config(temp_path)
+
+            # Verify loaded configuration
+            self.assertIsInstance(setting.source, ArxivSourceConfig)
+            self.assertEqual(setting.source.max_results, 25)
+            self.assertEqual(setting.source.sort_by, "relevance")
+
+            self.assertIsInstance(setting.parser, PDFParserConfig)
+            self.assertEqual(setting.parser.method, "pdfplumber")
+            self.assertFalse(setting.parser.download_pdfs)
+
+            self.assertEqual(setting.log_level, "WARNING")
+
+        finally:
+            # Clean up
+            os.unlink(temp_path)
+
+    def test_load_config_nonexistent_file(self):
+        """Test loading configuration from nonexistent file."""
+        with self.assertRaises(FileNotFoundError):
+            load_config("nonexistent.yaml")
+
+    def test_substitute_env_vars(self):
+        """Test environment variable substitution in configuration."""
+        # Set up environment variables
+        os.environ["TEST_VAR"] = "test_value"
+        os.environ["API_KEY"] = "secret_key"
+
+        config_dict = {
+            "source": {
+                "type": "arxiv",
+                "config": {
+                    "api_key": "${API_KEY}",
+                    "max_results": "${MAX_RESULTS:50}",  # with default
+                },
+            },
+            "data_dir": "${DATA_DIR:./default_data}",
+            "temp_dir": "${TEST_VAR}/temp",
+        }
+
+        result = Setting.substitute_env_vars(config_dict)
+
+        # Test substitution
+        self.assertEqual(result["source"]["config"]["api_key"], "secret_key")
+        self.assertEqual(
+            result["source"]["config"]["max_results"], "50"
+        )  # default used
+        self.assertEqual(result["data_dir"], "./default_data")  # default used
+        self.assertEqual(result["temp_dir"], "test_value/temp")
+
+        # Clean up
+        del os.environ["TEST_VAR"]
+        del os.environ["API_KEY"]
+
+    def test_substitute_env_vars_nested(self):
+        """Test environment variable substitution in nested structures."""
+        os.environ["NESTED_VAR"] = "nested_value"
+
+        config_dict = {
+            "components": {
+                "parser": {
+                    "config": {
+                        "nested_list": ["${NESTED_VAR}", "static_value"],
+                        "nested_dict": {"key": "${NESTED_VAR}"},
+                    }
                 }
             }
         }
 
-        settings = load_config("test_config.yaml")
+        result = Setting.substitute_env_vars(config_dict)
 
-        mock_file.assert_called_once()
-        mock_yaml_load.assert_called_once()
-        self.assertIn("llama", settings.parsers)
+        self.assertEqual(
+            result["components"]["parser"]["config"]["nested_list"][0],
+            "nested_value",
+        )
+        self.assertEqual(
+            result["components"]["parser"]["config"]["nested_dict"]["key"],
+            "nested_value",
+        )
+
+        # Clean up
+        del os.environ["NESTED_VAR"]
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_substitute_env_vars_defaults(self):
+        """Test environment variable substitution with defaults when vars don't exist."""
+        config_dict = {
+            "api_key": "${MISSING_KEY:default_key}",
+            "no_default": "${MISSING_NO_DEFAULT}",
+            "mixed": "prefix_${MISSING_WITH_DEFAULT:default}_suffix",
+        }
+
+        result = Setting.substitute_env_vars(config_dict)
+
+        self.assertEqual(result["api_key"], "default_key")
+        self.assertEqual(
+            result["no_default"], ""
+        )  # empty string when no default
+        self.assertEqual(result["mixed"], "prefix_default_suffix")
+
+    def test_export_config(self):
+        """Test exporting configuration to dictionary."""
+        setting = Setting(
+            source=ArxivSourceConfig(max_results=30),
+            parser=PDFParserConfig(method="pdfplumber", download_pdfs=True),
+            tagger=LLMTaggerConfig(max_tags=5),
+            log_level="DEBUG",
+            data_dir="./test_data",
+        )
+
+        config_dict = setting._export_config()
+
+        # Test component export
+        self.assertEqual(config_dict["source"]["type"], "arxiv")
+        self.assertEqual(config_dict["source"]["config"]["max_results"], 30)
+
+        self.assertEqual(config_dict["parser"]["type"], "pdf")
+        self.assertEqual(
+            config_dict["parser"]["config"]["method"], "pdfplumber"
+        )
+        self.assertTrue(config_dict["parser"]["config"]["download_pdfs"])
+
+        self.assertEqual(config_dict["tagger"]["type"], "llm")
+        self.assertEqual(config_dict["tagger"]["config"]["max_tags"], 5)
+
+        # Test simple fields
+        self.assertEqual(config_dict["log_level"], "DEBUG")
+        self.assertEqual(config_dict["data_dir"], "./test_data")
+
+        # Test sensitive data exclusion
+        self.assertNotIn("api_key", config_dict["llm"])
+
+    def test_save_to_yaml(self):
+        """Test saving configuration to YAML file."""
+        setting = Setting(
+            source=ArxivSourceConfig(max_results=20),
+            parser=PDFParserConfig(method="pymupdf"),
+        )
+
+        # Test saving to temporary file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
+            temp_path = f.name
+
+        try:
+            setting.save_to_yaml(temp_path)
+
+            # Verify file was created and contains expected content
+            with open(temp_path, "r") as f:
+                import yaml
+
+                saved_config = yaml.safe_load(f)
+
+            self.assertEqual(saved_config["source"]["type"], "arxiv")
+            self.assertEqual(
+                saved_config["source"]["config"]["max_results"], 20
+            )
+            self.assertEqual(saved_config["parser"]["type"], "pdf")
+            self.assertEqual(
+                saved_config["parser"]["config"]["method"], "pymupdf"
+            )
+
+        finally:
+            # Clean up
+            os.unlink(temp_path)
 
 
 if __name__ == "__main__":

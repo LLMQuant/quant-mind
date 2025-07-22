@@ -1,486 +1,389 @@
-"""Configuration management for QuantMind."""
+"""Unified configuration management for QuantMind.
+
+Simple, type-safe configuration system with YAML loading and environment variable substitution.
+"""
+
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 import yaml
-from pathlib import Path
-from typing import Dict, Any, Optional, Union
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field, field_validator
 
-from quantmind.config.llm import LLMConfig
-from quantmind.config.parsers import (
-    BaseParserConfig,
-    LlamaParserConfig,
-    PDFParserConfig,
+from quantmind.config.flows import (
+    AnalyzerFlowConfig,
+    BaseFlowConfig,
+    QAFlowConfig,
+    SummaryFlowConfig,
 )
-from quantmind.utils.env import EnvConfig
+from quantmind.config.llm import LLMConfig
+from quantmind.config.parsers import LlamaParserConfig, PDFParserConfig
+from quantmind.config.sources import (
+    ArxivSourceConfig,
+    NewsSourceConfig,
+    WebSourceConfig,
+)
+from quantmind.config.storage import LocalStorageConfig
+from quantmind.config.taggers import LLMTaggerConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
-@dataclass
-class SourceConfig:
-    """Configuration for content sources."""
-
-    name: str
-    type: str
-    config: Dict[str, Any] = field(default_factory=dict)
-    enabled: bool = True
+from dotenv import load_dotenv
 
 
-@dataclass
-class ComponentConfig:
-    """Base configuration for a component."""
+class Setting(BaseModel):
+    """Unified configuration for QuantMind - single instance pattern."""
 
-    name: str
-    type: str
-    config: Union[BaseParserConfig, Dict[str, Any]] = field(
-        default_factory=dict
-    )
-    enabled: bool = True
+    # Component configurations - single instances, not dictionaries
+    source: Optional[
+        Union[ArxivSourceConfig, NewsSourceConfig, WebSourceConfig]
+    ] = None
+    parser: Optional[Union[PDFParserConfig, LlamaParserConfig]] = None
+    tagger: Optional[LLMTaggerConfig] = None
+    storage: LocalStorageConfig = Field(default_factory=LocalStorageConfig)
+    flow: Optional[
+        Union[
+            QAFlowConfig, SummaryFlowConfig, AnalyzerFlowConfig, BaseFlowConfig
+        ]
+    ] = None
 
-
-@dataclass
-class TaggerConfig:
-    """Configuration for content taggers."""
-
-    name: str
-    type: str
-    config: Dict[str, Any] = field(default_factory=dict)
-    enabled: bool = True
-
-
-@dataclass
-class StorageConfig:
-    """Configuration for storage backends."""
-
-    name: str
-    type: str
-    config: Dict[str, Any] = field(default_factory=dict)
-    enabled: bool = True
-
-
-@dataclass
-class WorkflowConfig:
-    """Configuration for workflow execution."""
-
-    max_workers: int = 4
-    retry_attempts: int = 3
-    timeout: int = 300
-    enable_deduplication: bool = True
-    quality_threshold: float = 0.5
-
-
-@dataclass
-class Settings:
-    """Main configuration settings for QuantMind."""
-
-    # Component configurations
-    sources: Dict[str, SourceConfig] = field(default_factory=dict)
-    parsers: Dict[str, ComponentConfig] = field(default_factory=dict)
-    taggers: Dict[str, TaggerConfig] = field(default_factory=dict)
-    storages: Dict[str, StorageConfig] = field(default_factory=dict)
-
-    # Workflow configuration
-    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
-
-    # LLM configuration
-    llm: LLMConfig = field(default_factory=LLMConfig)
+    # Core configuration
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
     # Global settings
-    log_level: str = "INFO"
+    log_level: str = Field(
+        default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$"
+    )
     data_dir: str = "./data"
     temp_dir: str = "/tmp"
 
-    # API configurations (legacy, prefer LLM config)
-    openai_api_key: Optional[str] = None
-    llama_cloud_api_key: Optional[str] = None
-    arxiv_max_results: int = 100
+    class Config:
+        """Pydantic model configuration."""
+
+        validate_assignment = True
+        extra = "forbid"
+
+    @field_validator("data_dir", "temp_dir")
+    @classmethod
+    def validate_directories(cls, v: str) -> str:
+        """Validate and create directories if they don't exist."""
+        path = Path(v).expanduser()
+        # Keep the original style for relative paths.
+        if not path.is_absolute():
+            resolved_path = path.resolve()
+            resolved_path.mkdir(parents=True, exist_ok=True)
+            return v
+        else:
+            path = path.resolve()
+            path.mkdir(parents=True, exist_ok=True)
+            return str(path)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "Settings":
-        """Create Settings from a dictionary.
+    def load_dotenv(cls, dotenv_path: Optional[str] = None) -> bool:
+        """Load environment variables from .env file.
 
         Args:
-            config_dict: Configuration dictionary
+            dotenv_path: Path to .env file. If None, auto-discovers .env file.
 
         Returns:
-            Settings instance
+            True if .env file was found and loaded, False otherwise
         """
-        settings = cls()
-
-        # Load sources
-        for name, source_data in config_dict.get("sources", {}).items():
-            settings.sources[name] = SourceConfig(
-                name=name,
-                type=source_data.get("type", "unknown"),
-                config=source_data.get("config", {}),
-                enabled=source_data.get("enabled", True),
-            )
-
-        # Load parsers
-        for name, parser_data in config_dict.get("parsers", {}).items():
-            parser_type = parser_data.get("type", "unknown")
-            parser_config_data = parser_data.get("config", {})
-
-            # Create appropriate Pydantic config based on parser type
-            if parser_type == "LlamaParser":
-                parser_config = LlamaParserConfig(**parser_config_data)
-            elif parser_type == "PDFParser":
-                parser_config = PDFParserConfig(**parser_config_data)
+        if dotenv_path:
+            # Load specific file
+            env_path = Path(dotenv_path)
+            if env_path.exists():
+                load_dotenv(env_path)
+                logger.info(f"Loaded environment from {env_path}")
+                return True
             else:
-                # For unknown types, keep as dict for backward compatibility
-                parser_config = parser_config_data
+                logger.warning(f"Dotenv file not found: {env_path}")
+                return False
+        else:
+            # Auto-discover .env file
+            current_dir = Path.cwd()
+            env_paths = [
+                current_dir / ".env",
+                current_dir.parent / ".env",
+            ]
 
-            settings.parsers[name] = ComponentConfig(
-                name=name,
-                type=parser_type,
-                config=parser_config,
-                enabled=parser_data.get("enabled", True),
+            for env_path in env_paths:
+                if env_path.exists():
+                    load_dotenv(env_path)
+                    logger.info(f"Loaded environment from {env_path}")
+                    return True
+
+            logger.debug("No .env file found")
+            return False
+
+    @classmethod
+    def substitute_env_vars(cls, config_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Substitute environment variables in configuration values.
+
+        Supports syntax: ${ENV_VAR} or ${ENV_VAR:default_value}
+        """
+
+        def substitute_value(value: Any) -> Any:
+            if isinstance(value, str):
+                # Pattern: ${VAR} or ${VAR:default}
+                pattern = r"\$\{([^}:]+)(?::([^}]*))?\}"
+
+                def replacer(match):
+                    env_var = match.group(1)
+                    default_val = (
+                        match.group(2) if match.group(2) is not None else ""
+                    )
+                    return os.getenv(env_var, default_val)
+
+                return re.sub(pattern, replacer, value)
+            elif isinstance(value, dict):
+                return {k: substitute_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [substitute_value(item) for item in value]
+            else:
+                return value
+
+        return substitute_value(config_dict)
+
+    @classmethod
+    def from_yaml(
+        cls, config_path: Union[str, Path], env_file: Optional[str] = None
+    ) -> "Setting":
+        """Load configuration from YAML file with environment variable substitution.
+
+        Args:
+            config_path: Path to YAML configuration file
+            env_file: Optional path to .env file
+
+        Returns:
+            Configured Setting instance
+
+        Raises:
+            FileNotFoundError: If config file doesn't exist
+            ValueError: If config format is invalid
+        """
+        config_path = Path(config_path)
+
+        if not config_path.exists():
+            raise FileNotFoundError(
+                f"Configuration file not found: {config_path}"
             )
 
-        # Load taggers
-        for name, tagger_data in config_dict.get("taggers", {}).items():
-            settings.taggers[name] = TaggerConfig(
-                name=name,
-                type=tagger_data.get("type", "unknown"),
-                config=tagger_data.get("config", {}),
-                enabled=tagger_data.get("enabled", True),
-            )
+        # Load .env file first
+        cls.load_dotenv(env_file)
 
-        # Load storages
-        for name, storage_data in config_dict.get("storages", {}).items():
-            settings.storages[name] = StorageConfig(
-                name=name,
-                type=storage_data.get("type", "unknown"),
-                config=storage_data.get("config", {}),
-                enabled=storage_data.get("enabled", True),
-            )
+        try:
+            # Load YAML
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
 
-        # Load workflow configuration
-        workflow_data = config_dict.get("workflow", {})
-        settings.workflow = WorkflowConfig(
-            max_workers=workflow_data.get("max_workers", 4),
-            retry_attempts=workflow_data.get("retry_attempts", 3),
-            timeout=workflow_data.get("timeout", 300),
-            enable_deduplication=workflow_data.get(
-                "enable_deduplication", True
+            if not isinstance(config_dict, dict):
+                raise ValueError("Configuration file must contain a dictionary")
+
+            # Substitute environment variables
+            config_dict = cls.substitute_env_vars(config_dict)
+
+            # Parse configuration
+            return cls._parse_config(config_dict)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to load configuration from {config_path}: {e}"
+            )
+            raise
+
+    @classmethod
+    def _parse_config(cls, config_dict: Dict[str, Any]) -> "Setting":
+        """Parse configuration dictionary into Setting instance."""
+        # Configuration type registry
+        CONFIG_REGISTRY = {
+            "source": {
+                "arxiv": ArxivSourceConfig,
+                "news": NewsSourceConfig,
+                "web": WebSourceConfig,
+            },
+            "parser": {
+                "pdf": PDFParserConfig,
+                "llama": LlamaParserConfig,
+            },
+            "tagger": {
+                "llm": LLMTaggerConfig,
+            },
+            "storage": {
+                "local": LocalStorageConfig,
+            },
+            "flow": {
+                "qa": QAFlowConfig,
+                "summary": SummaryFlowConfig,
+                "analyzer": AnalyzerFlowConfig,
+                "base": BaseFlowConfig,
+            },
+        }
+
+        parsed = {}
+
+        # Parse component configurations
+        for component_name, type_registry in CONFIG_REGISTRY.items():
+            if component_name in config_dict:
+                component_data = config_dict[component_name]
+                if isinstance(component_data, dict):
+                    component_type = component_data.get("type")
+                    component_config = component_data.get("config", {})
+
+                    if component_type in type_registry:
+                        config_class = type_registry[component_type]
+                        parsed[component_name] = config_class(
+                            **component_config
+                        )
+                    else:
+                        logger.warning(
+                            f"Unknown {component_name} type: {component_type}"
+                        )
+
+        # Parse other configurations
+        if "llm" in config_dict:
+            parsed["llm"] = LLMConfig(**config_dict["llm"])
+
+        # Copy simple fields
+        for key in ["log_level", "data_dir", "temp_dir"]:
+            if key in config_dict:
+                parsed[key] = config_dict[key]
+
+        return cls(**parsed)
+
+    @classmethod
+    def create_default(cls) -> "Setting":
+        """Create default configuration with sensible defaults."""
+        return cls(
+            source=ArxivSourceConfig(
+                max_results=100,
+                sort_by="submittedDate",
+                sort_order="descending",
             ),
-            quality_threshold=workflow_data.get("quality_threshold", 0.5),
+            parser=PDFParserConfig(
+                method="pymupdf",
+                download_pdfs=True,
+                extract_tables=True,
+            ),
+            storage=LocalStorageConfig(base_dir=Path("./data")),
         )
 
-        # Load LLM configuration
-        llm_data = config_dict.get("llm", {})
+    def save_to_yaml(self, config_path: Union[str, Path]) -> None:
+        """Save configuration to YAML file.
 
-        # Support legacy API key configuration
-        if "openai_api_key" in config_dict and "api_key" not in llm_data:
-            llm_data["api_key"] = config_dict["openai_api_key"]
-
-        settings.llm = LLMConfig(**llm_data)
-
-        # Load global settings
-        settings.log_level = config_dict.get("log_level", "INFO")
-        settings.data_dir = config_dict.get("data_dir", "./data")
-        settings.temp_dir = config_dict.get("temp_dir", "/tmp")
-        settings.openai_api_key = config_dict.get("openai_api_key")
-        settings.llama_cloud_api_key = config_dict.get("llama_cloud_api_key")
-        settings.arxiv_max_results = config_dict.get("arxiv_max_results", 100)
-
-        return settings
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert Settings to dictionary.
-
-        Returns:
-            Configuration dictionary
+        Args:
+            config_path: Path to save configuration to
         """
-        return {
-            "sources": {
-                name: {
-                    "type": source.type,
-                    "config": source.config,
-                    "enabled": source.enabled,
-                }
-                for name, source in self.sources.items()
-            },
-            "parsers": {
-                name: {
-                    "type": parser.type,
-                    "config": parser.config.model_dump()
-                    if hasattr(parser.config, "model_dump")
-                    else parser.config,
-                    "enabled": parser.enabled,
-                }
-                for name, parser in self.parsers.items()
-            },
-            "taggers": {
-                name: {
-                    "type": tagger.type,
-                    "config": tagger.config,
-                    "enabled": tagger.enabled,
-                }
-                for name, tagger in self.taggers.items()
-            },
-            "storages": {
-                name: {
-                    "type": storage.type,
-                    "config": storage.config,
-                    "enabled": storage.enabled,
-                }
-                for name, storage in self.storages.items()
-            },
-            "workflow": {
-                "max_workers": self.workflow.max_workers,
-                "retry_attempts": self.workflow.retry_attempts,
-                "timeout": self.workflow.timeout,
-                "enable_deduplication": self.workflow.enable_deduplication,
-                "quality_threshold": self.workflow.quality_threshold,
-            },
-            "llm": self.llm.model_dump(),
-            "log_level": self.log_level,
-            "data_dir": self.data_dir,
-            "temp_dir": self.temp_dir,
-            "openai_api_key": self.openai_api_key,
-            "llama_cloud_api_key": self.llama_cloud_api_key,
-            "arxiv_max_results": self.arxiv_max_results,
-        }
+        config_path = Path(config_path)
+        config_dict = self._export_config()
 
-    def get_enabled_sources(self) -> Dict[str, SourceConfig]:
-        """Get enabled source configurations.
-
-        Returns:
-            Dictionary of enabled sources
-        """
-        return {
-            name: config
-            for name, config in self.sources.items()
-            if config.enabled
-        }
-
-    def get_enabled_parsers(self) -> Dict[str, ComponentConfig]:
-        """Get enabled parser configurations.
-
-        Returns:
-            Dictionary of enabled parsers
-        """
-        return {
-            name: config
-            for name, config in self.parsers.items()
-            if config.enabled
-        }
-
-    def get_enabled_taggers(self) -> Dict[str, TaggerConfig]:
-        """Get enabled tagger configurations.
-
-        Returns:
-            Dictionary of enabled taggers
-        """
-        return {
-            name: config
-            for name, config in self.taggers.items()
-            if config.enabled
-        }
-
-    def get_enabled_storages(self) -> Dict[str, StorageConfig]:
-        """Get enabled storage configurations.
-
-        Returns:
-            Dictionary of enabled storages
-        """
-        return {
-            name: config
-            for name, config in self.storages.items()
-            if config.enabled
-        }
-
-
-def load_config(config_path: Union[str, Path]) -> Settings:
-    """Load configuration from a file.
-
-    Args:
-        config_path: Path to configuration file (YAML or JSON)
-
-    Returns:
-        Settings instance
-
-    Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValueError: If config file format is invalid
-    """
-    config_path = Path(config_path)
-
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            if config_path.suffix.lower() in [".yml", ".yaml"]:
-                config_dict = yaml.safe_load(f)
-            elif config_path.suffix.lower() == ".json":
-                import json
-
-                config_dict = json.load(f)
-            else:
-                raise ValueError(
-                    f"Unsupported config file format: {config_path.suffix}"
-                )
-
-        if not isinstance(config_dict, dict):
-            raise ValueError("Configuration file must contain a dictionary")
-
-        # Apply environment variable overrides
-        config_dict = _apply_env_overrides(config_dict)
-
-        settings = Settings.from_dict(config_dict)
-        logger.info(f"Loaded configuration from {config_path}")
-
-        return settings
-
-    except Exception as e:
-        logger.error(f"Failed to load configuration from {config_path}: {e}")
-        raise
-
-
-def _apply_env_overrides(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply environment variable overrides to configuration.
-
-    Args:
-        config_dict: Base configuration dictionary
-
-    Returns:
-        Configuration with environment overrides applied
-    """
-    # Ensure environment is loaded (including .env files)
-    EnvConfig.load_dotenv()
-
-    # Define environment variable mappings
-    env_mappings = {
-        "QUANTMIND_LOG_LEVEL": "log_level",
-        "QUANTMIND_DATA_DIR": "data_dir",
-        "QUANTMIND_TEMP_DIR": "temp_dir",
-        "OPENAI_API_KEY": "openai_api_key",
-        "LLAMA_CLOUD_API_KEY": "llama_cloud_api_key",
-        "QUANTMIND_ARXIV_MAX_RESULTS": "arxiv_max_results",
-        "QUANTMIND_MAX_WORKERS": "workflow.max_workers",
-        "QUANTMIND_RETRY_ATTEMPTS": "workflow.retry_attempts",
-        "QUANTMIND_TIMEOUT": "workflow.timeout",
-    }
-
-    for env_var, config_key in env_mappings.items():
-        env_value = EnvConfig.get_env_var(env_var)
-        if env_value is not None:
-            # Handle nested keys
-            keys = config_key.split(".")
-            current = config_dict
-
-            # Navigate to parent
-            for key in keys[:-1]:
-                if key not in current:
-                    current[key] = {}
-                current = current[key]
-
-            # Set value with type conversion
-            final_key = keys[-1]
-            if env_var in [
-                "QUANTMIND_ARXIV_MAX_RESULTS",
-                "QUANTMIND_MAX_WORKERS",
-                "QUANTMIND_RETRY_ATTEMPTS",
-                "QUANTMIND_TIMEOUT",
-            ]:
-                current[final_key] = int(env_value)
-            else:
-                current[final_key] = env_value
-
-    return config_dict
-
-
-def create_default_config() -> Settings:
-    """Create default configuration.
-
-    Returns:
-        Default Settings instance
-    """
-    settings = Settings()
-
-    # Default source configuration
-    settings.sources["arxiv"] = SourceConfig(
-        name="arxiv",
-        type="ArxivSource",
-        config={"max_results": 100, "sort_by": "SubmittedDate"},
-    )
-
-    # Default parser configurations
-    settings.parsers["pdf"] = ComponentConfig(
-        name="pdf",
-        type="PDFParser",
-        config=PDFParserConfig(
-            method="pymupdf",
-            download_pdfs=True,
-            max_file_size_mb=50,
-        ),
-    )
-
-    settings.parsers["llama"] = ComponentConfig(
-        name="llama",
-        type="LlamaParser",
-        config=LlamaParserConfig(
-            result_type="markdown",
-            parsing_mode="fast",
-            max_file_size_mb=50,
-        ),
-        enabled=False,  # Disabled by default (requires API key)
-    )
-
-    # Default tagger configurations
-    settings.taggers["rule"] = TaggerConfig(
-        name="rule", type="RuleTagger", config={"case_sensitive": False}
-    )
-
-    settings.taggers["llm"] = TaggerConfig(
-        name="llm",
-        type="LLMTagger",
-        config={
-            "model_type": "openai",
-            "model_name": "gpt-4",
-            "temperature": 0.0,
-        },
-        enabled=False,  # Disabled by default (requires API key)
-    )
-
-    # Default storage configuration
-    settings.storages["json"] = StorageConfig(
-        name="json",
-        type="JSONStorage",
-        config={
-            "storage_dir": "./data",
-            "auto_backup": True,
-            "max_backup_count": 5,
-        },
-    )
-
-    return settings
-
-
-def save_config(settings: Settings, config_path: Union[str, Path]) -> None:
-    """Save configuration to a file.
-
-    Args:
-        settings: Settings instance to save
-        config_path: Path to save configuration to
-    """
-    config_path = Path(config_path)
-    config_dict = settings.to_dict()
-
-    try:
-        with open(config_path, "w", encoding="utf-8") as f:
-            if config_path.suffix.lower() in [".yml", ".yaml"]:
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
                 yaml.dump(config_dict, f, default_flow_style=False, indent=2)
+
+            logger.info(f"Saved configuration to {config_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save configuration to {config_path}: {e}")
+            raise
+
+    def _export_config(self) -> Dict[str, Any]:
+        """Export configuration to dictionary format suitable for YAML."""
+
+        def serialize_value(value: Any) -> Any:
+            """Recursively serialize values."""
+            if isinstance(value, Path):
+                return str(value)
+            elif isinstance(value, dict):
+                return {k: serialize_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [serialize_value(item) for item in value]
             else:
-                import json
+                return value
 
-                json.dump(config_dict, f, indent=2, ensure_ascii=False)
+        def serialize_component(component, component_type_map):
+            if component is None:
+                return None
 
-        logger.info(f"Saved configuration to {config_path}")
+            # Find component type
+            component_class = type(component)
+            component_type = None
+            for type_name, type_class in component_type_map.items():
+                if component_class == type_class:
+                    component_type = type_name
+                    break
 
-    except Exception as e:
-        logger.error(f"Failed to save configuration to {config_path}: {e}")
-        raise
+            if component_type is None:
+                return None
+
+            # Serialize config, excluding sensitive fields
+            config_dict = component.model_dump(exclude_none=True)
+            config_dict.pop("api_key", None)  # Remove sensitive data
+
+            # Convert Path objects to strings
+            config_dict = serialize_value(config_dict)
+
+            return {"type": component_type, "config": config_dict}
+
+        # Type mappings for export
+        type_maps = {
+            "source": {
+                "arxiv": ArxivSourceConfig,
+                "news": NewsSourceConfig,
+                "web": WebSourceConfig,
+            },
+            "parser": {"pdf": PDFParserConfig, "llama": LlamaParserConfig},
+            "tagger": {"llm": LLMTaggerConfig},
+            "storage": {"local": LocalStorageConfig},
+            "flow": {
+                "qa": QAFlowConfig,
+                "summary": SummaryFlowConfig,
+                "analyzer": AnalyzerFlowConfig,
+                "base": BaseFlowConfig,
+            },
+        }
+
+        config_dict = {}
+
+        # Export components
+        for component_name, type_map in type_maps.items():
+            component = getattr(self, component_name, None)
+            serialized = serialize_component(component, type_map)
+            if serialized:
+                config_dict[component_name] = serialized
+
+        # Export LLM config (exclude sensitive data)
+        config_dict["llm"] = self.llm.model_dump(exclude={"api_key"})
+
+        # Export simple fields
+        config_dict.update(
+            {
+                "log_level": self.log_level,
+                "data_dir": self.data_dir,
+                "temp_dir": self.temp_dir,
+            }
+        )
+
+        return config_dict
+
+
+# Factory functions for convenience
+def load_config(
+    config_path: Union[str, Path], env_file: Optional[str] = None
+) -> Setting:
+    """Load configuration from YAML file."""
+    return Setting.from_yaml(config_path, env_file)
+
+
+def create_default_config() -> Setting:
+    """Create default configuration."""
+    return Setting.create_default()
+
+
+# Export public API
+__all__ = [
+    "Setting",
+    "load_config",
+    "create_default_config",
+]
