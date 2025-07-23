@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/quant-mind.svg" width="400">
+  <img src="assets/quant-mind.png" width="400">
 </p>
 
 <p align="center">
