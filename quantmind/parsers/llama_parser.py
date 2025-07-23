@@ -11,7 +11,6 @@ from llama_cloud_services.parse.types import JobResult
 
 from quantmind.config.parsers import LlamaParserConfig
 from quantmind.models.paper import Paper
-from quantmind.utils.env import get_llama_cloud_api_key
 from quantmind.utils.logger import get_logger
 
 from .base import BaseParser
@@ -53,9 +52,9 @@ class LlamaParser(BaseParser):
         # Store typed config for easier access
         self.llama_config = llama_config
 
-        # Extract API key using modern environment management
-        self.api_key = self.llama_config.api_key or get_llama_cloud_api_key(
-            required=False
+        # Extract API key from config or environment
+        self.api_key = self.llama_config.api_key or os.getenv(
+            "LLAMA_CLOUD_API_KEY"
         )
         if not self.api_key:
             raise ValueError(
