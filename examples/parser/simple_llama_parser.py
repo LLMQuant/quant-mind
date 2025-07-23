@@ -1,11 +1,11 @@
 """Simple LlamaParser usage example.
 
 This example shows basic usage of the LlamaParser for parsing
-individual PDF files or URLs using the new Pydantic configuration system
-with modern dotenv-based environment management.
+individual PDF files or URLs using the new Pydantic configuration system.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from colorama import Fore, Style
@@ -13,7 +13,6 @@ from colorama import Fore, Style
 from quantmind.config.parsers import LlamaParserConfig, ParsingMode, ResultType
 from quantmind.models.paper import Paper
 from quantmind.parsers.llama_parser import LlamaParser
-from quantmind.utils.env import get_llama_cloud_api_key, load_environment
 
 # Set logging level to DEBUG
 logging.basicConfig(level=logging.DEBUG)
@@ -23,9 +22,9 @@ def demo_file_parsing():
     """Demonstrate parsing a local PDF file."""
     print("=== File Parsing Demo ===\n")
 
-    # Create parser with Pydantic configuration using modern env management
+    # Create parser with Pydantic configuration
     config = LlamaParserConfig(
-        api_key=get_llama_cloud_api_key(required=False) or "demo_key",
+        api_key=os.getenv("LLAMA_CLOUD_API_KEY") or "demo_key",
         result_type=ResultType.MD,
         parsing_mode=ParsingMode.FAST,
         max_file_size_mb=25,
@@ -79,7 +78,7 @@ def demo_url_parsing():
     print("=== URL Parsing Demo ===\n")
 
     config = LlamaParserConfig(
-        api_key=get_llama_cloud_api_key(required=False) or "demo_key",
+        api_key=os.getenv("LLAMA_CLOUD_API_KEY") or "demo_key",
         result_type=ResultType.TXT,
         parsing_mode=ParsingMode.BALANCED,
     )
@@ -129,7 +128,7 @@ def demo_paper_parsing():
 
     # Create parser with advanced configuration
     config = LlamaParserConfig(
-        api_key=get_llama_cloud_api_key(required=False) or "demo_key",
+        api_key=os.getenv("LLAMA_CLOUD_API_KEY") or "demo_key",
         result_type=ResultType.MD,
         parsing_mode=ParsingMode.PREMIUM,
         system_prompt=(
@@ -190,7 +189,7 @@ def demo_configuration_options():
     print("=== Configuration Options Demo ===\n")
 
     # Get API key once for all configurations
-    api_key = get_llama_cloud_api_key(required=False) or "demo_key"
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY") or "demo_key"
 
     configurations = [
         {
@@ -247,19 +246,10 @@ def main():
     print("=" * 45)
     print()
 
-    # Load environment configuration (including .env files)
-    env_loaded = load_environment()
-    if env_loaded:
-        print(
-            Fore.GREEN
-            + "🔧 Environment configuration loaded from .env file"
-            + Style.RESET_ALL
-        )
-
-    # Check for API key using modern approach
+    # Check for API key
     try:
-        api_key = get_llama_cloud_api_key(required=False)
-        if api_key and api_key != "demo_key":
+        api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+        if api_key:
             print("✅ LLAMA_CLOUD_API_KEY found - examples will use real API")
         else:
             print("⚠️  LLAMA_CLOUD_API_KEY not set - running in demo mode")
@@ -307,7 +297,7 @@ def main():
     )
     print(
         Fore.YELLOW
-        + "\n💡 Run `python -c 'from quantmind.utils.env import create_sample_env_file; create_sample_env_file()'` to create a sample .env file"
+        + "\n💡 Create a .env file with: LLAMA_CLOUD_API_KEY=your_api_key_here"
         + Style.RESET_ALL
     )
 
