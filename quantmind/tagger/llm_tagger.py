@@ -1,16 +1,10 @@
-"""Simple LLM-based tagger for financial research papers."""
+"""Simple LLM-based tagger for financial research papers using LLMBlock."""
 
 import json
 from typing import List
 
-try:
-    from openai import OpenAI
-
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-
 from quantmind.config import LLMTaggerConfig
+from quantmind.llm import create_llm_block
 from quantmind.models import Paper
 from quantmind.utils.logger import get_logger
 
@@ -22,12 +16,12 @@ logger = get_logger(__name__)
 class LLMTagger(BaseTagger):
     """Simple LLM-based tagger for financial research papers.
 
-    Generates relevant tags for quantitative finance papers using LLM analysis.
+    Uses LLMBlock to generate relevant tags for quantitative finance papers.
     """
 
     def __init__(
         self,
-        config: LLMTaggerConfig = LLMTaggerConfig(),
+        config: LLMTaggerConfig = None,
     ):
         """Initialize LLM tagger.
 
@@ -35,37 +29,17 @@ class LLMTagger(BaseTagger):
             config: Configuration for the LLM tagger
         """
         super().__init__()
+        self.config = config or LLMTaggerConfig()
 
-        self.config = config
-
-        self.client = None
-        self._init_client()
-
-    def _init_client(self):
-        """Initialize the LLM client."""
-        if self.llm_type == "openai" and OPENAI_AVAILABLE:
-            try:
-                self.client = (
-                    OpenAI(
-                        api_key=self.config.api_key,
-                        base_url=self.config.base_url,
-                    )
-                    if self.config.base_url
-                    else OpenAI(
-                        api_key=self.config.api_key,
-                    )
-                )
-                logger.info(
-                    f"Initialized OpenAI client with model {self.llm_name}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI client: {e}")
-                self.client = None
-        else:
-            logger.warning(
-                f"LLM client not available for type: {self.llm_type}"
+        # Create LLMBlock directly from the embedded LLMConfig
+        try:
+            self.llm_block = create_llm_block(self.config.llm_config)
+            logger.info(
+                f"Initialized LLM tagger with model: {self.config.llm_config.model}"
             )
-            self.client = None
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM block: {e}")
+            self.llm_block = None
 
     def tag_paper(self, paper: Paper) -> Paper:
         """Generate tags for a paper using LLM analysis.
@@ -76,8 +50,8 @@ class LLMTagger(BaseTagger):
         Returns:
             Paper object with added tags
         """
-        if not self.client:
-            logger.warning("No LLM client available, skipping tagging")
+        if not self.llm_block:
+            logger.warning("No LLM block available, skipping tagging")
             return paper
 
         try:
@@ -95,7 +69,7 @@ class LLMTagger(BaseTagger):
             paper.meta_info.update(
                 {
                     "tagger": "llm_tagger",
-                    "model_used": self.llm_name,
+                    "model_used": self.config.llm_config.model,
                     "tags_generated": len(tags),
                 }
             )
@@ -127,7 +101,7 @@ class LLMTagger(BaseTagger):
         # Use first max_tokens characters of full text to stay within token limits
         if paper.full_text:
             content_parts.append(
-                f"Content: {paper.full_text[: self.config.max_tokens]}..."
+                f"Content: {paper.full_text[: self.config.llm_config.max_tokens]}..."
             )
 
         return "\n\n".join(content_parts)
@@ -144,17 +118,16 @@ class LLMTagger(BaseTagger):
         prompt = self._build_prompt(content)
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.llm_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.config.temperature,
-            )
+            response = self.llm_block.generate_text(prompt)
 
-            response_text = response.choices[0].message.content.strip()
-            logger.debug(f"LLM response: {response_text}")
+            if not response:
+                logger.error("No response from LLM")
+                return []
+
+            logger.debug(f"LLM response: {response}")
 
             # Parse tags from response
-            tags = self._parse_tags(response_text)
+            tags = self._parse_tags(response)
 
             # Limit to max_tags
             return tags[: self.config.max_tags]
@@ -182,9 +155,6 @@ class LLMTagger(BaseTagger):
 
 Paper Content:
 {content}
-
-User instructions (if empty, skip this part):
-{self.config.custom_instructions}
 
 Generate tags that capture the key aspects like:
 - Market types (equity, forex, crypto, bonds)
@@ -269,18 +239,29 @@ Return only a JSON list of tags, no other text:
         Returns:
             List of extracted tags
         """
-        if not self.client:
+        if not self.llm_block:
             return []
 
         content = f"Title: {title}\n\nContent: {text}" if title else text
         return self._generate_tags(content)
 
+    def test_connection(self) -> bool:
+        """Test if the LLM connection is working.
+
+        Returns:
+            True if connection is working, False otherwise
+        """
+        if not self.llm_block:
+            return False
+
+        return self.llm_block.test_connection()
+
     @property
     def llm_type(self) -> str:
         """Get the LLM type."""
-        return self.config.llm_type
+        return "openai"  # Default, can be made configurable if needed
 
     @property
     def llm_name(self) -> str:
         """Get the LLM name."""
-        return self.config.llm_name
+        return self.config.llm_config.model

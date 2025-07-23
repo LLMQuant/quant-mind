@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from quantmind.models.content import KnowledgeItem
 
@@ -31,14 +31,14 @@ class Paper(KnowledgeItem):
     # Additional paper URLs (inherit url, pdf_url from parent)
     code_url: Optional[str] = None
 
-    @validator("categories", "tags", pre=True)
+    @field_validator("categories", "tags", mode="before")
     def ensure_list(cls, v):
         """Ensure categories and tags are always lists."""
         if isinstance(v, str):
             return [v]
         return v or []
 
-    @validator("authors", pre=True)
+    @field_validator("authors", mode="before")
     def parse_authors(cls, v):
         """Parse authors from various formats."""
         if isinstance(v, str):
