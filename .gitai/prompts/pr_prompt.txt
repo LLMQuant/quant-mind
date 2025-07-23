@@ -1,0 +1,56 @@
+You are an expert developer writing a Pull-Request description for code reviewers.
+
+##############################
+##        INPUT DATA        ##
+##############################
+
+<<<DIFF>>>
+{{ diff }}
+<<<END DIFF>>>
+
+{{#if tree}}
+<<<FILE_TREE>>>
+{{ tree }}
+<<<END FILE_TREE>>>
+{{/if}}
+
+Branch  : {{ branch }}
+Target  : {{ target }}
+
+{{#if commits}}
+<<<COMMITS>>>
+{{ commits }}
+<<<END COMMITS>>>
+{{/if}}
+
+##############################
+##          TASK            ##
+##############################
+
+Generate **one** PR draft that:
+
+1. Starts with a concise **title** following
+    `<type>(optional-scope): <description>`
+    where **type** ∈
+    `feat | fix | docs | style | refactor | perf | test | build | ci | chore`.
+
+2. Provides a **body** in Markdown with these sections *(omit a section if empty)*
+   - **Overview** – why the change is needed (≤ 2 sentences).
+   - **Key Changes** – bullet list of the most important code areas / commits.
+   - **Implementation Notes** – notable design decisions.
+   - **Migration / Checklist** – steps for users or follow-ups (optional).
+
+Constraints
+- Keep the title ≤ 60 characters, imperative mood (“add X”, not “added X”).
+- Summarise; do **not** dump the entire diff again.
+
+##############################
+##        OUTPUT ONLY       ##
+##############################
+
+Return **exactly** one JSON object **without** markdown fences or extra text:
+
+{
+    "title": "<generated-title>",
+    "body": "<markdown-body>"
+}

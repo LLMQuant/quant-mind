@@ -15,13 +15,13 @@ jobs:
   build:
     name: update
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-        
+
       - name: Set up Python Env
         uses: actions/setup-python@v4
         with:
@@ -32,12 +32,12 @@ jobs:
           pip install arxiv
           pip install requests
           pip install pyyaml
-          
+
       - name: Run quant_scholar.py
         run: |
           python quant_scholar.py --update_paper_links
           cp README.md wiki/index.md
-          
+
       - name: Commit and Push
         run: |
           git config --global user.name "${{ env.GITHUB_USER_NAME }}"
@@ -45,4 +45,3 @@ jobs:
           git add README.md docs/quant-scholar.json wiki/index.md
           git commit -m "[Workflow] Automatic Update Quant Scholar Paper List" || echo "No changes to commit"
           git push
-

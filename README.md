@@ -1,24 +1,18 @@
 
 <p align="center">
-  <img src="asset/quant-mind-logo.png" width="160">
+  <img src="assets/quantmind-logo.png" width="160">
 </p>
 
-
-<!-- 使用 asset/ 下的 svg -->
-
 <p align="center">
-  <img src="asset/quant-mind.svg" width="400">
+  <img src="assets/quant-mind.svg" width="400">
 </p>
 
 <p align="center">
   <b>Transform Financial Knowledge into Actionable Intelligence</b>
 </p>
 <p align="center">
-  <a href="https://github.com/LLMQuant/quant-scholar/blob/main/LICENSE">
+  <a href="https://github.com/LLMQuant/quant-mind/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  </a>
-  <a href="https://github.com/LLMQuant/quant-scholar/actions">
-    <img src="https://github.com/LLMQuant/quant-scholar/workflows/Run%20Quant%20Scholar/badge.svg" alt="Build Status">
   </a>
   <a href="https://python.org">
     <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python Version">
@@ -28,14 +22,15 @@
   <a href="#-why-quantmind">Why QuantMind</a> •
   <a href="#system-architecture">Architecture</a> •
   <a href="#-quick-start">Quick Start</a> •
+  <a href="#-usage-examples">Usage</a> •
+  <a href="#%EF%B8%8F-roadmap">Roadmap</a> •
   <a href="#the-vision-an-intelligent-research-agent">Vision</a> •
   <a href="#-contributing">Contributing</a>
 </p>
 
-
 ---
 
-**QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge graph, enabling AI-powered research at scale.
+**QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge base, enabling AI-powered research at scale.
 
 ### ✨ Why QuantMind?
 
@@ -50,7 +45,7 @@ The financial research landscape is overwhelming. Every day, hundreds of papers,
 
 ### System Architecture
 
-![quantmind-outline](asset/quantmind-stage-outline.png)
+![quantmind-outline](assets/quantmind-stage-outline.png)
 
 QuantMind is built on a decoupled, two-stage architecture. This design separates the concerns of data ingestion from intelligent retrieval, ensuring both robustness and flexibility.
 
@@ -58,13 +53,13 @@ QuantMind is built on a decoupled, two-stage architecture. This design separates
 
 This layer is responsible for collecting, parsing, and structuring raw information into standardized knowledge units.
 
-```
+```text
 Source APIs (arXiv, News, Blogs) → Intelligent Parser → Workflow/Agent → Structured Knowledge Base
 ```
 
-- **Crawler**: Connects to various sources (academic APIs, news feeds, financial blogs) to pull content
+- **Source**: Connects to various sources (academic APIs, news feeds, financial blogs, perplexity search source) to pull content
 - **Parser**: Extracts text, tables, and figures from PDFs, HTML, and other formats
-- **Tag/Label**: Automatically categorizes content into research areas and topics
+- **Tagger**: Automatically categorizes content into research areas and topics
 - **Workflow/Agent**: Orchestrates the extraction pipeline with quality control and deduplication
 
 #### **Stage 2: Intelligent Retrieval**
@@ -92,10 +87,10 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 **Prerequisites:**
 
-*   Python 3.8+
-*   Git
+- Python 3.8+
+- Git
 
-**Installation & Execution:**
+**Installation:**
 
 1. **Install uv (if not already installed):**
 
@@ -113,11 +108,11 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 2. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/LLMQuant/quant-scholar.git
-   cd quant-scholar
+   git clone https://github.com/LLMQuant/quant-mind.git
+   cd quant-mind
    ```
 
-3. **Create and activate virtual environment with uv:**
+3. **Create and activate virtual environment:**
 
    ```bash
    # Create a virtual environment
@@ -134,48 +129,82 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 4. **Install dependencies:**
 
    ```bash
-   uv pip install -r requirements.txt
+   uv pip install -e .
    ```
 
-5. **Customize the configuration (optional):**
+### 📚 Usage Examples
 
-   ```bash
-   # Edit the search keywords and output paths in config.yaml
-   ```
+#### Basic Paper Search and Processing
 
-6. **Run the pipeline:**
+```python
+from quantmind.sources import ArxivSource
+from quantmind.storage import LocalStorage
+from quantmind.config import ArxivSourceConfig, LocalStorageConfig
 
-   ```bash
-   # Fetch the latest papers and update all output files
-   python quant_scholar.py
+# Configure source and storage
+arxiv_config = ArxivSourceConfig(max_results=10)
+storage_config = LocalStorageConfig(storage_dir="./data")
 
-   # Run only the link validation check
-   python quant_scholar.py --update_paper_links
-   ```
+# Initialize components
+source = ArxivSource(config=arxiv_config)
+storage = LocalStorage(config=storage_config)
 
-------
+# Search for papers
+papers = source.search("machine learning finance")
 
-### The Vision: An Intelligent Research Agent
+# Store papers locally
+storage.process_knowledges(papers)
 
-While the current system excels at automated paper collection, QuantMind is designed with a larger vision: to become a comprehensive intelligence layer for all financial knowledge. We're building a system that understands the interconnections between academic research, market news, analyst reports, and social sentiment—creating a unified knowledge graph that powers better financial decisions.
+# Display results
+for paper in papers:
+    print(f"Title: {paper.title}")
+    print(f"Authors: {', '.join(paper.authors)}")
+    print(f"Categories: {', '.join(paper.categories)}")
+```
+
+#### Quant Paper Agent Example
+
+> [!Note]
+>
+> Will come soon.
+
+---
+
+### 🗺️ Roadmap
+
+- [ ] Better `flow` design for user-friendly usage
+- [ ] First production level example (Quant Paper Agent)
+- [ ] `tool` integration for more advanced usage
+- [ ] Additional content sources (financial news, blogs, reports)
+- [ ] Standardize the `knowledge` format (data standardization)
+
+---
+
+### The Vision: An Intelligent Research Framework
+
+> [!IMPORTANT]
+> **This section describes our long-term vision, not current capabilities.** While QuantMind today provides a solid knowledge extraction framework, the features described below represent our aspirational goals for future development.
+
+QuantMind is designed with a larger vision: to become a comprehensive intelligence layer for all financial knowledge. We're building toward a system that understands the interconnections between academic research, market news, analyst reports, and social sentiment—creating a unified knowledge base that powers better financial decisions.
 
 The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
 
-**Conceptual Example:**
-
-```python
-# The future we are building towards
-from quantmind import KnowledgeBase, MemoryBank
-from quantmind.agents import PaperReader, NewsMonitor
-from quantmind.brain import understand, memorize, recall
-
-# Initialize the knowledge base
-kb = KnowledgeBase()
-kb.ingest(source="arxiv", topic="portfolio optimization")
-
-# Query for high-level insights
-insights = kb.query("latest trends in risk parity strategies")
-```
+> [!NOTE]
+> **Future Conceptual Example:**
+>
+> ```python
+> # The future we are building towards
+> from quantmind import KnowledgeBase, MemoryBank
+> from quantmind.agents import PaperReader, NewsMonitor
+> from quantmind.brain import understand, memorize, recall
+>
+> # Initialize the knowledge base
+> kb = KnowledgeBase()
+> kb.ingest(source="arxiv", topic="portfolio optimization")
+>
+> # Query for high-level insights
+> insights = kb.query("latest trends in risk parity strategies")
+> ```
 
 This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
 
@@ -183,7 +212,7 @@ This future state represents our commitment to moving beyond simple data aggrega
 
 ### 🤝 Contributing
 
-We welcome contributions of all forms, from bug reports to feature development. If you're interested in helping build the future of financial research, please review our contribution guidelines.
+We welcome contributions of all forms, from bug reports to feature development. If you're interested in helping build the future of financial research, please review our contribution guidelines. For more details, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. **Fork** the repository.
 2. **Create a new branch** (`git checkout -b feature/my-new-feature`).
@@ -197,12 +226,7 @@ Please open an issue in the [GitHub Issues](https://github.com/LLMQuant/quant-mi
 
 This project is licensed under the MIT License - see the [LICENSE](https://claude.ai/chat/LICENSE) file for details.
 
-### Acknowledgements
+### ❤️ Acknowledgements
 
 - **arXiv** for providing open access to a world of research.
 - The **open-source community** for the tools and libraries that make this project possible.
-
-------
-
-
-<p align="center"> <b>From Knowledge to Alpha</b><br> Made with ❤️ by <a href="https://github.com/LLMQuant">LLMQuant</a> </p>
