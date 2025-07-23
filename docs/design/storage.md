@@ -39,9 +39,9 @@ def process_knowledge(self, knowledge: KnowledgeItem) -> str:
 
 This method acts as a router. While it stores any `KnowledgeItem` by default, it contains special logic for subtypes. For instance, when it receives a `Paper` object:
 
-1.  It first stores the `Paper` metadata as a knowledge item.
-2.  It then checks if the `Paper` has a `pdf_url`.
-3.  If a URL exists and the corresponding PDF is not already in the raw file storage, it automatically downloads the content and stores it using `store_raw_file`.
+1. It first stores the `Paper` metadata as a knowledge item.
+2. It then checks if the `Paper` has a `pdf_url`.
+3. If a URL exists and the corresponding PDF is not already in the raw file storage, it automatically downloads the content and stores it using `store_raw_file`.
 
 This design elegantly handles type-specific logic within the storage layer, simplifying the upstream workflow agents.
 
@@ -53,7 +53,7 @@ This design elegantly handles type-specific logic within the storage layer, simp
 
 It organizes data on the filesystem in a clear, hierarchical structure defined by `LocalStorageConfig`:
 
-```
+```text
 <storage_dir>/
 ├── 📂 raw_files/          # Raw source files (e.g., paper_id.pdf)
 ├── 📂 knowledges/         # Structured data (e.g., paper_id.json)
@@ -72,12 +72,12 @@ To solve this, `LocalStorage` implements a **high-performance, persistent indexi
 
 **How it Works:**
 
-1.  **Index Files**: For each core data type (`raw_files`, `knowledges`, `embeddings`), a corresponding JSON index file is maintained in the `extra/` directory. This index is a simple key-value map:
-    -   `file_id` -> `{ "path": "relative/path/to/file", "extension": ".pdf" }`
+1. **Index Files**: For each core data type (`raw_files`, `knowledges`, `embeddings`), a corresponding JSON index file is maintained in the `extra/` directory. This index is a simple key-value map:
+    - `file_id` -> `{ "path": "relative/path/to/file", "extension": ".pdf" }`
 
-2.  **In-Memory Cache**: On initialization, `LocalStorage` loads these JSON files into in-memory dictionaries (`self._raw_files_index`, etc.) for instantaneous O(1) lookups.
+2. **In-Memory Cache**: On initialization, `LocalStorage` loads these JSON files into in-memory dictionaries (`self._raw_files_index`, etc.) for instantaneous O(1) lookups.
 
-3.  **Real-time Updates**: Every `store_*` or `delete_*` operation automatically updates both the in-memory index and the corresponding JSON file on disk, ensuring data consistency.
+3. **Real-time Updates**: Every `store_*` or `delete_*` operation automatically updates both the in-memory index and the corresponding JSON file on disk, ensuring data consistency.
 
     ```python
     # Example: store_raw_file
@@ -89,7 +89,7 @@ To solve this, `LocalStorage` implements a **high-performance, persistent indexi
         self._save_index("raw_files")
     ```
 
-4.  **Efficient Lookups**: `get_*` methods now first consult the in-memory index for a near-instant lookup. The costly filesystem scan is only used as a last-resort fallback.
+4. **Efficient Lookups**: `get_*` methods now first consult the in-memory index for a near-instant lookup. The costly filesystem scan is only used as a last-resort fallback.
 
     ```python
     # Example: get_raw_file
@@ -107,9 +107,9 @@ To solve this, `LocalStorage` implements a **high-performance, persistent indexi
 
 The indexing system is designed to be robust:
 
--   **Automatic Rebuilding**: If an index file is missing or corrupt on startup, `LocalStorage` will automatically scan the corresponding data directory and rebuild the index from scratch.
--   **Self-Healing**: If an index entry points to a file that has been deleted from the filesystem externally, the `get_*` method will detect this, remove the stale entry from the index, and save the corrected index.
--   **Manual Rebuild**: A public `rebuild_all_indexes()` method is provided for manual maintenance and data recovery.
+- **Automatic Rebuilding**: If an index file is missing or corrupt on startup, `LocalStorage` will automatically scan the corresponding data directory and rebuild the index from scratch.
+- **Self-Healing**: If an index entry points to a file that has been deleted from the filesystem externally, the `get_*` method will detect this, remove the stale entry from the index, and save the corrected index.
+- **Manual Rebuild**: A public `rebuild_all_indexes()` method is provided for manual maintenance and data recovery.
 
 ## 3. Configuration
 
