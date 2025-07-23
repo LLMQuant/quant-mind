@@ -1,0 +1,63 @@
+# QuantMind Configuration Example
+# This file demonstrates the new unified configuration system
+
+# Source configuration (single instance)
+source:
+  type: arxiv
+  config:
+    max_results: ${ARXIV_MAX_RESULTS:100}
+    sort_by: submittedDate
+    sort_order: descending
+    download_pdfs: true
+    requests_per_second: 1.0
+
+# Parser configuration (single instance)
+parser:
+  type: pdf
+  config:
+    method: pymupdf
+    download_pdfs: true
+    extract_tables: true
+    extract_images: false
+    max_file_size_mb: 50
+
+# Tagger configuration (single instance)
+tagger:
+  type: llm
+  config:
+    llm_config:
+      model: ${OPENAI_MODEL:gpt-4o}
+      api_key: ${OPENAI_API_KEY}
+      temperature: 0.3
+      max_tokens: 5000
+    max_tags: 5
+
+# Storage configuration
+storage:
+  type: local
+  config:
+    base_dir: ${DATA_DIR:./data}
+
+# Flow configuration (single instance)
+flow:
+  type: qa
+  config:
+    num_questions: 5
+    include_different_difficulties: true
+    llm_config:
+      model: ${OPENAI_MODEL:gpt-4o}
+      api_key: ${OPENAI_API_KEY}
+      temperature: 0.3
+      max_tokens: 4000
+
+# Core LLM configuration
+llm:
+  model: ${OPENAI_MODEL:gpt-4o}
+  api_key: ${OPENAI_API_KEY}
+  temperature: 0.3
+  max_tokens: 4000
+
+# Global settings
+log_level: ${LOG_LEVEL:INFO}
+data_dir: ${DATA_DIR:./data}
+temp_dir: ${TEMP_DIR:/tmp}
