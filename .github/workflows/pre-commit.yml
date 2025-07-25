@@ -4,6 +4,13 @@ name: Pre-commit Checks
 on:
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:  # 添加这行支持手动触发
+    inputs:
+      branch:
+        description: 'Branch to test'
+        required: false
+        default: 'master'
+        type: string
 
 jobs:
   pre-commit:
@@ -13,6 +20,8 @@ jobs:
     # 第一步：检出代码到 runner 环境
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch || github.ref }}  # 支持指定分支
 
     # 第二步：设置 Python 环境
     # 使用 Python 3.11 确保与开发环境一致
