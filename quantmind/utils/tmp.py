@@ -1,5 +1,4 @@
-"""
-Template system for QuantMind prompts
+"""Template system for QuantMind prompts.
 
 This module provides infrastructure to load and render prompt templates
 from YAML files using Jinja2 templating engine.
@@ -24,10 +23,10 @@ PROJ_PATH = DIRNAME.parent.parent.parent
 
 def get_caller_dir(upshift: int = 0) -> Path:
     """Get the directory of the calling module.
-    
+
     Args:
         upshift: Number of stack frames to go up (default: 0 for immediate caller)
-        
+
     Returns:
         Path to the caller's directory
     """
@@ -41,32 +40,38 @@ def get_caller_dir(upshift: int = 0) -> Path:
     return caller_dir
 
 
-def load_content(uri: str, caller_dir: Path | None = None, ftype: str = "yaml") -> Any:
+def load_content(
+    uri: str, caller_dir: Path | None = None, ftype: str = "yaml"
+) -> Any:
     """Load content from file based on URI.
-    
+
     Args:
         uri: URI in format "path:key1.key2" or "path" for direct file content
         caller_dir: Directory to resolve relative paths from
         ftype: File type extension (yaml, txt, etc.)
-        
+
     Returns:
         Loaded content (dict for YAML, str for text files)
-        
+
     Raises:
         FileNotFoundError: If file cannot be found
     """
     if caller_dir is None:
         caller_dir = get_caller_dir(upshift=1)
-    
+
     # Parse the URI
     path_part, *yaml_trace = uri.split(":")
-    assert len(yaml_trace) <= 1, f"Invalid uri {uri}, only one yaml trace is allowed."
+    assert (
+        len(yaml_trace) <= 1
+    ), f"Invalid uri {uri}, only one yaml trace is allowed."
     yaml_trace = [key for yt in yaml_trace for key in yt.split(".")]
 
     # Build file paths with priorities
     if path_part.startswith("."):
         # Relative to caller directory
-        file_path_l = [caller_dir / f"{path_part[1:].replace('.', '/')}.{ftype}"]
+        file_path_l = [
+            caller_dir / f"{path_part[1:].replace('.', '/')}.{ftype}"
+        ]
     else:
         # Try current directory first, then project root
         file_path_l = [
@@ -94,18 +99,17 @@ def load_content(uri: str, caller_dir: Path | None = None, ftype: str = "yaml") 
 
 
 class QuantMindTemplate:
-    """
-    QuantMind Template system for loading and rendering prompt templates.
-    
+    """QuantMind Template system for loading and rendering prompt templates.
+
     Usage:
         T = QuantMindTemplate
-        
+
         # Load from YAML file
         prompt = T("prompts.analysis:system_prompt").r(
             context="financial analysis",
             model="gpt-4"
         )
-        
+
         # Load from text file
         prompt = T("prompts.analysis:user_prompt", ftype="txt").r(
             query="analyze this data"
@@ -113,21 +117,21 @@ class QuantMindTemplate:
     """
 
     def __init__(self, uri: str, ftype: str = "yaml"):
-        """
-        Initialize template with URI.
-        
+        """Initialize template with URI.
+
         Args:
             uri: URI in format "path:key1.key2" or "path" for direct content
             ftype: File type (yaml, txt, etc.)
-            
+
         URI Examples:
-            - "prompts.analysis:system_prompt" - Load from prompts/analysis.yaml, key "system_prompt"
+            - "prompts.analysis:system_prompt" - Load from prompts/analysis.yaml,
+                key "system_prompt"
             - ".local:custom_prompt" - Load from caller's local.yaml, key "custom_prompt"
             - "prompts.analysis:user_prompt" - Load from prompts/analysis.yaml, key "user_prompt"
         """
         self.uri = uri
         caller_dir = get_caller_dir(1)
-        
+
         # Handle relative paths
         if uri.startswith("."):
             try:
@@ -135,36 +139,30 @@ class QuantMindTemplate:
                 self.uri = f"{str(caller_dir.resolve().relative_to(PROJ_PATH)).replace('/', '.')}{uri}"
             except ValueError:
                 pass
-                
+
         self.template = load_content(uri, caller_dir=caller_dir, ftype=ftype)
 
     def r(self, **context: Any) -> str:
-        """
-        Render the template with the given context.
-        
+        """Render the template with the given context.
+
         Args:
             **context: Context variables for template rendering
-            
+
         Returns:
             Rendered template string
         """
         # Create Jinja2 environment with support for includes
         env = Environment(
-            undefined=StrictUndefined,
-            loader=FunctionLoader(load_content)
+            undefined=StrictUndefined, loader=FunctionLoader(load_content)
         )
-        
+
         # Render the template
-        rendered = (
-            env.from_string(self.template)
-            .render(**context)
-            .strip("\n")
-        )
-        
+        rendered = env.from_string(self.template).render(**context).strip("\n")
+
         # Clean up multiple newlines
         while "\n\n\n" in rendered:
             rendered = rendered.replace("\n\n\n", "\n\n")
-            
+
         # Log for debugging
         logger.debug(
             "Template rendered",
@@ -173,11 +171,11 @@ class QuantMindTemplate:
                 "template": self.template,
                 "context": context,
                 "rendered": rendered,
-            }
+            },
         )
-        
+
         return rendered
 
 
 # Convenience alias
-T = QuantMindTemplate 
+T = QuantMindTemplate

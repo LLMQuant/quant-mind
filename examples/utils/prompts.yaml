@@ -1,10 +1,10 @@
 paper_analysis: |
   Please analyze the following research paper and provide trading insights:
-  
+
   Title: {{ title }}
   Abstract: {{ abstract }}
   Keywords: {{ keywords }}
-  
+
   Focus on:
   - Key quantitative methods and their trading applications
   - Potential alpha signals or risk factors identified
@@ -16,7 +16,7 @@ paper_analysis: |
 
 local_prompt: |
   This is a local prompt template for testing.
-  
+
   Custom Parameter: {{ custom_param }}
   Local Context: {{ local_context }}
 
@@ -32,4 +32,4 @@ conditional_test: |
 
 nested_test:
   key1: "Value 1: {{ var1 }}"
-  key2: "Value 2: {{ var2 }}" 
+  key2: "Value 2: {{ var2 }}"
