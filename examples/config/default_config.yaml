@@ -1,4 +1,3 @@
-data_dir: ./data
 llm:
   api_version: null
   base_url: null
@@ -37,7 +36,5 @@ source:
   type: arxiv
 storage:
   config:
-    base_dir: /Users/wenkeli/work/LLMQuant/quant-mind/data
-    storage_dir: ./data
+    storage_dir: /Users/wenkeli/work/LLMQuant/quant-mind/data
   type: local
-temp_dir: /tmp

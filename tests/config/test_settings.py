@@ -1,6 +1,7 @@
 """Unit tests for settings configuration system."""
 
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -25,8 +26,6 @@ class TestSetting(unittest.TestCase):
         setting = Setting()
 
         self.assertEqual(setting.log_level, "INFO")
-        self.assertEqual(setting.data_dir, "./data")
-        self.assertEqual(setting.temp_dir, "/tmp")
         self.assertIsNone(setting.source)
         self.assertIsNone(setting.parser)
         self.assertIsNone(setting.tagger)
@@ -73,7 +72,6 @@ class TestSetting(unittest.TestCase):
                 "config": {"max_tags": 8, "model": "gpt-4o"},
             },
             "log_level": "DEBUG",
-            "data_dir": "./test_data",
         }
 
         setting = Setting._parse_config(config_dict)
@@ -96,7 +94,9 @@ class TestSetting(unittest.TestCase):
 
         # Test simple fields
         self.assertEqual(setting.log_level, "DEBUG")
-        self.assertEqual(setting.data_dir, "./test_data")
+
+        if setting.storage.storage_dir.exists():
+            shutil.rmtree(setting.storage.storage_dir)
 
     def test_parse_config_unknown_types(self):
         """Test parsing configuration with unknown component types."""
@@ -200,8 +200,6 @@ class TestSetting(unittest.TestCase):
                     "max_results": "${MAX_RESULTS:50}",  # with default
                 },
             },
-            "data_dir": "${DATA_DIR:./default_data}",
-            "temp_dir": "${TEST_VAR}/temp",
         }
 
         result = Setting.substitute_env_vars(config_dict)
@@ -211,8 +209,6 @@ class TestSetting(unittest.TestCase):
         self.assertEqual(
             result["source"]["config"]["max_results"], "50"
         )  # default used
-        self.assertEqual(result["data_dir"], "./default_data")  # default used
-        self.assertEqual(result["temp_dir"], "test_value/temp")
 
         # Clean up
         del os.environ["TEST_VAR"]
@@ -271,7 +267,6 @@ class TestSetting(unittest.TestCase):
             parser=PDFParserConfig(method="pdfplumber", download_pdfs=True),
             tagger=LLMTaggerConfig(max_tags=5),
             log_level="DEBUG",
-            data_dir="./test_data",
         )
 
         config_dict = setting._export_config()
@@ -291,10 +286,14 @@ class TestSetting(unittest.TestCase):
 
         # Test simple fields
         self.assertEqual(config_dict["log_level"], "DEBUG")
-        self.assertEqual(config_dict["data_dir"], "./test_data")
 
         # Test sensitive data exclusion
         self.assertNotIn("api_key", config_dict["llm"])
+
+        assert setting.storage.storage_dir.exists()
+        if setting.storage.storage_dir.exists():
+            shutil.rmtree(setting.storage.storage_dir)
+        assert not setting.storage.storage_dir.exists()
 
     def test_save_to_yaml(self):
         """Test saving configuration to YAML file."""
