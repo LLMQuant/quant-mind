@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from quantmind.config.flows import (
     AnalyzerFlowConfig,
@@ -56,29 +56,12 @@ class Setting(BaseModel):
     log_level: str = Field(
         default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$"
     )
-    data_dir: str = "./data"
-    temp_dir: str = "/tmp"
 
     class Config:
         """Pydantic model configuration."""
 
         validate_assignment = True
         extra = "forbid"
-
-    @field_validator("data_dir", "temp_dir")
-    @classmethod
-    def validate_directories(cls, v: str) -> str:
-        """Validate and create directories if they don't exist."""
-        path = Path(v).expanduser()
-        # Keep the original style for relative paths.
-        if not path.is_absolute():
-            resolved_path = path.resolve()
-            resolved_path.mkdir(parents=True, exist_ok=True)
-            return v
-        else:
-            path = path.resolve()
-            path.mkdir(parents=True, exist_ok=True)
-            return str(path)
 
     @classmethod
     def load_dotenv(cls, dotenv_path: Optional[str] = None) -> bool:
@@ -246,9 +229,8 @@ class Setting(BaseModel):
             parsed["llm"] = LLMConfig(**config_dict["llm"])
 
         # Copy simple fields
-        for key in ["log_level", "data_dir", "temp_dir"]:
-            if key in config_dict:
-                parsed[key] = config_dict[key]
+        if "log_level" in config_dict:
+            parsed["log_level"] = config_dict["log_level"]
 
         return cls(**parsed)
 
@@ -266,7 +248,7 @@ class Setting(BaseModel):
                 download_pdfs=True,
                 extract_tables=True,
             ),
-            storage=LocalStorageConfig(base_dir=Path("./data")),
+            storage=LocalStorageConfig(),
         )
 
     def save_to_yaml(self, config_path: Union[str, Path]) -> None:
@@ -357,13 +339,7 @@ class Setting(BaseModel):
         config_dict["llm"] = self.llm.model_dump(exclude={"api_key"})
 
         # Export simple fields
-        config_dict.update(
-            {
-                "log_level": self.log_level,
-                "data_dir": self.data_dir,
-                "temp_dir": self.temp_dir,
-            }
-        )
+        config_dict["log_level"] = self.log_level
 
         return config_dict
 
