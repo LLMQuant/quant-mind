@@ -59,5 +59,3 @@ llm:
 
 # Global settings
 log_level: ${LOG_LEVEL:INFO}
-data_dir: ${DATA_DIR:./data}
-temp_dir: ${TEMP_DIR:/tmp}
