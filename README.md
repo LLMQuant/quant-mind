@@ -36,7 +36,6 @@ QuantMind is a next-generation AI platform that ingests, processes, and structur
 
 ### ✨ Why QuantMind?
 
-The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published. **QuantMind** solves this by:
 The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published.
 
 
