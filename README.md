@@ -41,9 +41,9 @@ The financial research landscape is overwhelming. Every day, hundreds of papers,
 
 
 #### 🌐 The Opportunity
-- **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable  
-- **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed  
-- **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance  
+- **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable
+- **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed
+- **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance
 
 ---
 
@@ -52,7 +52,6 @@ The financial research landscape is overwhelming. Every day, hundreds of papers,
 - 🧠 **Understanding** content with domain-specific LLMs fine-tuned for finance
 - 💾 **Storing** information in a semantic knowledge graph
 - 🚀 **Retrieving** insights through natural language queries
-
 ---
 
 ### System Architecture
