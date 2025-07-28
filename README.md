@@ -30,17 +30,26 @@
 
 ---
 
-**QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge base, enabling AI-powered research at scale.
+### 🧐 Overview
+QuantMind is a next-generation AI platform that ingests, processes, and structures **every** new piece of quantitative-finance research, including papers, news, blogs, and SEC filings into a **semantic knowledge graph**. Institutional investors, hedge funds, and research teams can now explore the frontier of factor strategies, risk models, and market insights in **seconds**, unlocking alpha that would otherwise remain buried.
 
 ### ✨ Why QuantMind?
 
-The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published. **QuantMind** solves this by:
+The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published.
 
+
+#### 🌐 The Opportunity
+- **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable  
+- **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed  
+- **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance  
+
+---
+
+#### 💡 **QuantMind** solves this by:
 - 🔍 **Extracting** structured knowledge from any source (PDFs, web pages, APIs)
 - 🧠 **Understanding** content with domain-specific LLMs fine-tuned for finance
 - 💾 **Storing** information in a semantic knowledge graph
 - 🚀 **Retrieving** insights through natural language queries
-
 ---
 
 ### System Architecture
