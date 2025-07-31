@@ -5,5 +5,7 @@ from .embedding import EmbeddingBlock, create_embedding_block
 
 __all__ = [
     "LLMBlock",
-    "create_llm_block"
+    "create_llm_block",
+    "EmbeddingBlock",
+    "create_embedding_block",
 ]
