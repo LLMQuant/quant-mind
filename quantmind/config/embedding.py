@@ -5,7 +5,6 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-
 class EmbeddingConfig(BaseModel):
     """Configuration for EmbeddingBlock."""
 
@@ -16,25 +15,32 @@ class EmbeddingConfig(BaseModel):
 
     # Optional parameters
     user: Optional[str] = Field(
-        default=None, description="A unique identifier representing your end-user"
+        default=None,
+        description="A unique identifier representing your end-user",
     )
     dimensions: Optional[int] = Field(
-        default=None, description="The number of dimensions the resulting output embeddings should have. Only supported in OpenAI/Azure text-embedding-3 and later models"
+        default=None,
+        description="The number of dimensions the resulting output embeddings should have. Only supported in OpenAI/Azure text-embedding-3 and later models",
     )
     encoding_format: str = Field(
-        default="float", description="The format to return the embeddings in. Can be either 'float' or 'base64'"
+        default="float",
+        description="The format to return the embeddings in. Can be either 'float' or 'base64'",
     )
     timeout: int = Field(
-        default=600, description="The maximum time, in seconds, to wait for the API to respond"
+        default=600,
+        description="The maximum time, in seconds, to wait for the API to respond",
     )
     api_base: Optional[str] = Field(
-        default=None, description="The api endpoint you want to call the model with"
+        default=None,
+        description="The api endpoint you want to call the model with",
     )
     api_version: Optional[str] = Field(
-        default=None, description="(Azure-specific) the api version for the call"
+        default=None,
+        description="(Azure-specific) the api version for the call",
     )
     api_key: Optional[str] = Field(
-        default=None, description="The API key to authenticate and authorize requests. If not provided, the default API key is used"
+        default=None,
+        description="The API key to authenticate and authorize requests. If not provided, the default API key is used",
     )
     api_type: Optional[str] = Field(
         default=None, description="The type of API to use"
@@ -81,22 +87,26 @@ class EmbeddingConfig(BaseModel):
     def get_provider_type(self) -> str:
         """Extract provider type from model name."""
         model_lower = self.model.lower()
-        
+
         # OpenAI models
-        if (model_lower.startswith("text-embedding-") or 
-            model_lower.startswith("openai/") or
-            "ada" in model_lower or "3" in model_lower):
+        if (
+            model_lower.startswith("text-embedding-")
+            or model_lower.startswith("openai/")
+            or "ada" in model_lower
+            or "3" in model_lower
+        ):
             return "openai"
-        
+
         # Azure models
         elif "azure" in model_lower:
             return "azure"
-        
+
         # Cohere models
-        elif (model_lower.startswith("embed-") or
-              model_lower.startswith("cohere/")):
+        elif model_lower.startswith("embed-") or model_lower.startswith(
+            "cohere/"
+        ):
             return "cohere"
-        
+
         # Default to openai for unknown models
         else:
             return "unknown"
