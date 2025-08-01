@@ -73,4 +73,4 @@ config = EmbeddingConfig(
 
 ## See Also
 
-- `examples/llm/embedding_block_example.py` for complete examples 
+- `examples/llm/embedding_block_example.py` for complete examples
