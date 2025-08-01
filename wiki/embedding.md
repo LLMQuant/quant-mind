@@ -170,14 +170,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 def calculate_similarity(text1: str, text2: str) -> float:
     """Calculate semantic similarity between two texts."""
     embeddings = embedding_block.generate_embeddings([text1, text2])
-    
+
     if embeddings and len(embeddings) == 2:
         similarity = cosine_similarity(
-            [embeddings[0]], 
+            [embeddings[0]],
             [embeddings[1]]
         )[0][0]
         return similarity
-    
+
     return 0.0
 
 # Example usage
@@ -244,7 +244,7 @@ print(f"Format: {info['encoding_format']}")
 def efficient_batch_embedding(texts: List[str], batch_size: int = 100):
     """Process texts in optimal batches."""
     all_embeddings = []
-    
+
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         try:
@@ -253,7 +253,7 @@ def efficient_batch_embedding(texts: List[str], batch_size: int = 100):
                 all_embeddings.extend(batch_embeddings)
         except Exception as e:
             print(f"Error processing batch {i//batch_size + 1}: {e}")
-    
+
     return all_embeddings
 ```
 
@@ -271,7 +271,7 @@ def robust_embedding_generation(text: str, max_retries: int = 3):
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)  # Exponential backoff
-    
+
     return None
 ```
 
@@ -287,25 +287,25 @@ class CachedEmbeddingBlock:
         self.embedding_block = embedding_block
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
-    
+
     def get_embedding(self, text: str) -> Optional[List[float]]:
         # Create cache key
         text_hash = hashlib.md5(text.encode()).hexdigest()
         cache_file = os.path.join(self.cache_dir, f"{text_hash}.pkl")
-        
+
         # Check cache
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as f:
                 return pickle.load(f)
-        
+
         # Generate embedding
         embedding = self.embedding_block.generate_embedding(text)
-        
+
         # Cache result
         if embedding:
             with open(cache_file, 'wb') as f:
                 pickle.dump(embedding, f)
-        
+
         return embedding
 ```
 
@@ -323,4 +323,4 @@ class CachedEmbeddingBlock:
 
 ---
 
-*Last updated: January 2025* 
+*Last updated: January 2025*
