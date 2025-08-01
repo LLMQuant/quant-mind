@@ -1,7 +1,9 @@
 """Embedding configuration for QuantMind."""
 
+from random import choices
 from typing import Any, Dict, Optional
 
+from litellm import retry
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -30,6 +32,16 @@ class EmbeddingConfig(BaseModel):
         default=600,
         description="The maximum time, in seconds, to wait for the API to respond",
     )
+    retry_attempts: int = Field(
+        default=3,
+        ge=0,
+        description="The number of retry attempts",
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0,
+        description="The delay between retries in seconds",
+    )
     api_base: Optional[str] = Field(
         default=None,
         description="The api endpoint you want to call the model with",
@@ -53,19 +65,17 @@ class EmbeddingConfig(BaseModel):
             raise ValueError("Model name must be a non-empty string")
         return v.strip()
 
-    @field_validator("encoding_format")
-    def validate_encoding_format(cls, v):
-        """Validate encoding format."""
-        if v not in ["float", "base64"]:
-            raise ValueError("encoding_format must be 'float' or 'base64'")
+    @field_validator("api_key")
+    def validate_api_key(cls, v):
+        """Validate API key."""
+        if v is not None and not isinstance(v, str):
+            raise ValueError("API key must be a string")
         return v
 
     def get_litellm_params(self) -> Dict[str, Any]:
         """Get parameters formatted for LiteLLM embedding."""
         params = {
             "model": self.model,
-            "encoding_format": self.encoding_format,
-            "timeout": self.timeout,
         }
 
         # Add optional parameters if provided
@@ -73,6 +83,8 @@ class EmbeddingConfig(BaseModel):
             params["user"] = self.user
         if self.dimensions:
             params["dimensions"] = self.dimensions
+        if self.encoding_format:
+            params["encoding_format"] = self.encoding_format
         if self.api_base:
             params["api_base"] = self.api_base
         if self.api_version:
@@ -89,12 +101,11 @@ class EmbeddingConfig(BaseModel):
         model_lower = self.model.lower()
 
         # OpenAI models
-        if (
-            model_lower.startswith("text-embedding-")
-            or model_lower.startswith("openai/")
-            or "ada" in model_lower
-            or "3" in model_lower
-        ):
+        if model_lower in [
+            "text-embedding-ada-002",
+            "text-embedding-3-small",
+            "text-embedding-3-large",
+        ]:
             return "openai"
 
         # Azure models

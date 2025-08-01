@@ -158,10 +158,17 @@ class EmbeddingBlock:
                     f"Embedding call attempt {attempt + 1}/{self.config.retry_attempts + 1}"
                 )
 
-                # Extract input from params and remove it for the embedding call
-                input_text = params.pop("input")
+                # Create a copy of params to avoid mutation
+                call_params = params.copy()
+
+                # Extract input from params
+                input_text = call_params.pop("input")
+
+                # Remove model from params if it exists to avoid duplication
+                call_params.pop("model", None)
+
                 response = embedding(
-                    model=self.config.model, input=input_text, **params
+                    model=self.config.model, input=input_text, **call_params
                 )
 
                 if hasattr(response, "usage") and response.usage:
@@ -193,9 +200,7 @@ class EmbeddingBlock:
             True if connection is working, False otherwise
         """
         try:
-            response = self.generate_embedding(
-                "Hello, this is a test for embedding generation. Please respond with 'OK'."
-            )
+            response = self.generate_embedding("test")
             return response is not None and len(response) > 0
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
@@ -210,8 +215,8 @@ class EmbeddingBlock:
         info = {
             "model": self.config.model,
             "provider": self.config.get_provider_type(),
-            "dimension": self.get_embedding_dimension(),
-            "config": self.config.model_dump(),
+            "timeout": self.config.timeout,
+            "retry_attempts": self.config.retry_attempts,
         }
         return info
 
