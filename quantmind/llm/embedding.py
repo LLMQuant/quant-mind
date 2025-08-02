@@ -24,7 +24,7 @@ class EmbeddingBlock:
     """A reusable Embedding function block using LiteLLM.
 
     EmbeddingBlock provides a consistent interface for generating embeddings across
-    different providers (OpenAI, Anthropic, etc.).
+    different providers (OpenAI, Gemini, etc.).
 
     Unlike workflows, EmbeddingBlock focuses on providing basic embedding capabilities
     without business logic.

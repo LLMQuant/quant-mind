@@ -110,7 +110,7 @@ class EmbeddingConfig(BaseModel):
         elif "azure" in model_lower:
             return "azure"
 
-        # Cohere models
+        # Gemini models
         elif "gemini" in model_lower:
             return "gemini"
 

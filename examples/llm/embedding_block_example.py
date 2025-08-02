@@ -58,61 +58,6 @@ def example_openai_embeddings():
     info = embedding_block.get_info()
     print(f"📊 Model info: {info['model']}")
     print(f"📊 Provider: {info['provider']}")
-    print(f"📊 Dimension: {info['dimension']}")
-
-
-def example_openai_text_embedding_3():
-    """Example using OpenAI text-embedding-3 with custom dimensions."""
-    print("\n=== OpenAI Text-Embedding-3 Example ===")
-
-    # Configuration for OpenAI text-embedding-3
-    config = EmbeddingConfig(
-        model="text-embedding-3-small",
-        api_key=os.getenv("OPENAI_API_KEY"),
-        dimensions=512,  # Custom dimension (default is 1536)
-        timeout=30,
-        encoding_format="float",
-    )
-
-    # Create embedding block
-    embedding_block = create_embedding_block(config)
-
-    # Test connection
-    if embedding_block.test_connection():
-        print("✅ OpenAI text-embedding-3 connection successful")
-    else:
-        print("❌ OpenAI text-embedding-3 connection failed")
-        return
-
-    # Generate single embedding
-    text = (
-        "This is a sample text for embedding generation with custom dimensions."
-    )
-    embedding = embedding_block.generate_embedding(text)
-
-    if embedding:
-        print(f"✅ Generated embedding with {len(embedding)} dimensions")
-        print(f"   First 5 values: {embedding[:5]}")
-
-    # Generate multiple embeddings
-    texts = [
-        "First sample text for embedding.",
-        "Second sample text with different content.",
-        "Third sample text for batch processing.",
-    ]
-
-    embeddings = embedding_block.generate_embeddings(texts)
-
-    if embeddings:
-        print(f"✅ Generated {len(embeddings)} embeddings")
-        for i, emb in enumerate(embeddings):
-            print(f"   Text {i + 1}: {len(emb)} dimensions")
-
-    # Get embedding information
-    info = embedding_block.get_info()
-    print(f"📊 Model info: {info['model']}")
-    print(f"📊 Provider: {info['provider']}")
-    print(f"📊 Dimension: {info['dimension']}")
 
 
 def example_azure_embeddings():
@@ -166,7 +111,6 @@ def example_azure_embeddings():
     info = embedding_block.get_info()
     print(f"📊 Model info: {info['model']}")
     print(f"📊 Provider: {info['provider']}")
-    print(f"📊 Dimension: {info['dimension']}")
 
 
 def example_configuration_variants():
@@ -241,7 +185,6 @@ def main():
     # Run examples based on available API keys
     if os.getenv("OPENAI_API_KEY"):
         example_openai_embeddings()
-        example_openai_text_embedding_3()
     else:
         print("\n⚠️  Skipping OpenAI examples - OPENAI_API_KEY not set")
 
