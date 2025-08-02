@@ -65,8 +65,8 @@ class EmbeddingBlock:
                 os.environ["OPENAI_API_KEY"] = self.config.api_key
             elif provider_type == "azure":
                 os.environ["AZURE_API_KEY"] = self.config.api_key
-            elif provider_type == "cohere":
-                os.environ["COHERE_API_KEY"] = self.config.api_key
+            elif provider_type == "gemini":
+                os.environ["GEMINI_API_KEY"] = self.config.api_key
 
         logger.debug(
             f"Configured LiteLLM for provider: {self.config.get_provider_type()}"

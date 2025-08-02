@@ -102,12 +102,9 @@ class TestEmbeddingConfig(unittest.TestCase):
         config = EmbeddingConfig(model="text-embedding-ada-002-azure")
         self.assertEqual(config.get_provider_type(), "azure")
 
-        # Cohere models
-        config = EmbeddingConfig(model="embed-english-v3.0")
-        self.assertEqual(config.get_provider_type(), "cohere")
-
-        config = EmbeddingConfig(model="cohere/embed-multilingual-v3.0")
-        self.assertEqual(config.get_provider_type(), "cohere")
+        # Gemini models
+        config = EmbeddingConfig(model="gemini/embed-multilingual-v3.0")
+        self.assertEqual(config.get_provider_type(), "gemini")
 
         # Unknown models
         config = EmbeddingConfig(model="unknown-model")

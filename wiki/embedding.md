@@ -42,7 +42,6 @@ Embeddings map discrete objects (words, sentences, documents) to continuous vect
 | `text-embedding-ada-002` | 1536 | General purpose | OpenAI |
 | `text-embedding-3-small` | 1536 | High performance | OpenAI |
 | `text-embedding-3-large` | 3072 | Maximum quality | OpenAI |
-| `embed-english-v3.0` | 1024 | Multilingual | Cohere |
 
 ## 📌 Architecture
 
@@ -318,7 +317,6 @@ class CachedEmbeddingBlock:
 ## 🔗 External Resources
 
 - [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
-- [Cohere Embeddings](https://docs.cohere.com/docs/embeddings)
 - [Vector Similarity Search](https://www.pinecone.io/learn/vector-similarity-search/)
 
 ---
