@@ -2,7 +2,6 @@
 
 from typing import Any, Dict, Optional
 
-from litellm import retry
 from pydantic import BaseModel, Field, field_validator
 
 
