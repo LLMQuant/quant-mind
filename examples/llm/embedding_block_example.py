@@ -133,8 +133,6 @@ def example_azure_embeddings():
     # Create embedding block
     embedding_block = create_embedding_block(config)
 
-    # Create embedding block
-    embedding_block = create_embedding_block(config)
     # Test connection
     if embedding_block.test_connection():
         print("✅ Azure OpenAI connection successful")
