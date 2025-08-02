@@ -111,10 +111,8 @@ class EmbeddingConfig(BaseModel):
             return "azure"
 
         # Cohere models
-        elif model_lower.startswith("embed-") or model_lower.startswith(
-            "cohere/"
-        ):
-            return "cohere"
+        elif "gemini" in model_lower:
+            return "gemini"
 
         # Default to openai for unknown models
         else:
