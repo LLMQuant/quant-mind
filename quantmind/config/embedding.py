@@ -1,6 +1,5 @@
 """Embedding configuration for QuantMind."""
 
-from random import choices
 from typing import Any, Dict, Optional
 
 from litellm import retry
