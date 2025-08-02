@@ -222,15 +222,28 @@ This future state represents our commitment to moving beyond simple data aggrega
 
 ### 🤝 Contributing
 
-We welcome contributions of all forms, from bug reports to feature development. If you're interested in helping build the future of financial research, please review our contribution guidelines. For more details, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
+We welcome contributions of all forms, from bug reports to feature development.
 
-1. **Fork** the repository.
-2. **Create a new branch** (`git checkout -b feature/my-new-feature`).
-3. **Commit your changes** (`git commit -am 'Add some feature'`).
-4. **Push to the branch** (`git push origin feature/my-new-feature`).
-5. **Create a new Pull Request**.
+> [!IMPORTANT]
+> **For Contributors**: Please read [CONTRIBUTING.md](CONTRIBUTING.md) for essential development setup including pre-commit hooks, coding standards, and testing requirements.
 
-Please open an issue in the [GitHub Issues](https://github.com/LLMQuant/quant-mind/issues) tab to discuss any significant changes beforehand.
+**Quick Start for Contributors:**
+
+1. **Fork** the repository
+2. **Setup development environment**:
+   ```bash
+   uv venv && source .venv/bin/activate
+   uv pip install -e .
+   ./scripts/pre-commit-setup.sh
+   ```
+3. **Create feature branch** (`git checkout -b feat/my-feature`)
+4. **Follow conventional commits** (`feat: add new feature`)
+5. **Submit PR** with our template
+
+**Before Contributing:**
+- Open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss significant changes
+- Use our issue templates for bug reports and feature requests
+- Ensure all pre-commit hooks pass before submitting PR
 
 ### License
 
