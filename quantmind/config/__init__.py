@@ -7,6 +7,7 @@ from .flows import (
     SummaryFlowConfig,
 )
 from .llm import LLMConfig
+from .embedding import EmbeddingConfig
 from .parsers import LlamaParserConfig, PDFParserConfig
 from .settings import (
     Setting,
@@ -27,6 +28,7 @@ __all__ = [
     "Setting",
     # LLM Configuration
     "LLMConfig",
+    "EmbeddingConfig",
     # Tagger Configurations
     "LLMTaggerConfig",
     # Parser Configurations
