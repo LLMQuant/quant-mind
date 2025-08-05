@@ -23,7 +23,7 @@ def main():
     default_setting = create_default_config()
     print(f"   Source type: {type(default_setting.source).__name__}")
     print(f"   Parser type: {type(default_setting.parser).__name__}")
-    print(f"   Data directory: {default_setting.data_dir}")
+    print(f"   Storage directory: {default_setting.storage.storage_dir}")
 
     # Example 2: Save default configuration to YAML
     print("\n2. Saving default configuration to YAML:")
@@ -64,9 +64,8 @@ def main():
     print("   - ARXIV_MAX_RESULTS=50")
     print("   - OPENAI_MODEL=gpt-3.5-turbo")
     print("   - LOG_LEVEL=DEBUG")
-    print("   - DATA_DIR=./custom_data")
 
-    env_vars = ["ARXIV_MAX_RESULTS", "OPENAI_MODEL", "LOG_LEVEL", "DATA_DIR"]
+    env_vars = ["ARXIV_MAX_RESULTS", "OPENAI_MODEL", "LOG_LEVEL"]
     for var in env_vars:
         value = os.getenv(var)
         status = "✅ Set" if value else "❌ Not set"
@@ -74,7 +73,7 @@ def main():
 
     # Example 5: Direct configuration creation
     print("\n5. Creating configuration programmatically:")
-    from quantmind.config import ArxivSourceConfig, PDFParserConfig, LLMConfig
+    from quantmind.config import ArxivSourceConfig, LLMConfig, PDFParserConfig
 
     custom_setting = Setting(
         source=ArxivSourceConfig(
@@ -83,7 +82,6 @@ def main():
         parser=PDFParserConfig(method="pymupdf", extract_tables=True),
         llm=LLMConfig(model="gpt-4o", temperature=0.3),
         log_level="DEBUG",
-        data_dir="./custom_data",
     )
 
     print(f"   ✅ Created custom configuration")

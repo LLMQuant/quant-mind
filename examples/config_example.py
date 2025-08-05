@@ -146,8 +146,6 @@ def create_sample_config():
 
     # Set global settings
     settings.log_level = "INFO"
-    settings.data_dir = "./data"
-    settings.temp_dir = "./tmp"
     settings.arxiv_max_results = 500
 
     return settings
@@ -237,8 +235,7 @@ def show_configuration_details(settings):
 
     print(f"\nGlobal Settings:")
     print(f"  Log level: {settings.log_level}")
-    print(f"  Data directory: {settings.data_dir}")
-    print(f"  Temp directory: {settings.temp_dir}")
+    print(f"  Storage directory: {settings.storage.storage_dir}")
     print(f"  ArXiv max results: {settings.arxiv_max_results}")
 
     print(f"\nSources ({len(settings.sources)}):")
