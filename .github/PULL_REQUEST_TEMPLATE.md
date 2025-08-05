@@ -7,7 +7,7 @@ It'll be great if relevant reviewers can be assigned as well.-->
 
 Please feel free to remove inapplicable items for your PR.
 
-- [ ] The PR title starts with [$CATEGORY] (such as [Docs], [Fix], [Feature], [Refactor])
+- [ ] The PR title starts with `$CATEGORY(xx): xxx` (such as `feat(tool): xxx`, `fix(source): xxx`, `docs(README): xxx`)
 - [ ] Related issue is referred in this PR
 - [ ] The markdown and latex are rendered correctly.
 - [ ] The code in PR is well-documented.

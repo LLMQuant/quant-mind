@@ -64,7 +64,7 @@ def simulate_old_behavior(storage: LocalStorage, num_lookups: int = 50):
     old_time = end_time - start_time
 
     print(f"   Time for {num_lookups} lookups: {old_time:.4f} seconds")
-    print(f"   Average per lookup: {(old_time/num_lookups)*1000:.2f} ms")
+    print(f"   Average per lookup: {(old_time / num_lookups) * 1000:.2f} ms")
 
     return old_time
 
@@ -86,7 +86,7 @@ def test_new_indexing_performance(storage: LocalStorage, num_lookups: int = 50):
     new_time = end_time - start_time
 
     print(f"   Time for {num_lookups} lookups: {new_time:.4f} seconds")
-    print(f"   Average per lookup: {(new_time/num_lookups)*1000:.2f} ms")
+    print(f"   Average per lookup: {(new_time / num_lookups) * 1000:.2f} ms")
 
     return new_time
 
@@ -110,7 +110,7 @@ def test_knowledge_lookup_performance(
     print(
         f"   Time for {num_lookups} knowledge lookups: {lookup_time:.4f} seconds"
     )
-    print(f"   Average per lookup: {(lookup_time/num_lookups)*1000:.2f} ms")
+    print(f"   Average per lookup: {(lookup_time / num_lookups) * 1000:.2f} ms")
 
     return lookup_time
 
@@ -128,7 +128,7 @@ def test_batch_operations(storage: LocalStorage):
     count = len(all_knowledges)
 
     print(f"   Retrieved {count} knowledge items in {batch_time:.4f} seconds")
-    print(f"   Average per item: {(batch_time/count)*1000:.2f} ms")
+    print(f"   Average per item: {(batch_time / count) * 1000:.2f} ms")
 
     return batch_time
 

@@ -1,183 +1,144 @@
 # Contributing to QuantMind
 
-Thank you for your interest in contributing to QuantMind! This guide outlines the best practices for contributing to our intelligent knowledge extraction framework for quantitative finance.
+Thank you for contributing to QuantMind! This guide provides essential information for developers.
 
-## Quick Start
+## 🚀 Quick Setup
 
 1. **Fork and clone** the repository
-2. **Set up development environment**:
-
+2. **Set up environment**:
    ```bash
-   uv venv
-   source .venv/bin/activate
+   uv venv && source .venv/bin/activate
    uv pip install -e .
    ```
-
 3. **Install pre-commit hooks**:
-
    ```bash
-   # Automated setup (recommended)
    ./scripts/pre-commit-setup.sh
-
-   # Or manual setup
-   pip install pre-commit
-   pre-commit install
-   pre-commit install --hook-type pre-push
    ```
 
-## Development Standards
+## 🛠️ Development Setup
 
-### Code Quality
+### Pre-commit Hooks
 
-- **Location**: All new code must be in the `quantmind/` module
-- **Style**: Google-style docstrings, 80-character line length
-- **Architecture**: Use abstract base classes and dependency injection
-- **Type Safety**: Comprehensive type hints with Pydantic models
+We use pre-commit hooks to ensure code quality and consistency. These hooks automatically format code, run linting, and perform other quality checks before each commit.
 
-### Testing Requirements
+**Install pre-commit hooks:**
 
-- **Unit tests**: Required for all new functionality in `tests/quantmind/`
-- **Structure**: Mirror the `quantmind/` module structure
-- **Coverage**: Test both success and error cases
-- **Dependencies**: Mock external APIs and file systems
+```bash
+# Automated setup (recommended)
+./scripts/pre-commit-setup.sh
 
-### Documentation
+# Or manual setup
+pip install pre-commit
+pre-commit install
+pre-commit install --hook-type pre-push
+```
 
-- **Examples**: Add practical usage examples to `examples/quantmind/`
-- **Comments**: Clear inline documentation for complex logic
-- **Docstrings**: Google-style format for all public methods
+**What the hooks do:**
 
-## Automated Quality Checks
+- **On every commit:**
+  - Code formatting with `ruff format` (80-char line length)
+  - Linting with `ruff check --fix` (auto-fixes issues)
+  - File quality checks (trailing whitespace, EOF, YAML syntax)
+  - Safety checks (large files, merge conflicts)
 
-Our pre-commit configuration (`.pre-commit-config.yaml`) enforces quality standards:
+- **On push to remote:**
+  - Full unit test suite via `scripts/unittest.sh`
 
-### On Every Commit
-
-- **Formatting**: `ruff format` (80-char line length)
-- **Linting**: `ruff check --fix` (auto-fix issues)
-- **File Quality**: Trailing whitespace, EOF, YAML syntax
-- **Safety**: Check for large files and merge conflicts
-
-### On Push to Remote
-
-- **Unit Tests**: Full test suite via `scripts/unittest.sh`
-
-### Manual Execution
+**Manual execution:**
 
 ```bash
 # Run formatting and linting
 ./scripts/lint.sh
+
+# Run all pre-commit hooks on all files
+pre-commit run --all-files
 
 # Run specific tests
 ./scripts/unittest.sh tests/quantmind/sources/
 ./scripts/unittest.sh all  # Run all tests
 ```
 
-## Contribution Types
+**Troubleshooting:**
 
-### 1. New Sources
+- If hooks fail, fix the issues and commit again
+- To skip hooks temporarily (not recommended): `git commit --no-verify`
+- Update hooks: `pre-commit autoupdate`
 
+## 📝 Development Standards
+
+### Code Requirements
+- **Location**: All new code in `quantmind/` module
+- **Style**: Google-style docstrings, 80-char line length
+- **Architecture**: Abstract base classes + dependency injection
+- **Type Safety**: Pydantic models + comprehensive type hints
+
+### Testing
+- **Unit tests**: Required in `tests/quantmind/` (mirror module structure)
+- **Coverage**: Test success and error cases
+- **Mocking**: Mock external APIs and file systems
+
+### Documentation
+- **Examples**: Add to `examples/quantmind/` for new features
+- **Docstrings**: Google-style format for all public methods
+
+## 🏗️ Contribution Types
+
+### New Sources
 - Extend `BaseSource[ContentType]` in `quantmind/sources/`
-- Add corresponding config in `quantmind/config/sources.py`
-- Include comprehensive tests in `tests/sources/`
-- Provide usage example in `examples/sources/`
+- Add config in `quantmind/config/sources.py`
+- Include tests and usage example
 
-### 2. New Parsers
-
+### New Parsers
 - Extend `BaseParser` in `quantmind/parsers/`
-- Handle multiple content formats
-- Include error handling and validation
-- Add tests for different input types
+- Handle multiple content formats with error handling
 
-### 3. New Taggers
-
+### New Taggers
 - Extend `BaseTagger` in `quantmind/tagger/`
-- Support both rule-based and ML-based approaches
-- Include configuration options
-- Test with various content types
+- Support rule-based and ML approaches
 
-### 4. Storage Backends
-
+### Storage Backends
 - Extend `BaseStorage` in `quantmind/storage/`
-- Implement indexing and querying
-- Handle concurrent access
-- Include performance tests
+- Implement indexing, querying, and concurrent access
 
-## Code Quality Guidelines
-
-### Architecture Principles
-
-- **Separation of Concerns**: Single responsibility per component
-- **Dependency Injection**: Configurable and testable components
-- **Error Handling**: Comprehensive logging and graceful failures
-- **Type Safety**: Use Pydantic models and type hints
-
-### Best Practices
-
-- Use existing utilities (`quantmind.utils.logger`)
-- Follow the workflow orchestration pattern
-- Implement proper configuration validation
-- Add deduplication and quality control
-
-## Pull Request Process
+## 🔄 Pull Request Process
 
 1. **Create feature branch** from `master`
-2. **Implement changes** following development standards
-3. **Pre-commit hooks will automatically**:
-   - Format code with `ruff format`
-   - Fix linting issues with `ruff check --fix`
-   - Validate file quality and syntax
-4. **Before pushing**:
-
+2. **Follow conventional commits**: `type(scope): description`
+3. **Pre-commit hooks** run automatically on commit/push
+4. **Before submitting**:
    ```bash
-   # Verify all checks pass locally
    pre-commit run --all-files
    ./scripts/unittest.sh all
    ```
+5. **Submit PR** using our template
 
-5. **Submit PR** with clear description and test plan
+### PR Checklist
+- [ ] Code in `quantmind/` following architecture patterns
+- [ ] Unit tests with comprehensive coverage
+- [ ] Usage example (for new features)
+- [ ] All pre-commit hooks pass
+- [ ] Conventional commit format
 
-### PR Requirements
-
-- [ ] Code in `quantmind/` module following architecture patterns
-- [ ] Unit tests in `tests/` with comprehensive coverage
-- [ ] Usage example in `examples/` (for new features)
-- [ ] All pre-commit hooks pass (automatic on commit/push)
-- [ ] Clear commit messages and PR description
-
-## Development Tips
-
-### Testing
+## 💡 Development Tips
 
 ```bash
-# Run specific test modules
+# Run specific tests
 pytest tests/quantmind/sources/
 pytest tests/quantmind/models/
 
-# Run with coverage
-pytest tests --cov=quantmind
-```
-
-### Local Development
-
-```bash
 # Test CLI functionality
 quantmind extract "test query" --max-papers 5
 quantmind config show
+
+# Check code quality
+./scripts/lint.sh
 ```
 
-### Configuration
+## ❓ Questions?
 
-- Use structured config via `quantmind.config.settings`
-- Support environment variable overrides
-- Provide sensible defaults
-- Validate at startup
-
-## Questions?
-
-- Check existing issues and discussions
-- Follow the patterns in existing code
+- Check existing [issues](https://github.com/LLMQuant/quant-mind/issues)
+- Review architecture patterns in existing code
 - Look at `examples/` for usage patterns
-- Review the architecture in `CLAUDE.md`
+- See `CLAUDE.md` for detailed architecture
 
-Thank you for contributing to QuantMind! 🚀
+Thank you for contributing! 🚀
