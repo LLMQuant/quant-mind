@@ -18,6 +18,7 @@ from quantmind.config.storage import LocalStorageConfig
 from quantmind.config.taggers import LLMTaggerConfig
 
 
+# TODO (whisper): No tests for flows integration.
 class TestSetting(unittest.TestCase):
     """Comprehensive test cases for Setting configuration system."""
 

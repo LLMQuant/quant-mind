@@ -1,0 +1,20 @@
+# Prompt templates for SummaryFlow
+templates:
+  summarize_chunk_template: |
+    You are a financial research expert. Summarize the following content chunk
+    focusing on key insights, methodology, and findings. Keep it concise but comprehensive.
+
+    Content:
+    {{ chunk_text }}
+
+    Summary:
+
+  combine_summaries_template: |
+    You are a financial research expert. Combine the following chunk summaries
+    into a coherent, comprehensive final summary. Eliminate redundancy and
+    create a well-structured overview.
+
+    Chunk Summaries:
+    {{ summaries }}
+
+    Final Summary:
