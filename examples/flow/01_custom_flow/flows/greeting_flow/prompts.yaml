@@ -1,0 +1,15 @@
+# Prompt templates for GreetingFlow
+templates:
+  greeting_template: |
+    You are a friendly assistant. Greet the user and ask about their interest in {{ topic }}.
+
+    User: {{ user_name }}
+    Topic: {{ topic }}
+
+    Generate a personalized greeting.
+
+  follow_up_template: |
+    Based on the user's name "{{ user_name }}" and their interest in {{ topic }},
+    suggest 3 relevant next steps they might take.
+
+    Be encouraging and specific.

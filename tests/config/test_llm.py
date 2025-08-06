@@ -153,6 +153,9 @@ class TestLLMConfig(unittest.TestCase):
         config = LLMConfig()
         params = config.get_litellm_params()
 
+        # Since we will automatically resolve the API key, we should pop it.
+        params.pop("api_key")
+
         expected_params = {
             "model": "gpt-4o",
             "temperature": 0.0,

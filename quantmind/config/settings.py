@@ -11,14 +11,10 @@ from typing import Any, Dict, Optional, Union
 import yaml
 from pydantic import BaseModel, Field
 
-from quantmind.config.flows import (
-    AnalyzerFlowConfig,
-    BaseFlowConfig,
-    QAFlowConfig,
-    SummaryFlowConfig,
-)
+from quantmind.config.flows import BaseFlowConfig
 from quantmind.config.llm import LLMConfig
 from quantmind.config.parsers import LlamaParserConfig, PDFParserConfig
+from quantmind.config.registry import flow_registry
 from quantmind.config.sources import (
     ArxivSourceConfig,
     NewsSourceConfig,
@@ -43,11 +39,7 @@ class Setting(BaseModel):
     parser: Optional[Union[PDFParserConfig, LlamaParserConfig]] = None
     tagger: Optional[LLMTaggerConfig] = None
     storage: LocalStorageConfig = Field(default_factory=LocalStorageConfig)
-    flow: Optional[
-        Union[
-            QAFlowConfig, SummaryFlowConfig, AnalyzerFlowConfig, BaseFlowConfig
-        ]
-    ] = None
+    flows: Dict[str, BaseFlowConfig] = Field(default_factory=dict)
 
     # Core configuration
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -131,13 +123,17 @@ class Setting(BaseModel):
 
     @classmethod
     def from_yaml(
-        cls, config_path: Union[str, Path], env_file: Optional[str] = None
+        cls,
+        config_path: Union[str, Path],
+        env_file: Optional[str] = None,
+        auto_discover_flows: bool = True,
     ) -> "Setting":
         """Load configuration from YAML file with environment variable substitution.
 
         Args:
             config_path: Path to YAML configuration file
             env_file: Optional path to .env file
+            auto_discover_flows: Whether to auto-discover custom flow configurations
 
         Returns:
             Configured Setting instance
@@ -155,6 +151,10 @@ class Setting(BaseModel):
 
         # Load .env file first
         cls.load_dotenv(env_file)
+
+        # Auto-discover custom flows if enabled
+        if auto_discover_flows:
+            cls._auto_discover_flows(config_path)
 
         try:
             # Load YAML
@@ -177,6 +177,28 @@ class Setting(BaseModel):
             raise
 
     @classmethod
+    def _auto_discover_flows(cls, config_path: Path) -> None:
+        """Auto-discover custom flow configurations near the config file.
+
+        Args:
+            config_path: Path to the configuration file
+        """
+        # Search in the same directory as config file and subdirectories
+        search_paths = [
+            config_path.parent,  # Same directory as config
+            config_path.parent / "flows",  # flows subdirectory
+        ]
+
+        # Add additional search paths if they exist
+        for subdir in ["examples", "custom", "user_flows"]:
+            potential_path = config_path.parent / subdir
+            if potential_path.exists():
+                search_paths.append(potential_path)
+
+        flow_registry.auto_discover_flows(search_paths)
+        logger.debug(f"Auto-discovered flows from paths: {search_paths}")
+
+    @classmethod
     def _parse_config(cls, config_dict: Dict[str, Any]) -> "Setting":
         """Parse configuration dictionary into Setting instance."""
         # Configuration type registry
@@ -195,12 +217,6 @@ class Setting(BaseModel):
             },
             "storage": {
                 "local": LocalStorageConfig,
-            },
-            "flow": {
-                "qa": QAFlowConfig,
-                "summary": SummaryFlowConfig,
-                "analyzer": AnalyzerFlowConfig,
-                "base": BaseFlowConfig,
             },
         }
 
@@ -223,6 +239,32 @@ class Setting(BaseModel):
                         logger.warning(
                             f"Unknown {component_name} type: {component_type}"
                         )
+
+        # Parse flows dictionary using registry
+        if "flows" in config_dict:
+            flows_dict = {}
+            flows_config = config_dict["flows"]
+            if isinstance(flows_config, dict):
+                for flow_name, flow_data in flows_config.items():
+                    if isinstance(flow_data, dict):
+                        flow_type = flow_data.get("type", "base")
+                        flow_config = flow_data.get("config", {})
+
+                        try:
+                            # Use registry to get config class
+                            config_class = flow_registry.get_config_class(
+                                flow_type
+                            )
+                            # Add name to config if not present
+                            flow_config.setdefault("name", flow_name)
+                            flows_dict[flow_name] = config_class(**flow_config)
+                        except KeyError:
+                            logger.warning(f"Unknown flow type: {flow_type}")
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to create config for flow '{flow_name}': {e}"
+                            )
+            parsed["flows"] = flows_dict
 
         # Parse other configurations
         if "llm" in config_dict:
@@ -319,21 +361,33 @@ class Setting(BaseModel):
             "tagger": {"llm": LLMTaggerConfig},
             "storage": {"local": LocalStorageConfig},
             "flow": {
-                "qa": QAFlowConfig,
-                "summary": SummaryFlowConfig,
-                "analyzer": AnalyzerFlowConfig,
-                "base": BaseFlowConfig,
+                flow_type: flow_registry.get_config_class(flow_type)
+                for flow_type in flow_registry.list_types()
             },
         }
 
         config_dict = {}
 
-        # Export components
+        # Export components (excluding flows which are handled separately)
         for component_name, type_map in type_maps.items():
+            if component_name == "flow":
+                continue  # Handle flows separately
             component = getattr(self, component_name, None)
             serialized = serialize_component(component, type_map)
             if serialized:
                 config_dict[component_name] = serialized
+
+        # Export flows dictionary
+        if self.flows:
+            flows_dict = {}
+            for flow_name, flow_config in self.flows.items():
+                flow_serialized = serialize_component(
+                    flow_config, type_maps["flow"]
+                )
+                if flow_serialized:
+                    flows_dict[flow_name] = flow_serialized
+            if flows_dict:
+                config_dict["flows"] = flows_dict
 
         # Export LLM config (exclude sensitive data)
         config_dict["llm"] = self.llm.model_dump(exclude={"api_key"})
