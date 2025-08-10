@@ -12,8 +12,8 @@ logger = get_logger(__name__)
 
 
 class SearchSource(BaseSource[SearchContent]):
-    """
-    SearchSource provides a way to fetch content from search engines.
+    """SearchSource provides a way to fetch content from search engines.
+
     Currently, it uses DuckDuckGo as the search provider.
     """
 
@@ -37,12 +37,12 @@ class SearchSource(BaseSource[SearchContent]):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
     ) -> List[SearchContent]:
-        """
-        Performs a search query and returns a list of SearchContent objects.
+        """Performs a search query and returns a list of SearchContent objects.
 
         Args:
             query: The search query string.
-            max_results: The maximum number of results to return. Defaults to the value in the config.
+            max_results: The maximum number of results to return. Defaults to
+                the value in the config.
             site: Restrict search to a specific domain.
             filetype: Search for specific file types.
             start_date: Start date for search results (YYYY-MM-DD).
@@ -93,9 +93,10 @@ class SearchSource(BaseSource[SearchContent]):
             return []
 
     def get_by_id(self, content_id: str) -> Optional[SearchContent]:
-        """
-        Retrieves content by its ID (URL). This is not a standard use case for a search source,
-        but it's implemented for interface consistency. It performs a search for the URL.
+        """Retrieves content by its ID (URL).
+
+        This is not a standard use case for a search source, but it's
+        implemented for interface consistency. It performs a search for the URL.
 
         Args:
             content_id: The URL of the content to retrieve.
