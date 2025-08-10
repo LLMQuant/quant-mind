@@ -192,11 +192,19 @@ class WebSourceConfig(BaseSourceConfig):
         return v
 
 
+class SearchSourceConfig(BaseSourceConfig):
+    """Configuration for search sources."""
+
+    # No specific settings for now, inherits from BaseSourceConfig
+    pass
+
+
 # Source configuration registry
 SOURCE_CONFIGS = {
     "arxiv": ArxivSourceConfig,
     "news": NewsSourceConfig,
     "web": WebSourceConfig,
+    "search": SearchSourceConfig,
 }
 
 
