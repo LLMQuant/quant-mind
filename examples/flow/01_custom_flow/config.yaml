@@ -1,0 +1,13 @@
+# Configuration for custom flow example
+flows:
+  greeting_flow:
+    type: "greeting"
+    config:
+      name: "greeting_flow"
+      prompt_templates_path: "flows/greeting_flow/prompts.yaml"
+      llm_blocks:
+        greeter:
+          model: "gpt-4o-mini"
+          temperature: 0.7
+          max_tokens: 500
+          api_key: ${OPENAI_API_KEY}

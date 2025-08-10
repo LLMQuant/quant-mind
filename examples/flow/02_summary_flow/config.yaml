@@ -1,0 +1,9 @@
+# Configuration for summary flow demo
+flows:
+  summary_demo:
+    type: "summary"
+    config:
+      name: "summary_flow"
+      prompt_templates_path: "flows/summary_flow/prompts.yaml"
+      use_chunking: true
+      chunk_size: 1000  # Smaller chunks for demo
