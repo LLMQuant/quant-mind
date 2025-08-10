@@ -29,7 +29,13 @@ class SearchSource(BaseSource[SearchContent]):
         self.client = DDGS()
 
     def search(
-        self, query: str, max_results: Optional[int] = None
+        self,
+        query: str,
+        max_results: Optional[int] = None,
+        site: Optional[str] = None,
+        filetype: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> List[SearchContent]:
         """
         Performs a search query and returns a list of SearchContent objects.
@@ -37,6 +43,10 @@ class SearchSource(BaseSource[SearchContent]):
         Args:
             query: The search query string.
             max_results: The maximum number of results to return. Defaults to the value in the config.
+            site: Restrict search to a specific domain.
+            filetype: Search for specific file types.
+            start_date: Start date for search results (YYYY-MM-DD).
+            end_date: End date for search results (YYYY-MM-DD).
 
         Returns:
             A list of SearchContent objects.
@@ -44,22 +54,39 @@ class SearchSource(BaseSource[SearchContent]):
         if max_results is None:
             max_results = self.config.max_results
 
+        # Build the query with advanced search operators
+        search_query = query
+        if site or self.config.site:
+            search_query += f" site:{site or self.config.site}"
+        if filetype or self.config.filetype:
+            search_query += f" filetype:{filetype or self.config.filetype}"
+        
+        # Handle date range
+        final_start_date = start_date or self.config.start_date
+        final_end_date = end_date or self.config.end_date
+        if final_start_date and final_end_date:
+            search_query += f" daterange:{final_start_date}..{final_end_date}"
+        elif final_start_date:
+            search_query += f" daterange:{final_start_date}.."
+        elif final_end_date:
+            search_query += f" daterange:..{final_end_date}"
+
         try:
-            results = self.client.text(
-                query, max_results=max_results
-            )
+            results = self.client.text(search_query, max_results=max_results)
             search_content_list = [
                 SearchContent(
                     title=result["title"],
                     url=result["href"],
                     snippet=result["body"],
-                    query=query,
+                    query=search_query,
                     source=self.name,
                     meta_info={},
                 )
                 for result in results
             ]
-            logger.info(f"Found {len(search_content_list)} results for query: '{query}'")
+            logger.info(
+                f"Found {len(search_content_list)} results for query: '{search_query}'"
+            )
             return search_content_list
         except Exception as e:
             logger.error(f"An error occurred while searching with DuckDuckGo: {e}")
