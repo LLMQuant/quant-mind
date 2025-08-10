@@ -195,8 +195,11 @@ class WebSourceConfig(BaseSourceConfig):
 class SearchSourceConfig(BaseSourceConfig):
     """Configuration for search sources."""
 
-    # No specific settings for now, inherits from BaseSourceConfig
-    pass
+    site: Optional[str] = Field(default=None, description="Restrict search to a specific domain.")
+    filetype: Optional[str] = Field(default=None, description="Search for specific file types.")
+    start_date: Optional[str] = Field(default=None, description="Start date for search results (YYYY-MM-DD).")
+    end_date: Optional[str] = Field(default=None, description="End date for search results (YYYY-MM-DD).")
+
 
 
 # Source configuration registry
