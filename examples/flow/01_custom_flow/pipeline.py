@@ -4,7 +4,7 @@
 from pathlib import Path
 
 # Import the custom flow
-from flows.greeting_flow.flow import GreetingFlow
+from flows.greeting_flow import GreetingFlow
 from quantmind.config.settings import load_config
 
 
