@@ -8,6 +8,7 @@ This example demonstrates the built-in SummaryFlow with custom chunking strategy
 examples/flow/02_summary_flow/
 ├── flows/
 │   └── summary_flow/
+│       ├── __init__.py     # Module exports
 │       ├── prompts.yaml    # Prompt templates
 │       └── flow.py         # Mock LLM implementation (for testing)
 ├── config.yaml             # Flow configuration
@@ -36,6 +37,18 @@ examples/flow/02_summary_flow/
 - Environment variable resolution from `.env` file
 - Smart provider inference (OpenAI models use `OPENAI_API_KEY`)
 - Secure configuration without hardcoded keys
+
+## Easy Import Structure
+
+With the new `__init__.py` file, you can import the demo flow cleanly:
+
+```python
+# Import from flow directory
+from flows.summary_flow import DemoSummaryFlow
+
+# Use in pipelines
+flow = DemoSummaryFlow(config)
+```
 
 ## Running the Demo
 
