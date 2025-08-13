@@ -154,7 +154,8 @@ class TestLLMConfig(unittest.TestCase):
         params = config.get_litellm_params()
 
         # Since we will automatically resolve the API key, we should remove it from the parameters.
-        params.pop("api_key")
+        if "api_key" in params:
+            params.pop("api_key")
 
         expected_params = {
             "model": "gpt-4o",
