@@ -1,0 +1,23 @@
+# Configuration for podcast flow example
+flows:
+  podcast_flow:
+    type: "podcast"
+    config:
+      name: "podcast_flow"
+      prompt_templates_path: "flows/podcast_flow/prompts.yaml"
+      llm_blocks:
+        intro_generator:
+          model: "gpt-4o-mini"
+          temperature: 0.7
+          max_tokens: 300
+          api_key: ${OPENAI_API_KEY}
+        main_generator:
+          model: "gpt-4o-mini"
+          temperature: 0.5
+          max_tokens: 1000
+          api_key: ${OPENAI_API_KEY}
+        outro_generator:
+          model: "gpt-4o-mini"
+          temperature: 0.7
+          max_tokens: 300
+          api_key: ${OPENAI_API_KEY}
