@@ -21,7 +21,9 @@ class SearchContent(BaseContent):
 
     def get_text_for_embedding(self) -> str:
         """Return the text to be used for generating embeddings."""
-        return f"{self.title}{self.snippet}"
+        title = (self.title or "").strip()
+        snippet = (self.snippet or "").strip()
+        return f"{title}\n\n{snippet}"
 
     def to_dict(self) -> Dict[str, any]:
         """Convert the object to a dictionary."""
