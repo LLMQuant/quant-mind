@@ -8,6 +8,7 @@ This example demonstrates how to create a simple custom flow using the new Quant
 examples/flow/01_custom_flow/
 ├── flows/
 │   └── greeting_flow/
+│       ├── __init__.py     # Module exports
 │       ├── prompts.yaml    # Prompt templates
 │       └── flow.py         # Flow implementation
 ├── config.yaml             # Flow configuration
@@ -37,6 +38,18 @@ examples/flow/01_custom_flow/
 - Jinja2 templates with `{{ variable }}` syntax
 - Separated from code for easy editing
 - Loaded dynamically
+
+## Easy Import Structure
+
+With the new `__init__.py` files, you can now import flows cleanly:
+
+```python
+# Import from flow directory
+from flows.greeting_flow import GreetingFlow, GreetingFlowConfig
+
+# Use in major pipelines
+flow = GreetingFlow(config)
+```
 
 ## Running the Demo
 
