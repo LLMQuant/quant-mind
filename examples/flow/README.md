@@ -45,6 +45,7 @@ Both examples showcase the core principles of the new flow architecture:
 3. **Direct Access**: No unnecessary wrapper methods, just direct access to resources
 4. **Template Separation**: Prompts in YAML files for easy editing and maintenance
 5. **Type Safety**: Pydantic-based configuration instead of complex schemas
+6. **Easy Imports**: Each flow directory has `__init__.py` for clean imports (e.g., `from flows.greeting_flow import GreetingFlow`)
 
 ## Quick Start
 
