@@ -23,13 +23,12 @@ class PodcastFlow(BaseFlow):
             intro: Intro hint for the podcast script
             outro: Outro hint for the podcast script
         Returns:
-            JSON string containing the podcast script
+            A dictionary containing the podcast script with keys: intro, main, outro
         """
         logger.info("Starting podcast script generation flow")
 
         # Generate podcast script
-        script_str = self._generate_script(summary, intro, outro)
-        script = json.loads(script_str)
+        script = self._generate_script(summary, intro, outro)
 
         logger.info("Podcast script generation completed")
         return script
