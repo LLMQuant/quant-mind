@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Demo pipeline showing how to create and use a podcast flow."""
 
+import json
 from pathlib import Path
 
 # Import the custom flow
@@ -40,47 +41,19 @@ def main():
     sample_inputs = [
         {
             "summary": "Artificial Intelligence is transforming healthcare in unprecedented ways. Machine learning algorithms can now diagnose diseases with accuracy rates exceeding human doctors. AI-powered imaging systems detect early-stage cancers that might be missed by traditional methods.",
-            "intro": "AI revolutionizing healthcare with machine learning and predictive analytics",
-            "outro": "Future of AI in medicine and ethical considerations",
-        },
-        {
-            "summary": "Quantum computing is revolutionizing cryptography and drug discovery. Quantum algorithms can solve complex problems that classical computers cannot handle. This technology has the potential to break current encryption methods while enabling new breakthroughs in pharmaceutical research.",
-            "intro": "Quantum computing breakthroughs in cryptography and drug discovery",
-            "outro": "Implications for cybersecurity and pharmaceutical research",
-        },
-        {
-            "summary": "Climate change is accelerating faster than predicted. Rising global temperatures are causing extreme weather events, sea level rise, and ecosystem disruptions. Renewable energy adoption is increasing but not fast enough to meet climate targets.",
-            "intro": "Climate change acceleration and its global impacts",
-            "outro": "Renewable energy adoption and climate action urgency",
-        },
+        }
     ]
 
     for i, input_data in enumerate(sample_inputs, 1):
-        print(f"\n--- Processing Podcast {i}: {input_data['intro']} ---")
+        print(f"\n--- Processing Podcast {i}: {input_data['summary']} ---")
         try:
-            result = flow.run(
-                summary=input_data["summary"],
-                intro=input_data["intro"],
-                outro=input_data["outro"],
-            )
-            print(
-                "Intro:",
-                result.get("intro", "N/A")[:100] + "..."
-                if result.get("intro")
-                else "N/A",
-            )
-            print(
-                "Main:",
-                result.get("main", "N/A")[:100] + "..."
-                if result.get("main")
-                else "N/A",
-            )
-            print(
-                "Outro:",
-                result.get("outro", "N/A")[:100] + "..."
-                if result.get("outro")
-                else "N/A",
-            )
+            result = flow.run(summary=input_data["summary"])
+            assert isinstance(
+                result, dict
+            ), "Flow output should be a dictionary"
+            with open(f"podcast_script_{i}.json", "w") as f:
+                json.dump(result, f, indent=4)
+            print(f"✓ Podcast script saved to podcast_script_{i}.json")
         except Exception as e:
             print(f"✗ Flow execution failed: {e}")
             print("This is expected without proper API keys")
@@ -88,7 +61,7 @@ def main():
     print("\n=== Demo Complete ===")
     print("\nKey takeaways from this example:")
     print("• Podcast flow configuration with dataclass")
-    print("• YAML-based prompt templates for intro, main, and outro")
+    print("• YAML-based prompt templates for main")
     print("• Multiple LLM blocks for different content types")
     print("• Python-based orchestration logic")
     print("• Easy to customize and extend for different podcast styles")

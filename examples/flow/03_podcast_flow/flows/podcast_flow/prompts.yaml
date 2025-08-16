@@ -1,22 +1,8 @@
 # Prompt templates for PodcastFlow
 templates:
-  intro_prompt: |
-    You are a professional podcast host. Generate an engaging podcast introduction based on this hint.
-
-    Hint: {{ intro_hint }}
-
-    Generate the intro:
-
   main_prompt: |
     You are a professional podcast script writer. Convert into engaging podcast content based on this summary.
 
-    Summary: {{ summary }}
+    Summary: {{ summary_hint }}
 
     Generate the main podcast content:
-
-  outro_prompt: |
-    You are a professional podcast host. Generate a podcast outro based on this hint.
-
-    Hint: {{ outro_hint }}
-
-    Generate the outro:

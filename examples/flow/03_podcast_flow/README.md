@@ -38,18 +38,10 @@ flows:
       name: "podcast_flow"
       prompt_templates_path: "flows/podcast_flow/prompts.yaml"
       llm_blocks:
-        intro_generator:
-          model: "gpt-4o-mini"
-          temperature: 0.7
-          max_tokens: 300
         main_generator:
           model: "gpt-4o-mini"
           temperature: 0.5
           max_tokens: 1000
-        outro_generator:
-          model: "gpt-4o-mini"
-          temperature: 0.7
-          max_tokens: 300
 ```
 
 ## Usage
@@ -65,9 +57,7 @@ config = settings.flows["podcast_flow"]
 # Create and run flow
 flow = PodcastFlow(config)
 script = flow.run(
-    summary="Your summary text here...",
-    intro="AI in healthcare",
-    outro="Future of technology"
+    summary="Your summary text here..."
 )
 ```
 
@@ -84,9 +74,7 @@ script = flow.run(
 The flow returns a dictionary with:
 ```python
 {
-    "intro": "Generated intro content...",
     "main": "Generated main content...",
-    "outro": "Generated outro content..."
 }
 ```
 
