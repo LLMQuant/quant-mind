@@ -121,3 +121,11 @@ class SummaryFlowConfig(BaseFlowConfig):
                     "Final Summary:"
                 ),
             }
+
+
+class PodcastFlowConfig(BaseFlowConfig):
+    """Configuration for podcast generation flow."""
+
+    num_speakers: int = 2
+    speaker_languages: str = "en-us"
+    summary_hint: str

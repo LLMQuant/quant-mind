@@ -1,0 +1,8 @@
+# Prompt templates for PodcastFlow
+templates:
+  main_prompt: |
+    You are a professional podcast script writer. Convert into engaging podcast content based on this summary.
+
+    Summary: {{ summary_hint }}
+
+    Generate the main podcast content:
