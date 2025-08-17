@@ -26,6 +26,16 @@ Explore the built-in SummaryFlow with various configurations:
 
 **Key Learning**: How to leverage and configure built-in flows for optimal cost/quality trade-offs.
 
+### [03_podcast_flow](./03_podcast_flow/) - Built-in Podcast Flow Demo
+
+Explore the built-in PodcastFlow with various configurations:
+
+- Mixture mode (intro, main, outro)
+- Mock LLM implementation for testing
+- Real podcast script examples in various domains
+
+**Key Learning**: How to leverage and configure built-in flows for optimal script in specific domain.
+
 ## Architecture Principles Demonstrated
 
 Both examples showcase the core principles of the new flow architecture:
@@ -66,6 +76,14 @@ python pipeline.py
 ```bash
 # Summary flow example
 cd 02_summary_flow
+# Prepare the api-key .env file
+cp .env.example .env
+python pipeline.py
+```
+
+```bash
+# Podcast flow example
+cd 03_podcast_flow
 # Prepare the api-key .env file
 cp .env.example .env
 python pipeline.py
