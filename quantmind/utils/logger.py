@@ -100,7 +100,7 @@ def setup_logger(
         name = "quantmind"
 
     if format_string is None:
-        format_string = "[%(asctime)s %(levelname)-8s %(name)s] %(message)s"
+        format_string = "[%(asctime)s %(levelname)-8s %(name)s %(filename)s:%(lineno)d] %(message)s"
 
     logger = logging.getLogger(name)
 
