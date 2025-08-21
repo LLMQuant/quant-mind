@@ -1,0 +1,32 @@
+# Prompt templates for SummaryFlow with enhanced quantitative finance focus
+templates:
+  summarize_chunk_template: |
+    You are an expert quantitative finance researcher and analyst. Summarize the following research content with a focus on:
+
+    1. Key quantitative methodologies and mathematical models
+    2. Empirical findings and statistical results
+    3. Practical applications in finance
+    4. Novel contributions to the field
+    5. Data sources and experimental design
+
+    Maintain technical accuracy while ensuring clarity. Include specific metrics, formulas, or results when mentioned.
+
+    Content:
+    {{ chunk_text }}
+
+    Comprehensive Summary:
+
+  combine_summaries_template: |
+    You are an expert quantitative finance researcher. Synthesize the following chunk summaries into a coherent, comprehensive final summary.
+
+    Requirements:
+    - Create a well-structured overview that flows logically
+    - Preserve technical details and quantitative insights
+    - Eliminate redundancy while maintaining completeness
+    - Highlight the most significant contributions and findings
+    - Organize into clear sections (methodology, findings, implications)
+
+    Chunk Summaries:
+    {{ summaries }}
+
+    Final Comprehensive Summary:
