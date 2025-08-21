@@ -84,19 +84,38 @@ class TestPaper:
         assert paper.embedding == embedding
         assert paper.embedding_model == "text-embedding-ada-002"
 
-    def test_has_full_text(self):
-        """Test full text availability check."""
+    def test_has_content(self):
+        """Test content availability check."""
         paper1 = Paper(title="Test", abstract="Test abstract")
         paper2 = Paper(
             title="Test",
             abstract="Test abstract",
-            full_text="Full paper content",
+            content="Full paper content",
         )
-        paper3 = Paper(title="Test", abstract="Test abstract", full_text="   ")
+        paper3 = Paper(title="Test", abstract="Test abstract", content="   ")
 
-        assert not paper1.has_full_text()
-        assert paper2.has_full_text()
-        assert not paper3.has_full_text()
+        assert not paper1.has_content()
+        assert paper2.has_content()
+        assert not paper3.has_content()
+
+    def test_content_field(self):
+        """Test content field functionality."""
+        paper = Paper(title="Test", abstract="Test abstract")
+
+        # Test setting content
+        paper.content = "This is the full content"
+        assert paper.content == "This is the full content"
+        assert paper.has_content()
+
+        # Test content modification
+        paper.content = "Updated content"
+        assert paper.content == "Updated content"
+        assert paper.has_content()
+
+        # Test content is None initially
+        paper2 = Paper(title="Test 2", abstract="Test abstract 2")
+        assert paper2.content is None
+        assert not paper2.has_content()
 
     def test_get_primary_id(self):
         """Test primary ID extraction."""

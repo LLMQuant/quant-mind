@@ -107,7 +107,7 @@ class PDFParser(BaseParser):
                 content = self._extract_with_pymupdf(pdf_path)
 
             if content and self.validate_content(content):
-                paper.full_text = self.clean_text(content)
+                paper.content = self.clean_text(content)
                 paper.meta_info["pdf_parsed"] = True
                 paper.meta_info["parser_method"] = self.method
                 logger.debug(
