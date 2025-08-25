@@ -98,10 +98,10 @@ class LLMTagger(BaseTagger):
         if paper.abstract:
             content_parts.append(f"Abstract: {paper.abstract}")
 
-        # Use first max_tokens characters of full text to stay within token limits
-        if paper.full_text:
+        # Use first max_tokens characters of content to stay within token limits
+        if paper.content:
             content_parts.append(
-                f"Content: {paper.full_text[: self.config.llm_config.max_tokens]}..."
+                f"Content: {paper.content[: self.config.llm_config.max_tokens]}..."
             )
 
         return "\n\n".join(content_parts)

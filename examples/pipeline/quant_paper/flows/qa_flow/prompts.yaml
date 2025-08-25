@@ -1,0 +1,49 @@
+# Prompt templates for QAFlow
+templates:
+  generate_questions_template: |
+    You are a financial research expert and educational content creator. Your task is to generate {{ max_questions }} thoughtful, engaging questions based on the following research paper.
+
+    Paper Title: {{ title }}
+
+    Abstract:
+    {{ abstract }}
+
+    Content (partial):
+    {{ content }}
+
+    Generate {{ max_questions }} questions at {{ depth }} level focusing on: {{ focus_areas }}
+
+    Requirements:
+    - Questions should promote critical thinking and deeper understanding
+    - Focus on methodology, implications, and practical applications
+    - Suitable for web display and reader engagement
+    - Each question should end with a question mark
+
+    Please respond with valid JSON in the following format:
+    {
+      "questions": [
+        "First thoughtful question about the research?",
+        "Second insightful question about the methodology?",
+        "Third question about practical implications?"
+      ]
+    }
+
+    Ensure the response is valid JSON without any additional text or formatting.
+
+  refine_question_template: |
+    You are an educational content specialist. Refine the following question to make it more engaging and categorize it appropriately.
+
+    Original Question: {{ question }}
+    Paper Title: {{ title }}
+    Abstract: {{ abstract }}
+
+    Make the question clear, specific, and thought-provoking while maintaining its educational value.
+
+    Please respond with valid JSON in the following format:
+    {
+      "question": "refined version of the question",
+      "category": "methodology|findings|implications|applications|theory",
+      "difficulty": "basic|intermediate|advanced"
+    }
+
+    Ensure the response is valid JSON without any additional text or formatting.

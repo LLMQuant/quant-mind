@@ -140,9 +140,18 @@ class LLMBlock:
             params.update(kwargs)
             params["messages"] = messages
 
-            # Add response format if provided (for OpenAI)
-            if response_format and self.config.get_provider_type() == "openai":
-                params["response_format"] = response_format
+            # Add response format if provided
+            # TODO: Refactor the response_format to be more generic
+            if response_format:
+                provider_type = self.config.get_provider_type()
+                if provider_type == "openai":
+                    params["response_format"] = response_format
+                elif (
+                    provider_type == "google"
+                    and "response_schema" in response_format
+                ):
+                    # Gemini specific format
+                    params["response_format"] = response_format
 
             # Call LiteLLM
             response = self._call_with_retry(params)
