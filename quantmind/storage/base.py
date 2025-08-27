@@ -164,19 +164,29 @@ class BaseStorage(ABC):
                     f"Failed to download PDF for {paper.get_primary_id()}: {e}"
                 )
 
-    def _download_file_content(self, url: str) -> Optional[bytes]:
+    def _download_file_content(
+        self, url: str, timeout: Optional[int] = None
+    ) -> Optional[bytes]:
         """Download file content from URL.
 
         Args:
             url: URL to download from
+            timeout: Timeout in seconds (uses config if None)
 
         Returns:
             File content as bytes or None if failed
         """
+        # Use config timeout if not provided
+        if timeout is None:
+            timeout = getattr(self, "config", None)
+            timeout = (
+                getattr(timeout, "download_timeout", 30) if timeout else 30
+            )
+
         try:
             import requests
 
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=timeout)
             response.raise_for_status()
             return response.content
         except Exception:

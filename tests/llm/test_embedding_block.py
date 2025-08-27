@@ -16,7 +16,8 @@ class TestEmbeddingBlock(unittest.TestCase):
         self.config = EmbeddingConfig(
             model="text-embedding-ada-002",
             api_key="test-key",
-            timeout=30,
+            timeout=1,
+            retry_delay=0.01,
         )
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
@@ -28,7 +29,7 @@ class TestEmbeddingBlock(unittest.TestCase):
         self.assertEqual(block.config, self.config)
         mock_litellm.set_verbose = False
         self.assertEqual(mock_litellm.num_retries, 3)
-        self.assertEqual(mock_litellm.request_timeout, 30)
+        self.assertEqual(mock_litellm.request_timeout, 1)
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", False)
     def test_init_litellm_unavailable(self):
@@ -163,7 +164,7 @@ class TestEmbeddingBlock(unittest.TestCase):
 
         self.assertEqual(result, mock_response)
         self.assertEqual(mock_embedding.call_count, 2)
-        mock_sleep.assert_called_once_with(1.0)
+        mock_sleep.assert_called_once_with(0.01)
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
     @patch("quantmind.llm.embedding.litellm")
@@ -271,7 +272,7 @@ class TestEmbeddingBlock(unittest.TestCase):
 
         self.assertEqual(info["model"], "text-embedding-ada-002")
         self.assertEqual(info["provider"], "openai")
-        self.assertEqual(info["timeout"], 30)
+        self.assertEqual(info["timeout"], 1)
         self.assertEqual(info["retry_attempts"], 3)
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
@@ -281,14 +282,14 @@ class TestEmbeddingBlock(unittest.TestCase):
         block = EmbeddingBlock(self.config)
 
         # Check initial config
-        self.assertEqual(block.config.timeout, 30)
+        self.assertEqual(block.config.timeout, 1)
         self.assertEqual(block.config.api_key, "test-key")
 
         # Update config
-        block.update_config(timeout=60, api_key="new-key")
+        block.update_config(timeout=2, api_key="new-key")
 
         # Check updated config
-        self.assertEqual(block.config.timeout, 60)
+        self.assertEqual(block.config.timeout, 2)
         self.assertEqual(block.config.api_key, "new-key")
         # Other values should remain unchanged
         self.assertEqual(block.config.model, "text-embedding-ada-002")
@@ -300,14 +301,14 @@ class TestEmbeddingBlock(unittest.TestCase):
         block = EmbeddingBlock(self.config)
 
         # Check initial config
-        self.assertEqual(block.config.timeout, 30)
+        self.assertEqual(block.config.timeout, 1)
 
         # Use temporary config
-        with block.temporary_config(timeout=60):
-            self.assertEqual(block.config.timeout, 60)
+        with block.temporary_config(timeout=2):
+            self.assertEqual(block.config.timeout, 2)
 
         # Check config is restored
-        self.assertEqual(block.config.timeout, 30)
+        self.assertEqual(block.config.timeout, 1)
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
     @patch("quantmind.llm.embedding.litellm")
@@ -353,8 +354,8 @@ class TestEmbeddingBlock(unittest.TestCase):
         config = EmbeddingConfig(
             model="text-embedding-ada-002",
             api_key="test-key",
-            timeout=30,
-            retry_delay=0.1,
+            timeout=1,
+            retry_delay=0.01,
         )
 
         mock_response = Mock()

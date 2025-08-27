@@ -86,6 +86,8 @@ class TestLlamaParser(unittest.TestCase):
             result_type=ResultType.MD,
             parsing_mode=ParsingMode.FAST,
             max_file_size_mb=50,
+            timeout=10,
+            retry_attempts=1,
         )
 
     @patch("quantmind.parsers.llama_parser.LlamaParse")
@@ -277,8 +279,24 @@ class TestLlamaParser(unittest.TestCase):
         self.assertNotIn("parser_info", result.meta_info)
 
     @patch("quantmind.parsers.llama_parser.LlamaParse")
-    def test_parse_paper_parsing_error(self, mock_llama_parse):
+    @patch("quantmind.parsers.llama_parser.requests.get")
+    @patch("tempfile.NamedTemporaryFile")
+    def test_parse_paper_parsing_error(
+        self, mock_temp_file, mock_requests, mock_llama_parse
+    ):
         """Test parsing paper with parsing error."""
+        # Mock temp file
+        mock_temp = Mock()
+        mock_temp.name = "/tmp/test.pdf"
+        mock_temp_file.return_value.__enter__.return_value = mock_temp
+
+        # Mock requests
+        mock_response = Mock()
+        mock_response.headers = {"content-type": "application/pdf"}
+        mock_response.iter_content.return_value = [b"fake pdf content"]
+        mock_requests.return_value = mock_response
+
+        # Mock LlamaParse to raise exception
         mock_llama_instance = Mock()
         mock_llama_instance.parse.side_effect = Exception("Parsing failed")
         mock_llama_parse.return_value = mock_llama_instance
@@ -290,7 +308,14 @@ class TestLlamaParser(unittest.TestCase):
             pdf_url="https://example.com/paper.pdf",
         )
 
-        result = parser.parse_paper(paper)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("os.path.exists", return_value=True),
+            patch("os.unlink"),
+        ):
+            mock_stat.return_value.st_size = 1024 * 1024  # 1MB
+            result = parser.parse_paper(paper)
 
         # Should return original paper without content due to error
         self.assertIsNone(result.content)
