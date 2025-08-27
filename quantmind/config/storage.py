@@ -12,6 +12,10 @@ class BaseStorageConfig(BaseModel):
         default=Path("./data"), description="Base storage directory"
     )
 
+    download_timeout: int = Field(
+        default=30, description="Timeout in seconds for downloading files"
+    )
+
 
 class LocalStorageConfig(BaseStorageConfig):
     """Configuration for local file-based storage."""

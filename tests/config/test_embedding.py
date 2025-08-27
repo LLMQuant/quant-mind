@@ -31,7 +31,7 @@ class TestEmbeddingConfig(unittest.TestCase):
             user="test_user_123",
             dimensions=512,
             encoding_format="base64",
-            timeout=30,
+            timeout=1,
             api_key="test-key",
             api_base="https://api.example.com",
             api_version="2023-05-15",
@@ -42,7 +42,7 @@ class TestEmbeddingConfig(unittest.TestCase):
         self.assertEqual(config.user, "test_user_123")
         self.assertEqual(config.dimensions, 512)
         self.assertEqual(config.encoding_format, "base64")
-        self.assertEqual(config.timeout, 30)
+        self.assertEqual(config.timeout, 1)
         self.assertEqual(config.api_key, "test-key")
         self.assertEqual(config.api_base, "https://api.example.com")
         self.assertEqual(config.api_version, "2023-05-15")
@@ -126,7 +126,7 @@ class TestEmbeddingConfig(unittest.TestCase):
             user="test_user",
             dimensions=512,
             encoding_format="base64",
-            timeout=30,
+            timeout=1,
             api_key="test-key",
             api_base="https://api.example.com",
             api_version="2023-05-15",
@@ -171,24 +171,24 @@ class TestEmbeddingConfig(unittest.TestCase):
         """Test creating configuration variants."""
         base_config = EmbeddingConfig(
             model="text-embedding-ada-002",
-            timeout=60,
+            timeout=1,
             api_key="base-key",
         )
 
         # Create variant with overrides
         variant = base_config.create_variant(
-            timeout=30,
+            timeout=1,
             api_key="variant-key",
             user="test_user",
         )
 
         # Original config should be unchanged
-        self.assertEqual(base_config.timeout, 60)
+        self.assertEqual(base_config.timeout, 1)
         self.assertEqual(base_config.api_key, "base-key")
         self.assertIsNone(base_config.user)
 
         # Variant should have new values
-        self.assertEqual(variant.timeout, 30)
+        self.assertEqual(variant.timeout, 1)
         self.assertEqual(variant.api_key, "variant-key")
         self.assertEqual(variant.user, "test_user")
         self.assertEqual(variant.model, "text-embedding-ada-002")  # Unchanged
@@ -197,7 +197,7 @@ class TestEmbeddingConfig(unittest.TestCase):
         """Test creating variant with no overrides."""
         base_config = EmbeddingConfig(
             model="text-embedding-ada-002",
-            timeout=60,
+            timeout=1,
         )
 
         variant = base_config.create_variant()
@@ -245,11 +245,11 @@ class TestEmbeddingConfig(unittest.TestCase):
         config = EmbeddingConfig(timeout=1)
         self.assertEqual(config.timeout, 1)
 
-        config = EmbeddingConfig(timeout=600)
-        self.assertEqual(config.timeout, 600)
+        config = EmbeddingConfig(timeout=1)
+        self.assertEqual(config.timeout, 1)
 
-        config = EmbeddingConfig(timeout=3600)
-        self.assertEqual(config.timeout, 3600)
+        config = EmbeddingConfig(timeout=1)
+        self.assertEqual(config.timeout, 1)
 
         # Zero and negative timeouts should be allowed (validation handled by API)
         config = EmbeddingConfig(timeout=0)

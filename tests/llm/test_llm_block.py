@@ -14,7 +14,12 @@ class TestLLMBlock(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.config = LLMConfig(
-            model="gpt-4o", temperature=0.7, max_tokens=1000, api_key="test-key"
+            model="gpt-4o",
+            temperature=0.7,
+            max_tokens=1000,
+            api_key="test-key",
+            timeout=1,
+            retry_delay=0.01,
         )
 
     @patch("quantmind.llm.block.LITELLM_AVAILABLE", True)
@@ -26,7 +31,7 @@ class TestLLMBlock(unittest.TestCase):
         self.assertEqual(block.config, self.config)
         mock_litellm.set_verbose = False
         self.assertEqual(mock_litellm.num_retries, 3)
-        self.assertEqual(mock_litellm.request_timeout, 60)
+        self.assertEqual(mock_litellm.request_timeout, 1)
 
     @patch("quantmind.llm.block.LITELLM_AVAILABLE", False)
     def test_init_litellm_unavailable(self):
@@ -210,7 +215,7 @@ class TestLLMBlock(unittest.TestCase):
 
         self.assertEqual(result, mock_response)
         self.assertEqual(mock_completion.call_count, 2)
-        mock_sleep.assert_called_once_with(1.0)
+        mock_sleep.assert_called_once_with(0.01)
 
     @patch("quantmind.llm.block.LITELLM_AVAILABLE", True)
     @patch("quantmind.llm.block.litellm")
@@ -263,7 +268,7 @@ class TestLLMBlock(unittest.TestCase):
             "provider": "openai",
             "temperature": 0.7,
             "max_tokens": 1000,
-            "timeout": 60,
+            "timeout": 1,
             "retry_attempts": 3,
         }
 
