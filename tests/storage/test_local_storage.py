@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from quantmind.config.storage import LocalStorageConfig
 from quantmind.models.paper import Paper
@@ -18,7 +19,9 @@ class TestEnhancedStorageWithIndexing(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.temp_dir = Path(tempfile.mkdtemp())
-        self.config = LocalStorageConfig(storage_dir=self.temp_dir)
+        self.config = LocalStorageConfig(
+            storage_dir=self.temp_dir, download_timeout=1
+        )
         self.storage = LocalStorage(self.config)
 
     def tearDown(self):
@@ -321,8 +324,15 @@ class TestEnhancedStorageWithIndexing(unittest.TestCase):
         self.assertIsNotNone(retrieved_paper)
         self.assertEqual(retrieved_paper.title, "Test Paper")
 
-    def test_process_knowledge_paper_with_pdf_url(self):
+    @patch("requests.get")
+    def test_process_knowledge_paper_with_pdf_url(self, mock_requests):
         """Test Paper storage with PDF URL and indexing."""
+        # Mock requests to avoid real network calls
+        mock_response = Mock()
+        mock_response.content = b"%PDF-1.4 fake content"
+        mock_response.raise_for_status = Mock()
+        mock_requests.return_value = mock_response
+
         paper = Paper(
             title="Paper with PDF URL",
             abstract="Test paper with PDF URL",
