@@ -109,11 +109,13 @@ def _build_args_schema_from_signature(
             continue
 
         annotation = (
-            param.annotation if param.annotation is not inspect._empty else Any
+            param.annotation
+            if param.annotation is not inspect.Parameter.empty
+            else Any
         )
 
         # Required if no default, else use default
-        if param.default is inspect._empty:
+        if param.default is inspect.Parameter.empty:
             default = Field(..., description=f"Parameter for {param.name}")
         else:
             default = Field(
