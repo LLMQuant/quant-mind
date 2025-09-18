@@ -25,9 +25,7 @@ class Paper(KnowledgeItem):
     # Override content type
     content_type: str = Field(default="paper")
 
-    # Paper-specific content (inherit title, abstract, content from parent)
-    full_text: Optional[str] = None  # Alias for content
-
+    # Paper-specific content (inherits title, abstract, content from parent)
     # Additional paper URLs (inherit url, pdf_url from parent)
     code_url: Optional[str] = None
 
@@ -83,13 +81,13 @@ class Paper(KnowledgeItem):
         if model:
             self.embedding_model = model
 
-    def has_full_text(self) -> bool:
-        """Check if paper has full text content.
+    def has_content(self) -> bool:
+        """Check if paper has parsed content available.
 
         Returns:
-            True if full text is available
+            True if content is available
         """
-        return bool(self.full_text and len(self.full_text.strip()) > 0)
+        return bool(self.content and len(self.content.strip()) > 0)
 
     def get_primary_id(self) -> str:
         """Get the primary identifier for the paper.

@@ -197,9 +197,9 @@ class TestSummaryFlowConfig(unittest.TestCase):
 
     def test_chunking_strategy_enum_values(self):
         """Test ChunkingStrategy enum values."""
-        self.assertEqual(ChunkingStrategy.BY_SIZE.value, "size")
-        self.assertEqual(ChunkingStrategy.BY_SECTION.value, "section")
-        self.assertEqual(ChunkingStrategy.BY_CUSTOM.value, "custom")
+        self.assertEqual(ChunkingStrategy.BY_SIZE.value, "by_size")
+        self.assertEqual(ChunkingStrategy.BY_SECTION.value, "by_section")
+        self.assertEqual(ChunkingStrategy.BY_CUSTOM.value, "by_custom")
 
 
 if __name__ == "__main__":

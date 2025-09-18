@@ -32,10 +32,15 @@ class FlowConfigRegistry:
 
     def _register_builtin_flows(self):
         """Register built-in flow configuration types."""
-        from quantmind.config.flows import BaseFlowConfig, SummaryFlowConfig
+        from quantmind.config.flows import (
+            BaseFlowConfig,
+            SummaryFlowConfig,
+            PodcastFlowConfig,
+        )
 
         self._registry["base"] = BaseFlowConfig
         self._registry["summary"] = SummaryFlowConfig
+        self._registry["podcast"] = PodcastFlowConfig
 
         logger.debug("Registered built-in flow types: base, summary")
 

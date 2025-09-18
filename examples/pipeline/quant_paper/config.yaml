@@ -1,0 +1,68 @@
+# Configuration for Production Quant Paper Agent Example
+# Uses Gemini 2.5 Pro & Flash for production-level performance
+
+# Source configuration
+source:
+  type: "arxiv"
+  config:
+    max_results: 1
+    retry_delay: 1.0
+
+# Parser configuration
+parser:
+  type: "llama"
+  config:
+    api_key: ${LLAMA_CLOUD_API_KEY}
+    parsing_instructions: "Extract comprehensive quantitative finance content including methodologies, mathematical models, empirical findings, and practical implications."
+
+# Storage configuration
+storage:
+  type: "local"
+  config:
+    base_path: "./data"
+    auto_create_dirs: true
+    enable_indexing: true
+
+# Flow configurations
+flows:
+  # Summary flow using Gemini models
+  summary_flow:
+    type: "summary"
+    config:
+      name: "summary_flow"
+      prompt_templates_path: "flows/summary_flow/prompts.yaml"
+      use_chunking: true
+      chunk_size: 4000
+      chunk_strategy: "by_size"
+      llm_blocks:
+        cheap_summarizer:
+          model: "gemini/gemini-2.5-flash"
+          temperature: 0.3
+          max_tokens: 8192
+          api_key: ${GOOGLE_API_KEY}
+        powerful_combiner:
+          model: "gemini/gemini-2.5-pro"
+          temperature: 0.2
+          max_tokens: 8192
+          api_key: ${GOOGLE_API_KEY}
+
+  # QA flow using Gemini models for production
+  qa_flow:
+    type: "qa"
+    config:
+      name: "qa_flow"
+      prompt_templates_path: "flows/qa_flow/prompts.yaml"
+      max_questions: 7
+      question_depth: "deep"
+      focus_areas: ["methodology", "findings", "implications", "applications", "limitations"]
+      llm_blocks:
+        question_generator:
+          model: "gemini/gemini-2.5-pro"
+          temperature: 0.8
+          max_tokens: 8192
+          api_key: ${GOOGLE_API_KEY}
+        question_refiner:
+          model: "gemini/gemini-2.5-pro"
+          temperature: 0.3
+          max_tokens: 8192
+          api_key: ${GOOGLE_API_KEY}

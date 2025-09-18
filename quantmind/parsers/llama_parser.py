@@ -161,11 +161,26 @@ class LlamaParser(BaseParser):
                 raise FileNotFoundError(f"File not found: {local_path}")
 
             self.logger.debug(f"Parsing local file: {local_path}")
-            result = self.llama_parse.parse(str(local_path))
-            self.logger.debug(f"Result: {result}")
 
-            # Extract content from result using new API
-            content_text = self._extract_content_from_result(result)
+            # Handle Pydantic validation errors from LlamaParse API
+            try:
+                result = self.llama_parse.parse(str(local_path))
+                self.logger.debug(f"Result: {result}")
+                content_text = self._extract_content_from_result(result)
+            except Exception as validation_error:
+                error_msg = str(validation_error).lower()
+                if (
+                    "validation error" in error_msg
+                    or "field required" in error_msg
+                ):
+                    self.logger.warning(
+                        f"LlamaParse API returned invalid data structure, skipping this document: {validation_error}"
+                    )
+                    # For now, return empty content rather than trying complex fallback
+                    # This is more reliable than trying to access internal API methods
+                    content_text = ""
+                else:
+                    raise validation_error
 
             if self.validate_content(content_text):
                 return self.clean_text(content_text)

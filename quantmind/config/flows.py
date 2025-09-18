@@ -66,9 +66,9 @@ class ChunkingStrategy(Enum):
         BY_SECTION: Chunk by section
     """
 
-    BY_SIZE = "size"
-    BY_SECTION = "section"
-    BY_CUSTOM = "custom"
+    BY_SIZE = "by_size"
+    BY_SECTION = "by_section"
+    BY_CUSTOM = "by_custom"
 
 
 class SummaryFlowConfig(BaseFlowConfig):
@@ -121,3 +121,11 @@ class SummaryFlowConfig(BaseFlowConfig):
                     "Final Summary:"
                 ),
             }
+
+
+class PodcastFlowConfig(BaseFlowConfig):
+    """Configuration for podcast generation flow."""
+
+    num_speakers: int = 2
+    speaker_languages: str = "en-us"
+    summary_hint: str

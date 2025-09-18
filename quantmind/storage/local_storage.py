@@ -310,6 +310,13 @@ class LocalStorage(BaseStorage):
             )
             raise
 
+    def get_knowledge_path(self, knowledge_id: str) -> Optional[Path]:
+        """Get the path to a knowledge item by ID using efficient index lookup."""
+        if knowledge_id in self._knowledges_index:
+            relative_path = self._knowledges_index[knowledge_id]["path"]
+            return self.config.storage_dir / relative_path
+        return None
+
     def get_knowledge(self, knowledge_id: str) -> Optional[KnowledgeItem]:
         """Get a knowledge item by ID using efficient index lookup."""
         try:

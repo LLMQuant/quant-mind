@@ -26,6 +26,16 @@ Explore the built-in SummaryFlow with various configurations:
 
 **Key Learning**: How to leverage and configure built-in flows for optimal cost/quality trade-offs.
 
+### [03_podcast_flow](./03_podcast_flow/) - Built-in Podcast Flow Demo
+
+Explore the built-in PodcastFlow with various configurations:
+
+- Mixture mode (intro, main, outro)
+- Mock LLM implementation for testing
+- Real podcast script examples in various domains
+
+**Key Learning**: How to leverage and configure built-in flows for optimal script in specific domain.
+
 ## Architecture Principles Demonstrated
 
 Both examples showcase the core principles of the new flow architecture:
@@ -35,6 +45,7 @@ Both examples showcase the core principles of the new flow architecture:
 3. **Direct Access**: No unnecessary wrapper methods, just direct access to resources
 4. **Template Separation**: Prompts in YAML files for easy editing and maintenance
 5. **Type Safety**: Pydantic-based configuration instead of complex schemas
+6. **Easy Imports**: Each flow directory has `__init__.py` for clean imports (e.g., `from flows.greeting_flow import GreetingFlow`)
 
 ## Quick Start
 
@@ -65,6 +76,14 @@ python pipeline.py
 ```bash
 # Summary flow example
 cd 02_summary_flow
+# Prepare the api-key .env file
+cp .env.example .env
+python pipeline.py
+```
+
+```bash
+# Podcast flow example
+cd 03_podcast_flow
 # Prepare the api-key .env file
 cp .env.example .env
 python pipeline.py
