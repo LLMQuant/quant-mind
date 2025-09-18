@@ -31,26 +31,30 @@
 ---
 
 **QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge base, enabling AI-powered research at scale.
+
 ### 🧐 Overview
+
 QuantMind is a next-generation AI platform that ingests, processes, and structures **every** new piece of quantitative-finance research, including papers, news, blogs, and SEC filings into a **semantic knowledge graph**. Institutional investors, hedge funds, and research teams can now explore the frontier of factor strategies, risk models, and market insights in **seconds**, unlocking alpha that would otherwise remain buried.
 
 ### ✨ Why QuantMind?
 
 The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published.
 
-
 #### 🌐 The Opportunity
+
 - **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable
 - **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed
 - **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance
 
 ---
 
-#### 💡 **QuantMind** solves this by:
+#### 💡 **QuantMind** solves this by
+
 - 🔍 **Extracting** structured knowledge from any source (PDFs, web pages, APIs)
 - 🧠 **Understanding** content with domain-specific LLMs fine-tuned for finance
 - 💾 **Storing** information in a semantic knowledge graph
 - 🚀 **Retrieving** insights through natural language queries
+
 ---
 
 ### System Architecture
@@ -174,17 +178,16 @@ for paper in papers:
 
 #### Quant Paper Agent Example
 
-> [!Note]
->
-> Will come soon.
+You can take [this example](examples/basic_usage.py) as a reference.
 
 ---
 
 ### 🗺️ Roadmap
 
-- [ ] Better `flow` design for user-friendly usage
-- [ ] First production level example (Quant Paper Agent)
-- [ ] `tool` integration for more advanced usage
+- [x] Better `flow` design for user-friendly usage
+- [x] First production level example (Quant Paper Agent)
+- [x] `tool` integration for external information & agentic capabilities
+- [ ] Agentic Orchestration (`LLMFlow`) for more advanced usage
 - [ ] Additional content sources (financial news, blogs, reports)
 - [ ] Standardize the `knowledge` format (data standardization)
 
@@ -231,25 +234,31 @@ We welcome contributions of all forms, from bug reports to feature development.
 
 1. **Fork** the repository
 2. **Setup development environment**:
+
    ```bash
    uv venv && source .venv/bin/activate
    uv pip install -e .
    ./scripts/pre-commit-setup.sh
    ```
+
 3. **Create feature branch** (`git checkout -b feat/my-feature`)
 4. **Follow conventional commits** (`feat: add new feature`)
 5. **Submit PR** with our template
 
 **Before Contributing:**
+
 - Open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss significant changes
 - Use our issue templates for bug reports and feature requests
 - Ensure all pre-commit hooks pass before submitting PR
 
 ### License
 
-This project is licensed under the MIT License - see the [LICENSE](https://claude.ai/chat/LICENSE) file for details.
+QuantMind is released under the MIT License—see `LICENSE` for details. Portions of the
+agent tooling system are derived from Hugging Face's `smolagents` project and are
+provided under the Apache License 2.0 in `LICENSE-APACHE`.
 
 ### ❤️ Acknowledgements
 
 - **arXiv** for providing open access to a world of research.
 - The **open-source community** for the tools and libraries that make this project possible.
+- Hugging Face for `smolagents`, which inspired and informed our agent tooling / runtime abstractions.
