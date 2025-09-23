@@ -35,3 +35,8 @@ If you are implementing a new feature, please implement the unit test and exampl
 
 - For unit test, add in `tests/<module_name>`, and inherit the `unittest.TestCase` class.
 - For example, add in `examples/<module_name>`, and just demo the simple usage. (do not add too many use cases in single file)
+
+## Comment Style
+
+- All comments should be in English.
+- All comments should be in the Google style.
