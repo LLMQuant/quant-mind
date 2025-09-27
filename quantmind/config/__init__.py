@@ -17,6 +17,7 @@ from .sources import (
     BaseSourceConfig,
     NewsSourceConfig,
     WebSourceConfig,
+    SearchSourceConfig,
 )
 from .storage import BaseStorageConfig, LocalStorageConfig
 from .taggers import LLMTaggerConfig
@@ -37,6 +38,7 @@ __all__ = [
     "ArxivSourceConfig",
     "NewsSourceConfig",
     "WebSourceConfig",
+    "SearchSourceConfig",
     # Storage Configurations
     "BaseStorageConfig",
     "LocalStorageConfig",
