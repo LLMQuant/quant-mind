@@ -1,0 +1,87 @@
+```mermaid
+classDiagram
+    direction LR
+
+    class AgentMemory {
+        system_prompt: SystemPromptStep
+        steps: list[MemoryStep]
+        +reset()
+        +get_succinct_steps()
+        +get_full_steps()
+        +replay(logger, detailed)
+    }
+
+    class MemoryStep {
+        +dict()
+        +to_messages(summary_mode)
+    }
+
+    class SystemPromptStep {
+        system_prompt: str
+    }
+
+    class TaskStep {
+        task: str
+        task_images: list[Image]?
+    }
+
+    class PlanningStep {
+        plan: str
+        model_input_messages: list[ChatMessage]
+        model_output_message: ChatMessage
+        timing: Timing
+    }
+
+    class ActionStep {
+        step_number: int
+        model_input_messages: list[ChatMessage]?
+        tool_calls: list[ToolCall]?
+        model_output: str | list[dict]?
+        observations: str?
+        token_usage: TokenUsage?
+    }
+
+    class FinalAnswerStep {
+        output: Any
+    }
+
+    class CallbackRegistry {
+        +register(step_cls, callback)
+        +callback(memory_step, **kwargs)
+    }
+
+    class ToolCall {
+        name: str
+        id: str
+        arguments: Any
+    }
+
+    class ChatMessage {
+        role: MessageRole
+        content: str | list[dict]
+    }
+
+    class MessageRole
+    class Timing
+    class TokenUsage
+    class AgentLogger
+
+    AgentMemory --> SystemPromptStep
+    AgentMemory --> MemoryStep
+    AgentMemory --> AgentLogger
+    AgentMemory --> CallbackRegistry
+
+    MemoryStep <|-- SystemPromptStep
+    MemoryStep <|-- TaskStep
+    MemoryStep <|-- PlanningStep
+    MemoryStep <|-- ActionStep
+    MemoryStep <|-- FinalAnswerStep
+
+    ActionStep --> ToolCall
+    ActionStep --> ChatMessage
+    ActionStep --> Timing
+    ActionStep --> TokenUsage
+
+    PlanningStep --> ChatMessage
+    TaskStep --> ChatMessage
+```
