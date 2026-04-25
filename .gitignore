@@ -20,3 +20,7 @@ papers/
 data/
 demo_data/
 *.html
+
+# Local-only development scratch notes (not tracked)
+new_feature.md
+docs/design/zh/next-step-architecture.md

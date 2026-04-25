@@ -1,226 +1,144 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
 
 ## Project Overview
 
-QuantMind is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content into a queryable knowledge graph using a two-stage architecture:
+QuantMind is an intelligent knowledge extraction and retrieval framework for quantitative
+finance. As of 2026-04, it is being **repositioned as a domain library that runs on top
+of OpenAI Agents SDK**, rather than as a self-contained agent framework.
 
-**Stage 1: Knowledge Extraction** (Current Implementation)
-- Source APIs → Intelligent Parser → Workflow/Agent → Structured Knowledge Base
-- Components: Crawlers, Parsers, Taggers, Workflow orchestration, Storage
+The pre-pivot agent runtime (`brain/`, `tools/`, `storage/`, `tagger/`, custom Tool ABC,
+custom MultiStepAgent / Memory) was removed in PR #70. A full snapshot of the removed
+code is preserved on the `archive/agent-runtime-final` branch on origin — reference it
+if you need historical context, never resurrect it into master.
 
-**Stage 2: Intelligent Retrieval** (Future)
-- Knowledge Base → Embeddings → Solution Scenarios (DeepResearch, RAG, Data MCP)
+## Target Architecture (post-migration)
+
+```
+quantmind/
+├── flows/        # e2e pipeline functions (paper_flow, news_flow, ...)
+├── knowledge/    # Pydantic schemas (KnowledgeItem subclasses: Paper, News, ...)
+├── preprocess/   # fetch (arxiv/http/doi/local) + format (pdf/html/markdown)
+├── mind/         # cognitive layer; mind/memory/ is the MVP (filesystem-backed)
+├── configs/      # centralized cfg + input types (BaseFlowCfg + per-flow types)
+├── magic.py      # resolve_magic_input: natural language -> (input, cfg)
+└── utils/        # logger only
+```
+
+Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
+multi-agent handoff, or tool framework. Those come from `openai-agents`.
+
+## Current Repository State (transitional, after PR #70)
+
+Surviving modules — these still work but will be replaced or migrated in PR2-PR4:
+
+| Module | Status | Replacement |
+|--------|--------|-------------|
+| `quantmind/flow/` | active | `flows/` in PR4 |
+| `quantmind/parsers/` | active | `preprocess/format/` in PR3 |
+| `quantmind/sources/` | active | `preprocess/fetch/` in PR3 |
+| `quantmind/config/` | active | `configs/` in PR2 |
+| `quantmind/llm/` | active | deleted in PR4 (use SDK + `openai` directly) |
+| `quantmind/models/{content,paper,analysis}.py` | active | move to `knowledge/` in PR2 |
+| `quantmind/utils/logger.py` | active | permanent |
 
 ## Development Commands
 
-### Environment Setup
-```bash
-# Create and activate virtual environment
-uv venv
-source .venv/bin/activate  # macOS/Linux
-.venv\Scripts\activate     # Windows
+### Environment
 
-# Install dependencies
+```bash
+uv venv
+source .venv/bin/activate
 uv pip install -e .
 ```
 
-### Code Quality
+### Lint + Tests
+
 ```bash
-# Lint and format code
-./scripts/lint.sh
-# Or manually:
 ruff format .
 ruff check .
-
-# Run tests
-./scripts/unittest.sh
-# Or manually:
-pytest tests                         # all tests
-pytest tests/quantmind/             # new quantmind tests
-pytest tests/quantmind/models/      # specific module
+pytest tests/
 ```
 
-### QuantMind CLI Usage
-```bash
-# Basic extraction
-quantmind extract "machine learning finance" --max-papers 10
+Pre-commit hooks (`.pre-commit-config.yaml`) run on push: trailing whitespace, EOF,
+ruff, ruff-format, full pytest. Don't bypass hooks unless the user explicitly
+authorizes — fix the underlying issue instead.
 
-# Full pipeline with storage
-quantmind pipeline ml_pipeline "cat:q-fin.ST" --storage json --tagger rule
+## Architecture Principles
 
-# Search stored papers
-quantmind search --categories "Machine Learning in Finance" --limit 5
+1. **No framework, just lib** — Functions over classes; Protocol over ABC; no plugin
+   registries or hook discovery
+2. **Pure functions** — Flows are `async def run(...)`, not classes; state passed as
+   args; side effects via explicit hooks
+3. **Pydantic at boundaries, frozen dataclass internally** — Pydantic for anything
+   exposed to LLM (`output_type=`, cfg, input); frozen dataclass for internal value
+   types
+4. **Batch is first-class** — `batch_run(flow_fn, inputs, ...)` will land in PR4
+   (concurrency + error handling + progress aggregation). Users do NOT write
+   `asyncio.gather` boilerplate themselves
+5. **Customization 3 layers** — cfg (YAML/CLI), kwargs (Python `extra_*` flow args),
+   building blocks (fork the flow file). Each layer has explicit extension points
+6. **Observability 3 layers** — SDK auto-tracing, external processors via
+   `add_trace_processor()`, local trajectory archive under `<memory_dir>/runs/`
+7. **No CLI** — User-facing entry is a runbook script (5 lines of Python), not a
+   framework command. Magic input is the loose-input UX, resolved by an Agent
+8. **Magic input first** — Users describe intent in natural language;
+   `magic.resolve_magic_input(...)` returns a structured `(input, cfg)` tuple
 
-# System status
-quantmind status
+## Conventions When Editing
 
-# Configuration management
-quantmind config create --output config.yaml
-quantmind config show
-```
+- **Schemas**: Pydantic, `extra="forbid"`, `frozen=True`. All `KnowledgeItem`
+  subclasses must require `as_of: datetime` (financial time-sensitivity is mandatory)
+- **Configs**: Extend `BaseFlowCfg` (lands in PR2); never use `Dict[str, Any]` in
+  init signatures
+- **Tools**: SDK's `@function_tool` decorator; do NOT subclass anything
+- **Memory backends**: Implement the `Memory` Protocol with granular `tools()`,
+  `mcp_servers()`, `run_hooks()`, `reset()` — each may return an empty list. Do not
+  force MCP on every implementation
+- **Tests**: Subclasses of `unittest.TestCase` in `tests/<module>/`. Mock external
+  dependencies; cover both success and failure paths
+- **Imports**: Absolute (`from quantmind.knowledge import Paper`); no relative
+  imports across module boundaries
 
-### Legacy System
-```bash
-# Old autoscholar system (still available)
-python quant_scholar.py
-```
+## Communication Conventions
 
-## New Architecture (QuantMind v0.2.0)
+- **PR descriptions and issue bodies must be written in English**, regardless of the
+  language of the conversation that triggered them. They are read by external audiences
+  (search indexers, future maintainers, contributors who don't read Chinese).
+- Commit messages: English, conventional-commit style (`feat:` / `fix:` / `refactor:` /
+  `docs:` / `chore:` ...).
+- Inline PR review comments and issue discussion threads may be in whichever language
+  fits the participants.
 
-### Core Modules
+## Things NOT to Do
 
-**quantmind/** - New modular architecture following Stage 1 design:
+- ❌ Rebuild Agent runtime / Tool ABC / lifecycle hook abstraction
+- ❌ Add a CLI (`argparse`/`typer`/`click`); users run Python runbook scripts
+- ❌ Introduce class-based `BaseFlow` / plugin registry / hook discovery
+- ❌ Wrap `from agents import ...` in a QuantMind-side facade — use the SDK directly
+- ❌ Mix `batch_run` and `memory` (they will be mutually exclusive in MVP; see PR5)
+- ❌ Use `Dict[str, Any]` in init functions; use Pydantic models
+- ❌ Add hard deps on observability platforms (Langfuse / Logfire / etc.); document
+  integration via `add_trace_processor()` in user-facing cookbook only
+- ❌ Build embedding-based memory before filesystem memory has shipped and stabilized
 
-- **sources/**: Content acquisition layer
-  - `base.py`: Abstract source interface
-  - `arxiv_source.py`: ArXiv API integration with financial focus
+## Reference Material
 
-- **parsers/**: Content processing layer
-  - `base.py`: Abstract parser interface
-  - `pdf_parser.py`: PDF extraction (PyMuPDF + Marker support)
+- OpenAI Agents SDK docs: <https://openai.github.io/openai-agents-python/>
+- Lifecycle / RunHooks API: <https://openai.github.io/openai-agents-python/ref/lifecycle/>
+- MCP integration (filesystem server): <https://openai.github.io/openai-agents-python/mcp/>
+- Tracing (auto-capture, processors, disable): <https://openai.github.io/openai-agents-python/tracing/>
+- Original SDK announcement: <https://openai.com/index/the-next-evolution-of-the-agents-sdk/>
+- Removed agent runtime snapshot: `archive/agent-runtime-final` branch on origin
 
-- **tagger/**: Classification and labeling layer
-  - `base.py`: Abstract tagger interface
-  - `rule_tagger.py`: Rule-based financial classification
-  - `llm_tagger.py`: LLM-powered advanced tagging
+## Roadmap (post-PR1)
 
-- **workflow/**: Orchestration layer
-  - `agent.py`: Main WorkflowAgent for pipeline coordination
-  - `pipeline.py`: Pipeline execution with dependency management
-  - `tasks.py`: Task definitions (Crawl, Parse, Tag, Store)
-
-- **storage/**: Knowledge base layer
-  - `base.py`: Abstract storage interface
-  - `json_storage.py`: JSON file-based storage with indexing
-
-- **models/**: Data models
-  - `paper.py`: Enhanced Paper model with Pydantic validation
-  - `knowledge_graph.py`: Advanced graph operations
-
-- **config/**: Configuration management
-  - `settings.py`: Structured configuration with validation
-
-- **utils/**: Shared utilities
-  - `logger.py`: Consistent logging setup
-
-### Examples and Usage
-
-- **examples/quantmind/**: Complete usage examples
-  - `basic_usage.py`: Basic pipeline demonstration
-  - `config_example.py`: Configuration system demo
-
-### Legacy System (autoscholar/)
-
-Still available for backward compatibility:
-- **crawler/**: Legacy crawlers
-- **parser/**: Legacy parsers
-- **knowledge/**: Legacy graph models
-- **visualization/**: Pyvis visualizations
-
-## Key Dependencies
-
-### Core Dependencies
-- Pydantic for data validation
-- NetworkX for graph operations
-- PyMuPDF for PDF processing
-- ArXiv API client
-- YAML for configuration
-- Requests for HTTP operations
-
-### Optional Dependencies
-- OpenAI API (for LLM tagger)
-- CAMEL-AI (alternative LLM framework)
-- Marker (AI-powered PDF parsing)
-- PyVis (graph visualization)
-
-## Development Guidelines
-
-### Code Style
-- Use Pydantic models for data validation
-- Follow dependency injection patterns
-- Use abstract base classes for extensibility
-- Implement comprehensive error handling
-- Write descriptive docstrings (Google style)
-
-### Testing
-- Unit tests in `tests/quantmind/`
-- Mock external dependencies
-- Test both success and failure cases
-- Use pytest fixtures for common setups
-
-### Configuration
-- Use structured configuration via `quantmind.config.settings`
-- Support environment variable overrides
-- Validate configuration at startup
-- Provide sensible defaults
-
-### Architecture Principles
-- **Separation of Concerns**: Each component has a single responsibility
-- **Dependency Injection**: Components are configurable and testable
-- **Pipeline Orchestration**: Workflow management with task dependencies
-- **Quality Control**: Built-in deduplication and validation
-- **Extensibility**: Easy to add new sources, parsers, taggers, storage
-
-## Migration Notes
-
-When migrating from autoscholar to quantmind:
-1. Use `WorkflowAgent` instead of direct crawler usage
-2. Configure components via `Settings` system
-3. Use the CLI for common operations
-4. Take advantage of new pipeline orchestration
-5. Leverage improved error handling and logging
-
-## User Development Guidance
-
-- Config should add in `quantmind/config`
-- Data models should add in `quantmind/models`
-- Initialize function can not use `Dict[str, Any]`, which is not type safe.
-- Do not overdesign the code, just implement the basic and straightforward code, since we can always refactor the code later.
-- For examples, add in `quantmind/examples`, and just demo the simple usage. (do not add too many use cases in single file)
-- For tests, add in `tests/<module_name>`, and inherit the `unittest.TestCase` class.
-
-## Tagger Module Refactoring (v0.0.1)
-
-### Simplified LLM Tagger Design
-The tagger module has been completely refactored to eliminate over-engineering:
-
-**Removed Components:**
-- `rule_tagger.py` - Removed rule-based tagger (obsolete in LLM era)
-- `PaperTag` class - Removed complex tag objects, use simple strings
-- `hierarchical_tags` feature - Removed unnecessary complexity
-- `confidence_score` calculations - LLM outputs are inherently probabilistic
-- Categories vs Tags distinction - Unified to use only tags
-
-**Simplified LLMTagger:**
-- **Type-safe configuration**: Uses `LLMTaggerConfig` Pydantic model instead of `Dict[str, Any]`
-- **Structured imports**: `from quantmind.config import LLMTaggerConfig` and `from quantmind.models import Paper`
-- **Clean interface**: Single `config` parameter with proper type hints
-- **Base tagger**: Simplified to only require `tag_paper()` and `extract_tags()` abstract methods
-- **Custom instructions**: Support for user-provided instructions via `config.custom_instructions`
-- **Flexible LLM support**: `config.llm_type` and `config.llm_name` for different providers
-- **Base URL support**: `config.base_url` for custom API endpoints
-
-**Configuration Structure:**
-```python
-from quantmind.config import LLMTaggerConfig
-
-config = LLMTaggerConfig(
-    llm_type="openai",
-    llm_name="gpt-4o",
-    max_tags=5,
-    custom_instructions="Focus on trading strategies",
-    api_key="your-api-key",
-    base_url="https://custom-endpoint.com"  # optional
-)
-
-tagger = LLMTagger(config=config)
-```
-
-**Design Principles:**
-- **No over-engineering**: Simple, direct implementation
-- **Type safety**: Proper Pydantic configuration models
-- **User-friendly**: Clear API with sensible defaults
-- **Extensible**: Easy to add new LLM providers through config
-- **Maintainable**: ~290 lines vs previous 800+ lines
+| PR | Focus |
+|----|-------|
+| #70 (merged or in review) | Clean removal of self-built agent runtime |
+| PR2 | `knowledge/` + `configs/` skeleton |
+| PR3 | `preprocess/` (fetch + format two layers) |
+| PR4 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; drop old `flow/` `llm/` |
+| PR5 | `mind/memory/filesystem` MVP + trajectory archive |
+| PR6+ | Second flow (news/earnings) / observability cookbook / longer-term modules |

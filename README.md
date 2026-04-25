@@ -192,10 +192,10 @@ You can take [this example](examples/basic_usage.py) as a reference.
 
 - [x] Better `flow` design for user-friendly usage
 - [x] First production level example (Quant Paper Agent)
-- [x] `tool` integration for external information & agentic capabilities
-- [ ] Agentic Orchestration (`LLMFlow`) for more advanced usage
+- [ ] Migrate Agent layer to OpenAI Agents SDK
+- [ ] Standardize knowledge format with `knowledge/` (Pydantic-based)
 - [ ] Additional content sources (financial news, blogs, reports)
-- [ ] Standardize the `knowledge` format (data standardization)
+- [ ] Cross-step working memory (`mind/memory`) for batch document processing
 
 ---
 
@@ -213,16 +213,13 @@ The foundation we're building today—starting with papers—will expand to enco
 >
 > ```python
 > # The future we are building towards
-> from quantmind import KnowledgeBase, MemoryBank
-> from quantmind.agents import PaperReader, NewsMonitor
-> from quantmind.brain import understand, memorize, recall
+> from quantmind.flows import paper_flow, batch_run
+> from quantmind.knowledge import Paper
+> from quantmind.mind.memory import FilesystemMemory
 >
-> # Initialize the knowledge base
-> kb = KnowledgeBase()
-> kb.ingest(source="arxiv", topic="portfolio optimization")
->
-> # Query for high-level insights
-> insights = kb.query("latest trends in risk parity strategies")
+> memory = FilesystemMemory("./mem/factor-research/")
+> for arxiv_id in arxiv_ids:
+>     paper: Paper = await paper_flow(ArxivIdentifier(id=arxiv_id), memory=memory)
 > ```
 
 This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
@@ -259,12 +256,9 @@ We welcome contributions of all forms, from bug reports to feature development.
 
 ### License
 
-QuantMind is released under the MIT License—see `LICENSE` for details. Portions of the
-agent tooling system are derived from Hugging Face's `smolagents` project and are
-provided under the Apache License 2.0 in `LICENSE-APACHE`.
+QuantMind is released under the MIT License—see `LICENSE` for details.
 
 ### ❤️ Acknowledgements
 
 - **arXiv** for providing open access to a world of research.
 - The **open-source community** for the tools and libraries that make this project possible.
-- Hugging Face for `smolagents`, which inspired and informed our agent tooling / runtime abstractions.
