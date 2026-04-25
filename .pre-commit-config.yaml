@@ -18,9 +18,9 @@ repos:
 
 -   repo: local
     hooks:
-    -   id: unittest
-        name: Run unit tests
-        entry: bash scripts/unittest.sh
+    -   id: verify
+        name: Run scripts/verify.sh (full golden harness)
+        entry: bash scripts/verify.sh
         language: system
         pass_filenames: false
         types: [python]
