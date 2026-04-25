@@ -2,37 +2,6 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
-line-length = 80
-
-[tool.isort]
-profile = "black"
-
-[tool.ruff]
-# Same as Black.
-line-length = 80
-
-[tool.ruff.lint]
-select = ["D", "W505"]
-ignore = ["D100", "D102", "D104", "D105", "D107", "D203", "D213", "D401", "D402"]
-
-[tool.ruff.lint.pycodestyle]
-max-doc-length = 100
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["quantmind*"]
-
-[tool.setuptools.package-data]
-"*" = ["*.yaml", "*.yml", "*.json", "*.txt"]
-
 [project]
 name = "quantmind"
 version = "0.2.0"
@@ -42,8 +11,6 @@ dependencies = [
     "requests",
     "arxiv",
     "pyyaml",
-    "ruff",
-    "pytest",
     "numpy>=2.2.4",
     "openai>=1.68.2",
     "pillow>=10.1.0,<11.0.0",
@@ -59,15 +26,161 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Dev tooling that backs scripts/verify.sh: ruff (format+lint), basedpyright
+# (type check), import-linter (architecture contracts), pytest+pytest-cov
+# (tests + coverage floor). Black/isort/mypy from the previous toolchain are
+# intentionally dropped — ruff and basedpyright supersede them.
 dev = [
+    "ruff>=0.11,<0.12",
+    "basedpyright>=1.39",
+    "import-linter>=2.11",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.0.0",
+    "pre-commit>=3.0",
 ]
 full = [
     "marker-pdf>=0.2.0",
     "beautifulsoup4>=4.12.0",
     "sentence-transformers>=2.2.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantmind*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json", "*.txt"]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+# ----------------------------------------------------------------------------
+# ruff: format + lint
+# ----------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 80
+target-version = "py310"
+
+[tool.ruff.lint]
+# Layered rule selection. D (docstrings) keeps the existing convention;
+# F (pyflakes) catches real bugs; I (isort) keeps imports tidy; E/W
+# (pycodestyle, minus E501 which ruff format already handles); B (bugbear)
+# catches subtle correctness issues.
+select = ["D", "E", "F", "I", "W", "B", "W505"]
+ignore = [
+    # Docstring rules we explicitly waive (see existing convention).
+    "D100", "D102", "D104", "D105", "D107", "D203", "D213", "D401", "D402",
+    # E501 (line-too-long) is handled by ruff format; flagging it again on
+    # long URLs / strings only adds noise.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests don't need module/function docstrings or strict bugbear rules.
+"tests/**/*.py" = ["D", "B"]
+"**/__init__.py" = ["D104", "F401"]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 100
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ----------------------------------------------------------------------------
+# basedpyright: type checker
+# ----------------------------------------------------------------------------
+# Strategy: explicit include-list of files that survive PR3-PR5 plus the
+# target-architecture module dirs (knowledge/, configs/, preprocess/, flows/,
+# mind/). Transitional modules (config/, flow/, llm/, models/{analysis,
+# content,paper}.py, parsers/, sources/, utils/tmp.py) are NOT included; they
+# get deleted in subsequent PRs and are not worth modernizing for type checks.
+
+[tool.basedpyright]
+include = ["quantmind"]
+# Transitional modules excluded from type checking — they get deleted in
+# PR3-PR5 (per CLAUDE.md "Current Repository State" table). New modules
+# (knowledge/, configs/, preprocess/, flows/, mind/, magic.py) automatically
+# get type-checked at "standard" mode as they land — no further config needed.
+exclude = [
+    "**/__pycache__",
+    "**/.venv",
+    "**/build",
+    "quantmind/config",
+    "quantmind/flow",
+    "quantmind/llm",
+    "quantmind/parsers",
+    "quantmind/sources",
+    "quantmind/models/analysis.py",
+    "quantmind/models/content.py",
+    "quantmind/models/paper.py",
+    "quantmind/utils/tmp.py",
+]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
+reportMissingImports = "error"
+reportMissingTypeStubs = "none"
+
+# ----------------------------------------------------------------------------
+# import-linter: architectural boundary contracts
+# ----------------------------------------------------------------------------
+# Encodes the target architecture: utils is a permanent leaf. As new modules
+# land (knowledge, preprocess, configs, flows, mind), additional contracts
+# will be added (knowledge is a leaf; preprocess depends on knowledge+utils;
+# flows is the apex; mind depends on knowledge+utils only).
+
+[tool.importlinter]
+root_packages = ["quantmind"]
+
+[[tool.importlinter.contracts]]
+name = "utils is a leaf (no inbound deps from quantmind packages)"
+type = "forbidden"
+source_modules = ["quantmind.utils"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.flow",
+    "quantmind.llm",
+    "quantmind.models",
+    "quantmind.parsers",
+    "quantmind.sources",
+]
+
+# ----------------------------------------------------------------------------
+# pytest: configuration + coverage gate
+# ----------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Coverage floor 60% accommodates branch-coverage on transitional modules
+# (pdf_parser.py 26%, tmp.py 20%, arxiv_source.py 57%) that get deleted in
+# PR3-PR5. Ratchet to 70% once they're gone, then 80% for the post-pivot
+# codebase.
+addopts = [
+    "--cov=quantmind",
+    "--cov-report=term-missing",
+    "--cov-fail-under=60",
+    "-ra",
+]
+filterwarnings = [
+    # Pydantic v1 → v2 transition warnings on transitional model code that
+    # gets removed in PR3. Suppress until those modules are gone.
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::pydantic.PydanticDeprecatedSince20",
+]
+
+[tool.coverage.run]
+source = ["quantmind"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+# Coverage floor starts at 60% (branch-coverage drops the line-only baseline
+# from 69% to ~65%). Ratchet to 70% in PR3 once analysis.py / podcast_flow.py
+# / summary_flow.py / tmp.py and the rest of the transitional modules are
+# deleted.
