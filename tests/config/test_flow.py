@@ -1,12 +1,11 @@
 """Tests for flow configuration."""
 
 import unittest
-from unittest.mock import patch
 
 from quantmind.config.flows import (
     BaseFlowConfig,
-    SummaryFlowConfig,
     ChunkingStrategy,
+    SummaryFlowConfig,
 )
 from quantmind.config.llm import LLMConfig
 

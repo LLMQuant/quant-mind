@@ -135,12 +135,12 @@ class BaseParser(ABC):
             "ﬀ": "ff",
             "ﬃ": "ffi",
             "ﬄ": "ffl",
-            """: "'",
-            """: "'",
-            '"': '"',
-            '"': '"',
-            "–": "-",
-            "—": "-",
+            "\u2018": "'",  # left single quote
+            "\u2019": "'",  # right single quote
+            "\u201c": '"',  # left double quote
+            "\u201d": '"',  # right double quote
+            "–": "-",  # en dash
+            "—": "-",  # em dash
         }
 
         for old, new in replacements.items():

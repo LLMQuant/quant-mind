@@ -1,11 +1,11 @@
 """Configuration management for QuantMind."""
 
+from .embedding import EmbeddingConfig
 from .flows import (
     BaseFlowConfig,
     SummaryFlowConfig,
 )
 from .llm import LLMConfig
-from .embedding import EmbeddingConfig
 from .parsers import LlamaParserConfig, PDFParserConfig
 from .settings import (
     Setting,

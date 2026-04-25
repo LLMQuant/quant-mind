@@ -1,7 +1,6 @@
 """Tests for EmbeddingBlock."""
 
 import unittest
-from unittest import mock
 from unittest.mock import Mock, patch
 
 from quantmind.config import EmbeddingConfig
@@ -51,7 +50,7 @@ class TestEmbeddingBlock(unittest.TestCase):
         )
 
         with patch("os.environ", {}) as mock_env:
-            block = EmbeddingBlock(config)
+            EmbeddingBlock(config)
             self.assertEqual(mock_env.get("OPENAI_API_KEY"), "test-key")
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
@@ -64,7 +63,7 @@ class TestEmbeddingBlock(unittest.TestCase):
         )
 
         with patch("os.environ", {}) as mock_env:
-            block = EmbeddingBlock(config)
+            EmbeddingBlock(config)
             self.assertEqual(mock_env.get("AZURE_API_KEY"), "azure-key")
 
     @patch("quantmind.llm.embedding.LITELLM_AVAILABLE", True)
@@ -367,7 +366,7 @@ class TestEmbeddingBlock(unittest.TestCase):
 
         block = EmbeddingBlock(config)
         texts = ["Text 1", "Text 2", "Text 3", "Text 4"]
-        result = block.batch_embed(texts, batch_size=2)
+        block.batch_embed(texts, batch_size=2)
 
         # Should have delay between batches
         self.assertEqual(mock_sleep.call_count, 1)  # Delay between 2 batches
@@ -383,9 +382,7 @@ class TestEmbeddingBlock(unittest.TestCase):
         mock_embedding.return_value = mock_response
 
         block = EmbeddingBlock(self.config)
-        result = block.generate_embedding(
-            "Test text", dimensions=512, user="test_user"
-        )
+        block.generate_embedding("Test text", dimensions=512, user="test_user")
 
         # Check that kwargs were passed to the embedding call
         call_args = mock_embedding.call_args
@@ -409,7 +406,7 @@ class TestEmbeddingBlock(unittest.TestCase):
         mock_embedding.return_value = mock_response
 
         block = EmbeddingBlock(self.config)
-        result = block.generate_embeddings(
+        block.generate_embeddings(
             ["Text 1", "Text 2"], dimensions=512, user="test_user"
         )
 

@@ -3,8 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-from quantmind.models import BaseContent
 from quantmind.config import BaseSourceConfig
+from quantmind.models import BaseContent
 
 # Generic type for content
 ContentType = TypeVar("ContentType", bound=BaseContent)

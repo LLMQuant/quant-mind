@@ -316,7 +316,7 @@ class LLMBlock:
         # Re-setup LiteLLM
         self._setup_litellm()
 
-        logger.info(f"Updated LLMBlock configuration")
+        logger.info("Updated LLMBlock configuration")
 
     @contextmanager
     def temporary_config(self, **kwargs):

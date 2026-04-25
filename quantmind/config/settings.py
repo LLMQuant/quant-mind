@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from quantmind.config.flows import BaseFlowConfig
@@ -25,8 +26,6 @@ from quantmind.config.taggers import LLMTaggerConfig
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-from dotenv import load_dotenv
 
 
 class Setting(BaseModel):

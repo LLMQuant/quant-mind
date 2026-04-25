@@ -3,11 +3,10 @@
 This flow takes a summary and generates a podcast script in JSON format.
 """
 
-from typing import Any, Dict, List
-import json
+from typing import Any, Dict
 
-from quantmind.flow.base import BaseFlow
 from quantmind.config.flows import PodcastFlowConfig
+from quantmind.flow.base import BaseFlow
 from quantmind.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,7 +30,7 @@ class PodcastFlow(BaseFlow):
         """
         if summary:
             self.config.summary_hint = summary
-            logger.info(f"Using input summary.")
+            logger.info("Using input summary.")
         else:
             logger.warning("No summary provided, using default summary hint.")
 

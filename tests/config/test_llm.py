@@ -1,7 +1,6 @@
 """Tests for LLM configuration."""
 
 import unittest
-from unittest.mock import patch
 
 from quantmind.config.llm import LLMConfig
 

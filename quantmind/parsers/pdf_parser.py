@@ -2,9 +2,10 @@
 
 import os
 import tempfile
-import requests
-from typing import Dict, Optional, Any, Union
 from pathlib import Path
+from typing import Any, Dict, Optional, Union
+
+import requests
 
 try:
     import fitz  # PyMuPDF
@@ -191,7 +192,7 @@ class PDFParser(BaseParser):
                 # Clean up downloaded file
                 try:
                     os.unlink(pdf_path)
-                except:
+                except OSError:
                     pass
         return ""
 

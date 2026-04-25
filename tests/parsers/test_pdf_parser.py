@@ -1,7 +1,7 @@
 """Unit tests for PDFParser."""
 
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 from quantmind.config.parsers import PDFParserConfig
 from quantmind.models.paper import Paper

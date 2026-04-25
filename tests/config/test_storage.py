@@ -51,7 +51,7 @@ class TestLocalStorageConfig(unittest.TestCase):
         """Test that model_post_init creates all required subdirectories."""
         storage_dir = self.temp_dir / "test_storage"
 
-        config = LocalStorageConfig(storage_dir=storage_dir)
+        LocalStorageConfig(storage_dir=storage_dir)
 
         # Check that main directory exists
         self.assertTrue(storage_dir.exists())
