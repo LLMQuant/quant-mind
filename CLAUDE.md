@@ -4,14 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QuantMind is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content into a queryable knowledge graph using a two-stage architecture:
+QuantMind is an intelligent knowledge extraction and retrieval framework for quantitative
+finance. It is being repositioned as a domain library that runs on top of OpenAI Agents
+SDK rather than as a self-contained agent framework. The next-step architecture
+introduces these top-level modules:
 
-**Stage 1: Knowledge Extraction** (Current Implementation)
-- Source APIs → Intelligent Parser → Workflow/Agent → Structured Knowledge Base
-- Components: Crawlers, Parsers, Taggers, Workflow orchestration, Storage
+- `flows/` — e2e processing pipelines (Agent runtime delegated to OpenAI Agents SDK)
+- `knowledge/` — Pydantic-based knowledge schema standard
+- `preprocess/` — fetching and formatting helpers (PDF/HTML → markdown, etc.)
+- `mind/` — QuantMind's distinctive cognitive layer (working memory MVP first)
+- `configs/` — centralized flow/input config types
+- `magic.py` — natural-language → (input, cfg) resolver
 
-**Stage 2: Intelligent Retrieval** (Future)
-- Knowledge Base → Embeddings → Solution Scenarios (DeepResearch, RAG, Data MCP)
+Until those modules land, the repository is in a transitional state. PR1 removes the
+self-built agent runtime so subsequent PRs can build the new architecture from a clean
+slate.
 
 ## Development Commands
 
@@ -42,98 +49,33 @@ pytest tests/quantmind/             # new quantmind tests
 pytest tests/quantmind/models/      # specific module
 ```
 
-### QuantMind CLI Usage
-```bash
-# Basic extraction
-quantmind extract "machine learning finance" --max-papers 10
+## Current Modules (transitional, PR1)
 
-# Full pipeline with storage
-quantmind pipeline ml_pipeline "cat:q-fin.ST" --storage json --tagger rule
+After PR1's removal, the surviving modules are:
 
-# Search stored papers
-quantmind search --categories "Machine Learning in Finance" --limit 5
+- **flow/**: Existing flow scaffolding (will be replaced by `flows/` in a later PR)
+- **parsers/**: PDF / Llama parser helpers (will move to `preprocess/format/`)
+- **sources/**: ArXiv source (fetch logic will move to `preprocess/fetch/`)
+- **config/**: Configuration management (will be replaced by `configs/`)
+- **llm/**: LLM block + embedding helpers (will be removed once `flow/` migrates)
+- **models/**: `Paper`, `BaseContent`, `KnowledgeItem`, `analysis` (will move to `knowledge/`)
+- **utils/**: `logger.py` (kept long-term) plus tmp helpers
 
-# System status
-quantmind status
-
-# Configuration management
-quantmind config create --output config.yaml
-quantmind config show
-```
-
-### Legacy System
-```bash
-# Old autoscholar system (still available)
-python quant_scholar.py
-```
-
-## New Architecture (QuantMind v0.2.0)
-
-### Core Modules
-
-**quantmind/** - New modular architecture following Stage 1 design:
-
-- **sources/**: Content acquisition layer
-  - `base.py`: Abstract source interface
-  - `arxiv_source.py`: ArXiv API integration with financial focus
-
-- **parsers/**: Content processing layer
-  - `base.py`: Abstract parser interface
-  - `pdf_parser.py`: PDF extraction (PyMuPDF + Marker support)
-
-- **tagger/**: Classification and labeling layer
-  - `base.py`: Abstract tagger interface
-  - `rule_tagger.py`: Rule-based financial classification
-  - `llm_tagger.py`: LLM-powered advanced tagging
-
-- **workflow/**: Orchestration layer
-  - `agent.py`: Main WorkflowAgent for pipeline coordination
-  - `pipeline.py`: Pipeline execution with dependency management
-  - `tasks.py`: Task definitions (Crawl, Parse, Tag, Store)
-
-- **storage/**: Knowledge base layer
-  - `base.py`: Abstract storage interface
-  - `json_storage.py`: JSON file-based storage with indexing
-
-- **models/**: Data models
-  - `paper.py`: Enhanced Paper model with Pydantic validation
-  - `knowledge_graph.py`: Advanced graph operations
-
-- **config/**: Configuration management
-  - `settings.py`: Structured configuration with validation
-
-- **utils/**: Shared utilities
-  - `logger.py`: Consistent logging setup
-
-### Examples and Usage
-
-- **examples/quantmind/**: Complete usage examples
-  - `basic_usage.py`: Basic pipeline demonstration
-  - `config_example.py`: Configuration system demo
-
-### Legacy System (autoscholar/)
-
-Still available for backward compatibility:
-- **crawler/**: Legacy crawlers
-- **parser/**: Legacy parsers
-- **knowledge/**: Legacy graph models
-- **visualization/**: Pyvis visualizations
+These modules continue to compile and ship as-is in PR1; their replacements arrive in
+PR2 (`knowledge/` + `configs/`), PR3 (`preprocess/`), and PR4 (`flows/` + drop `flow/` `llm/`).
 
 ## Key Dependencies
 
 ### Core Dependencies
 - Pydantic for data validation
-- NetworkX for graph operations
-- PyMuPDF for PDF processing
+- PyMuPDF / Marker for PDF processing
 - ArXiv API client
-- YAML for configuration
-- Requests for HTTP operations
+- LiteLLM for multi-provider LLM access
+- YAML / Requests / httpx for configuration and IO
 
 ### Optional Dependencies
-- OpenAI API (for LLM tagger)
-- CAMEL-AI (alternative LLM framework)
-- Marker (AI-powered PDF parsing)
-- PyVis (graph visualization)
+- OpenAI API
+- llama-cloud-services (Llama parser)
 
 ## Development Guidelines
 
@@ -163,64 +105,23 @@ Still available for backward compatibility:
 - **Quality Control**: Built-in deduplication and validation
 - **Extensibility**: Easy to add new sources, parsers, taggers, storage
 
-## Migration Notes
-
-When migrating from autoscholar to quantmind:
-1. Use `WorkflowAgent` instead of direct crawler usage
-2. Configure components via `Settings` system
-3. Use the CLI for common operations
-4. Take advantage of new pipeline orchestration
-5. Leverage improved error handling and logging
-
 ## User Development Guidance
 
-- Config should add in `quantmind/config`
-- Data models should add in `quantmind/models`
-- Initialize function can not use `Dict[str, Any]`, which is not type safe.
-- Do not overdesign the code, just implement the basic and straightforward code, since we can always refactor the code later.
-- For examples, add in `quantmind/examples`, and just demo the simple usage. (do not add too many use cases in single file)
-- For tests, add in `tests/<module_name>`, and inherit the `unittest.TestCase` class.
+- Config should add in `quantmind/config` (until `configs/` lands in a later PR)
+- Data models should add in `quantmind/models` (until `knowledge/` lands)
+- Do not use `Dict[str, Any]` in initialize functions — not type safe.
+- Do not overdesign — implement the basic and straightforward code, refactor later.
+- Tests in `tests/<module_name>/`, inherit `unittest.TestCase`.
 
-## Tagger Module Refactoring (v0.0.1)
+## PR1 Cleanup (2026-04-25)
 
-### Simplified LLM Tagger Design
-The tagger module has been completely refactored to eliminate over-engineering:
+PR1 removes the self-built agent runtime to make room for the OpenAI Agents SDK
+migration. Removed in PR1:
 
-**Removed Components:**
-- `rule_tagger.py` - Removed rule-based tagger (obsolete in LLM era)
-- `PaperTag` class - Removed complex tag objects, use simple strings
-- `hierarchical_tags` feature - Removed unnecessary complexity
-- `confidence_score` calculations - LLM outputs are inherently probabilistic
-- Categories vs Tags distinction - Unified to use only tags
+- `quantmind/brain/`, `quantmind/tools/`, `quantmind/storage/`, `quantmind/tagger/`
+- `quantmind/models/{agent,memory,messages}.py`
+- `quantmind/utils/{agentic_ext,monitoring}.py`
+- vendored `smolagents/` and `LICENSE-APACHE`
+- All examples (will be re-added per-flow in later PRs)
 
-**Simplified LLMTagger:**
-- **Type-safe configuration**: Uses `LLMTaggerConfig` Pydantic model instead of `Dict[str, Any]`
-- **Structured imports**: `from quantmind.config import LLMTaggerConfig` and `from quantmind.models import Paper`
-- **Clean interface**: Single `config` parameter with proper type hints
-- **Base tagger**: Simplified to only require `tag_paper()` and `extract_tags()` abstract methods
-- **Custom instructions**: Support for user-provided instructions via `config.custom_instructions`
-- **Flexible LLM support**: `config.llm_type` and `config.llm_name` for different providers
-- **Base URL support**: `config.base_url` for custom API endpoints
-
-**Configuration Structure:**
-```python
-from quantmind.config import LLMTaggerConfig
-
-config = LLMTaggerConfig(
-    llm_type="openai",
-    llm_name="gpt-4o",
-    max_tags=5,
-    custom_instructions="Focus on trading strategies",
-    api_key="your-api-key",
-    base_url="https://custom-endpoint.com"  # optional
-)
-
-tagger = LLMTagger(config=config)
-```
-
-**Design Principles:**
-- **No over-engineering**: Simple, direct implementation
-- **Type safety**: Proper Pydantic configuration models
-- **User-friendly**: Clear API with sensible defaults
-- **Extensible**: Easy to add new LLM providers through config
-- **Maintainable**: ~290 lines vs previous 800+ lines
+Preserved as historical reference: `archive/agent-runtime-final` branch.

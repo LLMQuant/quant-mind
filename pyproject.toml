@@ -45,12 +45,7 @@ dependencies = [
     "ruff",
     "pytest",
     "numpy>=2.2.4",
-    "networkx>=3.4.2",
-    "scikit-learn>=1.6.1",
-    "pyvis==0.3.1",
-    "plotly>=6.0.1",
     "openai>=1.68.2",
-    "camel-ai>=0.2.42",
     "pillow>=10.1.0,<11.0.0",
     "llama-cloud-services>=0.6.12",
     "ipykernel>=6.29.5",
@@ -62,9 +57,6 @@ dependencies = [
     "litellm>=1.74.0.post1",
     "jinja2>=3.0.0",
 ]
-
-[project.scripts]
-quantmind = "quantmind_cli:main"
 
 [project.optional-dependencies]
 dev = [
