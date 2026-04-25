@@ -101,6 +101,16 @@ authorizes — fix the underlying issue instead.
 - **Imports**: Absolute (`from quantmind.knowledge import Paper`); no relative
   imports across module boundaries
 
+## Communication Conventions
+
+- **PR descriptions and issue bodies must be written in English**, regardless of the
+  language of the conversation that triggered them. They are read by external audiences
+  (search indexers, future maintainers, contributors who don't read Chinese).
+- Commit messages: English, conventional-commit style (`feat:` / `fix:` / `refactor:` /
+  `docs:` / `chore:` ...).
+- Inline PR review comments and issue discussion threads may be in whichever language
+  fits the participants.
+
 ## Things NOT to Do
 
 - ❌ Rebuild Agent runtime / Tool ABC / lifecycle hook abstraction
