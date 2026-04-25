@@ -13,6 +13,14 @@
 
 set -euo pipefail
 
+# Prefer the project venv over global tools so the same versions run locally
+# and in pre-commit / pre-push hooks (which spawn fresh shells without an
+# activated venv). CI provisions its own venv before invoking this script.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -d "$REPO_ROOT/.venv/bin" ]; then
+    export PATH="$REPO_ROOT/.venv/bin:$PATH"
+fi
+
 echo "==> [1/5] ruff format --check"
 ruff format --check .
 
