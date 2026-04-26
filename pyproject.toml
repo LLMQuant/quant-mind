@@ -140,6 +140,36 @@ type = "forbidden"
 source_modules = ["quantmind.utils"]
 forbidden_modules = [
     "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.knowledge",
+    "quantmind.llm",
+    "quantmind.models",
+    "quantmind.parsers",
+    "quantmind.sources",
+]
+
+[[tool.importlinter.contracts]]
+name = "knowledge is a leaf (no inbound deps from quantmind packages)"
+type = "forbidden"
+source_modules = ["quantmind.knowledge"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.llm",
+    "quantmind.models",
+    "quantmind.parsers",
+    "quantmind.sources",
+    "quantmind.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "configs only depends on knowledge (transitional modules forbidden)"
+type = "forbidden"
+source_modules = ["quantmind.configs"]
+forbidden_modules = [
+    "quantmind.config",
     "quantmind.flow",
     "quantmind.llm",
     "quantmind.models",
