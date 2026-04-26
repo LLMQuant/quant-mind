@@ -33,7 +33,7 @@ multi-agent handoff, or tool framework. Those come from `openai-agents`.
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `quantmind/knowledge/` | landed (PR3) | output schemas: `KnowledgeItem` + `Paper` / `News` / `Earnings` |
+| `quantmind/knowledge/` | landed (PR3) | data standard with three shapes: `FlattenKnowledge` (`News` / `Earnings` / `PaperKnowledgeCard`), `TreeKnowledge` (`Paper`), `GraphKnowledge` (placeholder); shared base = `BaseKnowledge` with typed `SourceRef` / `ExtractionRef` provenance + `embedding_text()` contract |
 | `quantmind/configs/` | landed (PR3) | `BaseFlowCfg` / `BaseInput` + per-flow cfg + discriminated-union input types |
 | `quantmind/utils/logger.py` | permanent | only general-purpose utility |
 | `quantmind/flow/` | transitional | replaced by `flows/` in PR5 |
@@ -109,8 +109,14 @@ issue instead.
 
 ## Conventions When Editing
 
-- **Schemas**: Pydantic, `extra="forbid"`, `frozen=True`. All `KnowledgeItem`
+- **Schemas**: Pydantic, `extra="forbid"`, `frozen=True`. All `BaseKnowledge`
   subclasses must require `as_of: datetime` (financial time-sensitivity is mandatory)
+  and provide a typed `source: SourceRef` (no bare strings). Subclasses MUST
+  override `embedding_text()` so the store layer knows what to embed.
+- **Knowledge shapes**: pick one of `FlattenKnowledge` (atomic card),
+  `TreeKnowledge` (hierarchical artifact), or wait for `GraphKnowledge`
+  (placeholder). Whole-document objects are `TreeKnowledge` even when a
+  flatten card exists alongside (e.g. `Paper` vs `PaperKnowledgeCard`).
 - **Configs**: Extend `BaseFlowCfg` (lands in PR2); never use `Dict[str, Any]` in
   init signatures
 - **Tools**: SDK's `@function_tool` decorator; do NOT subclass anything
@@ -159,7 +165,7 @@ issue instead.
 |----|-------|
 | #70 (merged) | Clean removal of self-built agent runtime |
 | #73 (merged) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
-| PR3 (this PR) | `knowledge/` + `configs/` skeleton — output schemas + flow cfgs + discriminated-union inputs; `openai-agents>=0.14` introduced as a hard dep for `BaseFlowCfg.model_settings` |
+| PR3 (this PR) | `knowledge/` data standard (Flatten / Tree / Graph shapes) + `configs/` skeleton; `openai-agents>=0.14` introduced for `BaseFlowCfg.model_settings`. Storage layer (`mind/store/` + SQLite + `sqlite-vec`) lands separately. |
 | PR4 | `preprocess/` (fetch + format two layers); migrate `parsers/` + `sources/`; delete `quantmind/models/{content,paper,analysis}.py` |
 | PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; delete `quantmind/flow/`, `quantmind/llm/`, `quantmind/config/` |
 | PR6 | `mind/memory/filesystem` MVP + trajectory archive |
