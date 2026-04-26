@@ -49,7 +49,7 @@ class TestLLMBlock(unittest.TestCase):
         config = LLMConfig(model="gpt-4o", api_key="test-key")
 
         with patch("os.environ", {}) as mock_env:
-            block = LLMBlock(config)
+            LLMBlock(config)
             self.assertEqual(mock_env.get("OPENAI_API_KEY"), "test-key")
 
     @patch("quantmind.llm.block.LITELLM_AVAILABLE", True)
@@ -82,7 +82,7 @@ class TestLLMBlock(unittest.TestCase):
         mock_completion.return_value = mock_response
 
         block = LLMBlock(self.config)
-        result = block.generate_text(
+        block.generate_text(
             "Test prompt", system_prompt="You are a helpful assistant."
         )
 

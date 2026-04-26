@@ -10,7 +10,7 @@ repos:
     -   id: check-merge-conflict
 
 -   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.3
+    rev: v0.11.2
     hooks:
     -   id: ruff
         args: [--fix]
@@ -18,9 +18,9 @@ repos:
 
 -   repo: local
     hooks:
-    -   id: unittest
-        name: Run unit tests
-        entry: bash scripts/unittest.sh
+    -   id: verify
+        name: Run scripts/verify.sh (full golden harness)
+        entry: bash scripts/verify.sh
         language: system
         pass_filenames: false
         types: [python]

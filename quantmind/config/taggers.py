@@ -1,7 +1,6 @@
 """Configuration models for taggers."""
 
-from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 

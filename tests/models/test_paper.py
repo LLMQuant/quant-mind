@@ -1,7 +1,9 @@
 """Tests for Paper model."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from quantmind.models.paper import Paper
 
 

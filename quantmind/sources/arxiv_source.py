@@ -4,8 +4,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Union
-from urllib.parse import urlparse
+from typing import List, Optional
 
 import arxiv
 import requests

@@ -1,7 +1,6 @@
 """Unit tests for BaseFlow class with new architecture."""
 
 import unittest
-from typing import Any
 from unittest.mock import Mock, patch
 
 from quantmind.config.flows import BaseFlowConfig

@@ -61,9 +61,9 @@ def load_content(
 
     # Parse the URI
     path_part, *yaml_trace = uri.split(":")
-    assert (
-        len(yaml_trace) <= 1
-    ), f"Invalid uri {uri}, only one yaml trace is allowed."
+    assert len(yaml_trace) <= 1, (
+        f"Invalid uri {uri}, only one yaml trace is allowed."
+    )
     yaml_trace = [key for yt in yaml_trace for key in yt.split(".")]
 
     # Build file paths with priorities

@@ -1,0 +1,44 @@
+name: verify
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same PR/branch when a new commit lands.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Create virtual environment
+        run: uv venv
+
+      - name: Install project + dev dependencies
+        run: uv pip install --python .venv/bin/python -e ".[dev]"
+
+      - name: Run scripts/verify.sh
+        run: |
+          source .venv/bin/activate
+          bash scripts/verify.sh

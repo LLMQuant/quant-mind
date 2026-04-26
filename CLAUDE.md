@@ -29,19 +29,24 @@ quantmind/
 Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
 multi-agent handoff, or tool framework. Those come from `openai-agents`.
 
-## Current Repository State (transitional, after PR #70)
+## Current Repository State (transitional, after PR #70 / #72)
 
-Surviving modules — these still work but will be replaced or migrated in PR2-PR4:
+Surviving modules — these still work but will be replaced or migrated in PR3-PR6:
 
 | Module | Status | Replacement |
 |--------|--------|-------------|
-| `quantmind/flow/` | active | `flows/` in PR4 |
-| `quantmind/parsers/` | active | `preprocess/format/` in PR3 |
-| `quantmind/sources/` | active | `preprocess/fetch/` in PR3 |
-| `quantmind/config/` | active | `configs/` in PR2 |
-| `quantmind/llm/` | active | deleted in PR4 (use SDK + `openai` directly) |
-| `quantmind/models/{content,paper,analysis}.py` | active | move to `knowledge/` in PR2 |
+| `quantmind/flow/` | active | `flows/` in PR5 |
+| `quantmind/parsers/` | active | `preprocess/format/` in PR4 |
+| `quantmind/sources/` | active | `preprocess/fetch/` in PR4 |
+| `quantmind/config/` | active | `configs/` in PR3 |
+| `quantmind/llm/` | active | deleted in PR5 (use SDK + `openai` directly) |
+| `quantmind/models/{content,paper,analysis}.py` | active | move to `knowledge/` in PR3 |
 | `quantmind/utils/logger.py` | active | permanent |
+| `quantmind/utils/tmp.py` | active | deleted in PR3-4 alongside the templating refactor |
+
+These transitional modules are excluded from `basedpyright` (see `pyproject.toml`)
+to keep the harness green during migration; new modules (`knowledge/`, `configs/`,
+`preprocess/`, `flows/`, `mind/`, `magic.py`) are auto-included at standard mode.
 
 ## Development Commands
 
@@ -50,20 +55,34 @@ Surviving modules — these still work but will be replaced or migrated in PR2-P
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install -e .
+uv pip install -e ".[dev]"
 ```
 
-### Lint + Tests
+### Verify (canonical local check)
+
+`scripts/verify.sh` is the single source of truth for "is this branch
+shippable". CI (`.github/workflows/verify.yml`) runs the exact same script,
+so a green local run means a green PR. Run it before every push:
 
 ```bash
-ruff format .
-ruff check .
-pytest tests/
+bash scripts/verify.sh
 ```
 
-Pre-commit hooks (`.pre-commit-config.yaml`) run on push: trailing whitespace, EOF,
-ruff, ruff-format, full pytest. Don't bypass hooks unless the user explicitly
-authorizes — fix the underlying issue instead.
+It runs five steps in fixed order, fast-failing on the first error:
+
+1. `ruff format --check` — formatting must be clean
+2. `ruff check` — lint (D, E, F, I, W, B, W505) must pass
+3. `basedpyright` — standard-mode type check on permanent + new modules
+4. `lint-imports` — architectural boundary contracts must hold
+5. `pytest --cov` — tests pass with ≥ 60% branch coverage (will ratchet up
+   to 70%+ in PR3 once transitional modules are removed)
+
+Pre-commit hooks (`.pre-commit-config.yaml`):
+- pre-commit stage: trailing whitespace / EOF / ruff / ruff-format (fast)
+- pre-push stage: full `scripts/verify.sh`
+
+Don't bypass hooks unless the user explicitly authorizes — fix the underlying
+issue instead.
 
 ## Architecture Principles
 
@@ -136,9 +155,10 @@ authorizes — fix the underlying issue instead.
 
 | PR | Focus |
 |----|-------|
-| #70 (merged or in review) | Clean removal of self-built agent runtime |
-| PR2 | `knowledge/` + `configs/` skeleton |
-| PR3 | `preprocess/` (fetch + format two layers) |
-| PR4 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; drop old `flow/` `llm/` |
-| PR5 | `mind/memory/filesystem` MVP + trajectory archive |
-| PR6+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
+| #70 (merged) | Clean removal of self-built agent runtime |
+| #72 (this PR) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
+| PR3 | `knowledge/` + `configs/` skeleton |
+| PR4 | `preprocess/` (fetch + format two layers) |
+| PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; drop old `flow/` `llm/` |
+| PR6 | `mind/memory/filesystem` MVP + trajectory archive |
+| PR7+ | Second flow (news/earnings) / observability cookbook / longer-term modules |

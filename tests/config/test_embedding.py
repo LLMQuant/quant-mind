@@ -1,7 +1,6 @@
 """Tests for Embedding configuration."""
 
 import unittest
-from unittest.mock import patch
 
 from quantmind.config.embedding import EmbeddingConfig
 

@@ -2,8 +2,7 @@
 
 import os
 import unittest
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch, PropertyMock
+from unittest.mock import Mock, PropertyMock, patch
 
 from quantmind.config.parsers import LlamaParserConfig, ParsingMode, ResultType
 from quantmind.models.paper import Paper

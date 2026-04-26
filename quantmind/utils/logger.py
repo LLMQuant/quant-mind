@@ -29,7 +29,7 @@ class ColoredFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset to default
     }
 
-    def __init__(self, *args, use_color: bool = None, **kwargs):
+    def __init__(self, *args, use_color: bool | None = None, **kwargs):
         """Initialize the colored formatter.
 
         Args:

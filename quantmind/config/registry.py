@@ -3,7 +3,7 @@
 import importlib
 import inspect
 from pathlib import Path
-from typing import Any, Dict, Optional, Type
+from typing import Dict, Optional, Type
 
 from quantmind.config.flows import BaseFlowConfig
 from quantmind.utils.logger import get_logger
@@ -34,8 +34,8 @@ class FlowConfigRegistry:
         """Register built-in flow configuration types."""
         from quantmind.config.flows import (
             BaseFlowConfig,
-            SummaryFlowConfig,
             PodcastFlowConfig,
+            SummaryFlowConfig,
         )
 
         self._registry["base"] = BaseFlowConfig
