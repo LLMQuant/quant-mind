@@ -108,8 +108,16 @@ class FlowConfigRegistry:
 
     def _discover_flows_in_path(self, path: Path) -> None:
         """Discover flows in a specific path."""
-        # Look for flow.py files in subdirectories
-        for flow_file in path.rglob("flow.py"):
+        # Look for flow.py files in subdirectories.
+        # `rglob` on macOS tmpdirs can hit AppTranslocation paths that raise
+        # OSError mid-iteration; swallow scan errors so registry probing never
+        # crashes the caller.
+        try:
+            flow_files = list(path.rglob("flow.py"))
+        except OSError as e:
+            logger.warning(f"Failed to scan {path} for flows: {e}")
+            return
+        for flow_file in flow_files:
             try:
                 self._load_flow_from_file(flow_file)
             except Exception as e:

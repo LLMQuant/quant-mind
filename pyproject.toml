@@ -122,6 +122,12 @@ pythonVersion = "3.10"
 typeCheckingMode = "standard"
 reportMissingImports = "error"
 reportMissingTypeStubs = "none"
+# Pydantic v2 discriminated unions tighten a `str` field to `Literal["..."]`
+# in subclasses (e.g. `Paper.item_type: Literal["paper"]`). Python's variance
+# rules say mutable attributes must be invariant, so basedpyright flags this
+# even though Pydantic supports it. We use this idiom throughout knowledge/
+# and configs/, so disable the diagnostic globally.
+reportIncompatibleVariableOverride = "none"
 
 # ----------------------------------------------------------------------------
 # import-linter: architectural boundary contracts
