@@ -1,19 +1,44 @@
-"""quantmind.knowledge — Pydantic schemas for extracted financial knowledge.
+"""quantmind.knowledge — data standard for extracted financial knowledge.
 
-Each subclass of `KnowledgeItem` is a frozen schema designed to be passed as
-`Agent(output_type=...)` to the OpenAI Agents SDK and to round-trip through
-JSON.
+The standard defines three shapes that share `BaseKnowledge`:
+
+- `FlattenKnowledge` — atomic cards (`News`, `Earnings`, `PaperKnowledgeCard`).
+- `TreeKnowledge` — hierarchical artifacts (`Paper`).
+- `GraphKnowledge` — cross-item edges (placeholder, not implemented).
+
+Every concrete subclass is frozen Pydantic v2 with ``extra="forbid"``,
+suitable for ``Agent(output_type=...)`` and round-tripping through JSON.
+Subclasses MUST override ``embedding_text()`` so the store layer knows
+what to embed.
 """
 
-from quantmind.knowledge._base import Citation, KnowledgeItem
+from quantmind.knowledge._base import (
+    BaseKnowledge,
+    Citation,
+    ExtractionRef,
+    SourceRef,
+)
+from quantmind.knowledge._flatten import FlattenKnowledge
+from quantmind.knowledge._graph import GraphKnowledge
+from quantmind.knowledge._tree import TreeKnowledge, TreeNode
 from quantmind.knowledge.earnings import Earnings
 from quantmind.knowledge.news import News
-from quantmind.knowledge.paper import Paper
+from quantmind.knowledge.paper import Paper, PaperKnowledgeCard
 
 __all__ = [
+    # Base
+    "BaseKnowledge",
     "Citation",
+    "ExtractionRef",
+    "SourceRef",
+    # Shapes
+    "FlattenKnowledge",
+    "GraphKnowledge",
+    "TreeKnowledge",
+    "TreeNode",
+    # Concrete
     "Earnings",
-    "KnowledgeItem",
     "News",
     "Paper",
+    "PaperKnowledgeCard",
 ]

@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import Field
 
-from quantmind.knowledge._base import KnowledgeItem
+from quantmind.knowledge._flatten import FlattenKnowledge
 
 
-class Earnings(KnowledgeItem):
-    """An earnings-release extraction (one filing -> one Earnings)."""
+class Earnings(FlattenKnowledge):
+    """An earnings-release extraction (one filing -> one Earnings card)."""
 
     item_type: Literal["earnings"] = "earnings"
 
@@ -19,3 +19,7 @@ class Earnings(KnowledgeItem):
     guidance: str | None = None
     surprise_flags: list[str] = Field(default_factory=list)
     transcript_quote: str | None = None
+
+    def embedding_text(self) -> str:
+        guidance = self.guidance or ""
+        return f"{self.ticker} {self.period} earnings\n{guidance}".strip()
