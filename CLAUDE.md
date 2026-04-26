@@ -29,24 +29,26 @@ quantmind/
 Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
 multi-agent handoff, or tool framework. Those come from `openai-agents`.
 
-## Current Repository State (transitional, after PR #70 / #72)
+## Current Repository State (transitional, after PR #70 / #73 / PR3)
 
-Surviving modules — these still work but will be replaced or migrated in PR3-PR6:
+| Module | Status | Notes |
+|--------|--------|-------|
+| `quantmind/knowledge/` | landed (PR3) | output schemas: `KnowledgeItem` + `Paper` / `News` / `Earnings` |
+| `quantmind/configs/` | landed (PR3) | `BaseFlowCfg` / `BaseInput` + per-flow cfg + discriminated-union input types |
+| `quantmind/utils/logger.py` | permanent | only general-purpose utility |
+| `quantmind/flow/` | transitional | replaced by `flows/` in PR5 |
+| `quantmind/parsers/` | transitional | replaced by `preprocess/format/` in PR4 |
+| `quantmind/sources/` | transitional | replaced by `preprocess/fetch/` in PR4 |
+| `quantmind/config/` | transitional | superseded by `quantmind/configs/` (PR3); deletion when consumers (`flow/`, `llm/`) migrate in PR5 |
+| `quantmind/llm/` | transitional | deleted in PR5 (use SDK + `openai` directly) |
+| `quantmind/models/{content,paper,analysis}.py` | transitional | superseded by `quantmind/knowledge/` (PR3); deletion when consumers (`parsers/`, `sources/`, `flow/`) migrate in PR4-PR5 |
+| `quantmind/utils/tmp.py` | transitional | deleted in PR3-4 alongside the templating refactor |
 
-| Module | Status | Replacement |
-|--------|--------|-------------|
-| `quantmind/flow/` | active | `flows/` in PR5 |
-| `quantmind/parsers/` | active | `preprocess/format/` in PR4 |
-| `quantmind/sources/` | active | `preprocess/fetch/` in PR4 |
-| `quantmind/config/` | active | `configs/` in PR3 |
-| `quantmind/llm/` | active | deleted in PR5 (use SDK + `openai` directly) |
-| `quantmind/models/{content,paper,analysis}.py` | active | move to `knowledge/` in PR3 |
-| `quantmind/utils/logger.py` | active | permanent |
-| `quantmind/utils/tmp.py` | active | deleted in PR3-4 alongside the templating refactor |
-
-These transitional modules are excluded from `basedpyright` (see `pyproject.toml`)
-to keep the harness green during migration; new modules (`knowledge/`, `configs/`,
-`preprocess/`, `flows/`, `mind/`, `magic.py`) are auto-included at standard mode.
+Transitional modules are excluded from `basedpyright` (see `pyproject.toml`)
+to keep the harness green during migration. New modules (`knowledge/`,
+`configs/`, `preprocess/`, `flows/`, `mind/`, `magic.py`) are auto-included
+at standard mode and gated by additional `import-linter` contracts so they
+cannot accidentally pull in a transitional module.
 
 ## Development Commands
 
@@ -156,9 +158,9 @@ issue instead.
 | PR | Focus |
 |----|-------|
 | #70 (merged) | Clean removal of self-built agent runtime |
-| #72 (this PR) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
-| PR3 | `knowledge/` + `configs/` skeleton |
-| PR4 | `preprocess/` (fetch + format two layers) |
-| PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; drop old `flow/` `llm/` |
+| #73 (merged) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
+| PR3 (this PR) | `knowledge/` + `configs/` skeleton — output schemas + flow cfgs + discriminated-union inputs; `openai-agents>=0.14` introduced as a hard dep for `BaseFlowCfg.model_settings` |
+| PR4 | `preprocess/` (fetch + format two layers); migrate `parsers/` + `sources/`; delete `quantmind/models/{content,paper,analysis}.py` |
+| PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; delete `quantmind/flow/`, `quantmind/llm/`, `quantmind/config/` |
 | PR6 | `mind/memory/filesystem` MVP + trajectory archive |
 | PR7+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
