@@ -13,6 +13,7 @@ dependencies = [
     "pyyaml",
     "numpy>=2.2.4",
     "openai>=1.68.2",
+    "openai-agents>=0.14",
     "pillow>=10.1.0,<11.0.0",
     "llama-cloud-services>=0.6.12",
     "ipykernel>=6.29.5",
@@ -121,6 +122,12 @@ pythonVersion = "3.10"
 typeCheckingMode = "standard"
 reportMissingImports = "error"
 reportMissingTypeStubs = "none"
+# Pydantic v2 discriminated unions tighten a `str` field to `Literal["..."]`
+# in subclasses (e.g. `Paper.item_type: Literal["paper"]`). Python's variance
+# rules say mutable attributes must be invariant, so basedpyright flags this
+# even though Pydantic supports it. We use this idiom throughout knowledge/
+# and configs/, so disable the diagnostic globally.
+reportIncompatibleVariableOverride = "none"
 
 # ----------------------------------------------------------------------------
 # import-linter: architectural boundary contracts
@@ -137,6 +144,36 @@ root_packages = ["quantmind"]
 name = "utils is a leaf (no inbound deps from quantmind packages)"
 type = "forbidden"
 source_modules = ["quantmind.utils"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.knowledge",
+    "quantmind.llm",
+    "quantmind.models",
+    "quantmind.parsers",
+    "quantmind.sources",
+]
+
+[[tool.importlinter.contracts]]
+name = "knowledge is a leaf (no inbound deps from quantmind packages)"
+type = "forbidden"
+source_modules = ["quantmind.knowledge"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.llm",
+    "quantmind.models",
+    "quantmind.parsers",
+    "quantmind.sources",
+    "quantmind.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "configs only depends on knowledge (transitional modules forbidden)"
+type = "forbidden"
+source_modules = ["quantmind.configs"]
 forbidden_modules = [
     "quantmind.config",
     "quantmind.flow",
