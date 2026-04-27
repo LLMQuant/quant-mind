@@ -1,7 +1,8 @@
 """Tests for knowledge._base — BaseKnowledge data standard."""
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -33,6 +34,17 @@ class CitationTests(unittest.TestCase):
     def test_quote_max_length(self):
         with self.assertRaises(ValidationError):
             Citation(source_id="x", quote="a" * 501)
+
+    def test_tree_anchor_round_trip(self):
+        tree_id = uuid4()
+        node_id = uuid4()
+        cit = Citation(source_id="paper:abc", tree_id=tree_id, node_id=node_id)
+        self.assertEqual(cit.tree_id, tree_id)
+        self.assertEqual(cit.node_id, node_id)
+        # JSON round-trip preserves UUID anchors.
+        revived = Citation.model_validate_json(cit.model_dump_json())
+        self.assertEqual(revived.tree_id, tree_id)
+        self.assertEqual(revived.node_id, node_id)
 
 
 class SourceRefTests(unittest.TestCase):
@@ -140,6 +152,41 @@ class BaseKnowledgeTests(unittest.TestCase):
         assert item.extraction is not None
         self.assertEqual(item.extraction.flow, "paper_flow")
 
+    def test_is_extracted_false_when_hand_curated(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        self.assertFalse(item.is_extracted())
+
+    def test_is_extracted_true_when_extraction_set(self):
+        ext = ExtractionRef(
+            flow="paper_flow", model="gpt-4o", extracted_at=_now()
+        )
+        item = _ConcreteKnowledge(as_of=_now(), source=_src(), extraction=ext)
+        self.assertTrue(item.is_extracted())
+
+    def test_freshness_with_explicit_now(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        future = _now() + timedelta(days=3)
+        self.assertEqual(item.freshness(future), timedelta(days=3))
+
+    def test_freshness_default_now_is_utc(self):
+        # Just verify it returns a timedelta without raising; default `now`
+        # comes from `datetime.now(timezone.utc)`.
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        self.assertIsInstance(item.freshness(), timedelta)
+
+    def test_with_tags_appends_unique(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src(), tags=["macro"])
+        updated = item.with_tags("equities", "macro", "rates")
+        self.assertEqual(updated.tags, ["macro", "equities", "rates"])
+        # Original is frozen and unchanged.
+        self.assertEqual(item.tags, ["macro"])
+
+    def test_with_tags_returns_new_instance(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        updated = item.with_tags("x")
+        self.assertIsNot(item, updated)
+        self.assertEqual(updated.tags, ["x"])
+
 
 class PackageExportTests(unittest.TestCase):
     def test_top_level_imports(self):
@@ -148,12 +195,14 @@ class PackageExportTests(unittest.TestCase):
             Citation,
             Earnings,
             ExtractionRef,
+            Factor,
             FlattenKnowledge,
             GraphKnowledge,
             News,
             Paper,
             PaperKnowledgeCard,
             SourceRef,
+            Thesis,
             TreeKnowledge,
             TreeNode,
         )
@@ -164,6 +213,8 @@ class PackageExportTests(unittest.TestCase):
         self.assertTrue(issubclass(News, FlattenKnowledge))
         self.assertTrue(issubclass(Earnings, FlattenKnowledge))
         self.assertTrue(issubclass(PaperKnowledgeCard, FlattenKnowledge))
+        self.assertTrue(issubclass(Factor, FlattenKnowledge))
+        self.assertTrue(issubclass(Thesis, FlattenKnowledge))
         self.assertTrue(issubclass(Paper, TreeKnowledge))
         # Ensure side-imports are real classes
         self.assertEqual(Citation.__name__, "Citation")

@@ -17,11 +17,12 @@ type-check time, because `BaseKnowledge` itself can be referenced as a
 generic return type without forcing every consumer to know about embeddings.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import Self
 
 
 class Citation(BaseModel):
@@ -105,3 +106,27 @@ class BaseKnowledge(BaseModel):
         raise NotImplementedError(
             f"{type(self).__name__}.embedding_text() must be overridden"
         )
+
+    # ── Convenience helpers ────────────────────────────────────────────
+    # These are shared by every shape (Flatten / Tree / Graph) because they
+    # operate on `BaseKnowledge` metadata, not domain payload.
+
+    def is_extracted(self) -> bool:
+        """True iff the item came from an LLM flow (vs hand-curated)."""
+        return self.extraction is not None
+
+    def freshness(self, now: datetime | None = None) -> timedelta:
+        """Time elapsed since ``as_of``. Defaults ``now`` to ``utcnow()``."""
+        reference = now if now is not None else datetime.now(timezone.utc)
+        return reference - self.as_of
+
+    def with_tags(self, *new_tags: str) -> Self:
+        """Return a copy with extra tags appended (frozen-friendly).
+
+        Duplicates are skipped so the operation is idempotent.
+        """
+        merged = list(self.tags)
+        for t in new_tags:
+            if t not in merged:
+                merged.append(t)
+        return self.model_copy(update={"tags": merged})
