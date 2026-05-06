@@ -27,10 +27,13 @@ def _extract_text_sync(pdf_bytes: bytes) -> str:
     try:
         page_texts: list[str] = []
         for page in doc:
-            # pymupdf's bundled type stubs omit Page.get_text even though it's
-            # the documented public API since the fitz era.
-            text = page.get_text("text")  # pyright: ignore[reportAttributeAccessIssue]
-            if text and text.strip():
+            # pymupdf's stubs vary across versions: older releases miss
+            # Page.get_text entirely; newer ones type the optional ``option``
+            # arg as a Literal union that fans out the return into
+            # ``str | list | dict``. Both cases need narrowing here.
+            extracted = page.get_text()  # pyright: ignore[reportAttributeAccessIssue]
+            text = extracted if isinstance(extracted, str) else ""
+            if text.strip():
                 page_texts.append(text)
     finally:
         doc.close()
