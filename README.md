@@ -154,37 +154,29 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 ### 📚 Usage Examples
 
-#### Basic Paper Search and Processing
+#### Fetch and format an arXiv paper
 
 ```python
-from quantmind.sources import ArxivSource
-from quantmind.storage import LocalStorage
-from quantmind.config import ArxivSourceConfig, LocalStorageConfig
+import asyncio
 
-# Configure source and storage
-arxiv_config = ArxivSourceConfig(max_results=10)
-storage_config = LocalStorageConfig(storage_dir="./data")
+from quantmind.preprocess import fetch_arxiv, pdf_to_markdown
 
-# Initialize components
-source = ArxivSource(config=arxiv_config)
-storage = LocalStorage(config=storage_config)
 
-# Search for papers
-papers = source.search("machine learning finance")
+async def main() -> None:
+    raw = await fetch_arxiv("arXiv:2401.12345")
+    markdown = await pdf_to_markdown(raw.bytes)
+    print(f"Title: {raw.title}")
+    print(f"Authors: {', '.join(raw.authors)}")
+    print(markdown[:500])
 
-# Store papers locally
-storage.process_knowledges(papers)
 
-# Display results
-for paper in papers:
-    print(f"Title: {paper.title}")
-    print(f"Authors: {', '.join(paper.authors)}")
-    print(f"Categories: {', '.join(paper.categories)}")
+asyncio.run(main())
 ```
 
-#### Quant Paper Agent Example
-
-You can take [this example](examples/basic_usage.py) as a reference.
+> **Note**: QuantMind is mid-migration to OpenAI Agents SDK
+> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). The high-level
+> flows/storage APIs land in upcoming PRs; for now the `preprocess/` and
+> `knowledge/` layers are stable.
 
 ---
 
