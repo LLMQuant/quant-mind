@@ -20,6 +20,8 @@ papers/
 data/
 demo_data/
 *.html
+# Test fixtures that intentionally ship as HTML are tracked.
+!tests/**/fixtures/*.html
 
 # Local-only development scratch notes (not tracked)
 new_feature.md
