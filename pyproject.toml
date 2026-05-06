@@ -8,22 +8,20 @@ version = "0.2.0"
 description = "QuantMind - Intelligent Knowledge Extraction and Retrieval Framework"
 requires-python = ">=3.10"
 dependencies = [
-    "requests",
     "arxiv",
     "pyyaml",
     "numpy>=2.2.4",
     "openai>=1.68.2",
     "openai-agents>=0.14",
     "pillow>=10.1.0,<11.0.0",
-    "llama-cloud-services>=0.6.12",
     "ipykernel>=6.29.5",
     "pydantic>=2.0.0",
     "pymupdf>=1.23.0",
-    "marker>=2.1.3",
     "python-dotenv>=1.0.0",
     "httpx[socks]>=0.28.1",
     "litellm>=1.74.0.post1",
     "jinja2>=3.0.0",
+    "trafilatura>=1.10",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +35,8 @@ dev = [
     "import-linter>=2.11",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
     "pre-commit>=3.0",
 ]
 full = [
@@ -94,14 +94,15 @@ convention = "google"
 # ----------------------------------------------------------------------------
 # Strategy: explicit include-list of files that survive PR3-PR5 plus the
 # target-architecture module dirs (knowledge/, configs/, preprocess/, flows/,
-# mind/). Transitional modules (config/, flow/, llm/, models/{analysis,
-# content,paper}.py, parsers/, sources/, utils/tmp.py) are NOT included; they
-# get deleted in subsequent PRs and are not worth modernizing for type checks.
+# mind/). Transitional modules still scheduled for deletion in PR5
+# (config/, flow/, llm/, models/{analysis,content,paper}.py) are NOT
+# included; they get deleted soon and are not worth modernizing for type
+# checks. parsers/, sources/, utils/tmp.py were removed in PR4.
 
 [tool.basedpyright]
 include = ["quantmind"]
 # Transitional modules excluded from type checking — they get deleted in
-# PR3-PR5 (per CLAUDE.md "Current Repository State" table). New modules
+# PR5 (per CLAUDE.md "Current Repository State" table). New modules
 # (knowledge/, configs/, preprocess/, flows/, mind/, magic.py) automatically
 # get type-checked at "standard" mode as they land — no further config needed.
 exclude = [
@@ -111,12 +112,9 @@ exclude = [
     "quantmind/config",
     "quantmind/flow",
     "quantmind/llm",
-    "quantmind/parsers",
-    "quantmind/sources",
     "quantmind/models/analysis.py",
     "quantmind/models/content.py",
     "quantmind/models/paper.py",
-    "quantmind/utils/tmp.py",
 ]
 pythonVersion = "3.10"
 typeCheckingMode = "standard"
@@ -132,10 +130,9 @@ reportIncompatibleVariableOverride = "none"
 # ----------------------------------------------------------------------------
 # import-linter: architectural boundary contracts
 # ----------------------------------------------------------------------------
-# Encodes the target architecture: utils is a permanent leaf. As new modules
-# land (knowledge, preprocess, configs, flows, mind), additional contracts
-# will be added (knowledge is a leaf; preprocess depends on knowledge+utils;
-# flows is the apex; mind depends on knowledge+utils only).
+# Encodes the target architecture: utils, knowledge, and preprocess are
+# leaves; configs depends only on knowledge. flows (PR5) and mind (PR6+)
+# get their own contracts when they land.
 
 [tool.importlinter]
 root_packages = ["quantmind"]
@@ -151,8 +148,7 @@ forbidden_modules = [
     "quantmind.knowledge",
     "quantmind.llm",
     "quantmind.models",
-    "quantmind.parsers",
-    "quantmind.sources",
+    "quantmind.preprocess",
 ]
 
 [[tool.importlinter.contracts]]
@@ -165,8 +161,7 @@ forbidden_modules = [
     "quantmind.flow",
     "quantmind.llm",
     "quantmind.models",
-    "quantmind.parsers",
-    "quantmind.sources",
+    "quantmind.preprocess",
     "quantmind.utils",
 ]
 
@@ -179,8 +174,20 @@ forbidden_modules = [
     "quantmind.flow",
     "quantmind.llm",
     "quantmind.models",
-    "quantmind.parsers",
-    "quantmind.sources",
+    "quantmind.preprocess",
+]
+
+[[tool.importlinter.contracts]]
+name = "preprocess only depends on utils (no inbound deps on configs/knowledge/transitional)"
+type = "forbidden"
+source_modules = ["quantmind.preprocess"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.knowledge",
+    "quantmind.llm",
+    "quantmind.models",
 ]
 
 # ----------------------------------------------------------------------------
@@ -189,19 +196,19 @@ forbidden_modules = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage floor 60% accommodates branch-coverage on transitional modules
-# (pdf_parser.py 26%, tmp.py 20%, arxiv_source.py 57%) that get deleted in
-# PR3-PR5. Ratchet to 70% once they're gone, then 80% for the post-pivot
-# codebase.
+# Coverage floor 65% after PR4 deleted parsers/sources (the low-coverage
+# drag) and added preprocess/ at >85% line. Will ratchet to 75% in PR5
+# once flow/, llm/, config/, models/{content,paper,analysis}.py are gone.
 addopts = [
     "--cov=quantmind",
     "--cov-report=term-missing",
-    "--cov-fail-under=60",
+    "--cov-fail-under=65",
     "-ra",
 ]
+asyncio_mode = "auto"
 filterwarnings = [
     # Pydantic v1 → v2 transition warnings on transitional model code that
-    # gets removed in PR3. Suppress until those modules are gone.
+    # gets removed in PR5. Suppress until those modules are gone.
     "ignore::DeprecationWarning:pydantic.*",
     "ignore::pydantic.PydanticDeprecatedSince20",
 ]
@@ -209,6 +216,19 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["quantmind"]
 branch = true
+# Transitional modules slated for PR5 deletion. They lost their tests in
+# PR4 (parsers/sources tests were dragging the floor down anyway and were
+# the only callers of flow/, llm/, config/parsers, config/sources). Once
+# PR5 deletes them, this omit list goes empty and the floor ratchets to 75.
+omit = [
+    "quantmind/flow/*",
+    "quantmind/llm/*",
+    "quantmind/config/parsers.py",
+    "quantmind/config/sources.py",
+    "quantmind/config/flows.py",
+    "quantmind/config/registry.py",
+    "quantmind/models/analysis.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -217,7 +237,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
 ]
-# Coverage floor starts at 60% (branch-coverage drops the line-only baseline
-# from 69% to ~65%). Ratchet to 70% in PR3 once analysis.py / podcast_flow.py
-# / summary_flow.py / tmp.py and the rest of the transitional modules are
-# deleted.
+# Branch coverage. Floor moves with the migration:
+#   PR3: 60% (parsers/sources still drag the average down)
+#   PR4: 65% (parsers/sources gone; preprocess >85%)
+#   PR5: 75% target (flow/, llm/, config/, transitional models/ gone)
