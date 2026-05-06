@@ -29,26 +29,29 @@ quantmind/
 Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
 multi-agent handoff, or tool framework. Those come from `openai-agents`.
 
-## Current Repository State (transitional, after PR #70 / #73 / PR3)
+## Current Repository State (transitional, after PR #70 / #73 / #74 / PR4)
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | `quantmind/knowledge/` | landed (PR3) | data standard with three shapes: `FlattenKnowledge` (`News` / `Earnings` / `PaperKnowledgeCard`), `TreeKnowledge` (`Paper`), `GraphKnowledge` (placeholder); shared base = `BaseKnowledge` with typed `SourceRef` / `ExtractionRef` provenance + `embedding_text()` contract |
 | `quantmind/configs/` | landed (PR3) | `BaseFlowCfg` / `BaseInput` + per-flow cfg + discriminated-union input types |
+| `quantmind/preprocess/` | landed (PR4) | `fetch/` (`fetch_arxiv` / `fetch_url` / `resolve_doi` / `read_local_file` returning `Fetched` / `RawPaper` / `CrossrefMetadata` frozen dataclasses) + `format/` (`pdf_to_markdown` via PyMuPDF, `html_to_markdown` via trafilatura) + `clean.py` (`normalize_unicode` / `collapse_whitespace` / `dedupe_lines`) + `time.py` (`to_utc` / `parse_filing_date` / `business_days_between`); leaf module — only depends on `quantmind.utils` |
 | `quantmind/utils/logger.py` | permanent | only general-purpose utility |
 | `quantmind/flow/` | transitional | replaced by `flows/` in PR5 |
-| `quantmind/parsers/` | transitional | replaced by `preprocess/format/` in PR4 |
-| `quantmind/sources/` | transitional | replaced by `preprocess/fetch/` in PR4 |
 | `quantmind/config/` | transitional | superseded by `quantmind/configs/` (PR3); deletion when consumers (`flow/`, `llm/`) migrate in PR5 |
 | `quantmind/llm/` | transitional | deleted in PR5 (use SDK + `openai` directly) |
-| `quantmind/models/{content,paper,analysis}.py` | transitional | superseded by `quantmind/knowledge/` (PR3); deletion when consumers (`parsers/`, `sources/`, `flow/`) migrate in PR4-PR5 |
-| `quantmind/utils/tmp.py` | transitional | deleted in PR3-4 alongside the templating refactor |
+| `quantmind/models/{content,paper,analysis}.py` | transitional | superseded by `quantmind/knowledge/` (PR3); deletion when consumers (`flow/`) migrate in PR5 |
 
-Transitional modules are excluded from `basedpyright` (see `pyproject.toml`)
-to keep the harness green during migration. New modules (`knowledge/`,
-`configs/`, `preprocess/`, `flows/`, `mind/`, `magic.py`) are auto-included
-at standard mode and gated by additional `import-linter` contracts so they
-cannot accidentally pull in a transitional module.
+`quantmind/parsers/`, `quantmind/sources/`, and `quantmind/utils/tmp.py`
+were removed in PR4 (replaced by `preprocess/format/`, `preprocess/fetch/`,
+and deletion respectively).
+
+Transitional modules are excluded from `basedpyright` AND from
+`coverage.run` (see `pyproject.toml`) to keep the harness green during
+migration. New modules (`knowledge/`, `configs/`, `preprocess/`, `flows/`,
+`mind/`, `magic.py`) are auto-included at standard mode and gated by
+`import-linter` contracts (4 contracts as of PR4) so they cannot
+accidentally pull in a transitional module.
 
 ## Development Commands
 
@@ -76,8 +79,9 @@ It runs five steps in fixed order, fast-failing on the first error:
 2. `ruff check` — lint (D, E, F, I, W, B, W505) must pass
 3. `basedpyright` — standard-mode type check on permanent + new modules
 4. `lint-imports` — architectural boundary contracts must hold
-5. `pytest --cov` — tests pass with ≥ 60% branch coverage (will ratchet up
-   to 70%+ in PR3 once transitional modules are removed)
+5. `pytest --cov` — tests pass with ≥ 65% branch coverage (will ratchet up
+   to 75%+ in PR5 once `flow/` / `llm/` / `config/` and the transitional
+   `models/*.py` are removed)
 
 Pre-commit hooks (`.pre-commit-config.yaml`):
 - pre-commit stage: trailing whitespace / EOF / ruff / ruff-format (fast)
@@ -165,8 +169,9 @@ issue instead.
 |----|-------|
 | #70 (merged) | Clean removal of self-built agent runtime |
 | #73 (merged) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
-| PR3 (this PR) | `knowledge/` data standard (Flatten / Tree / Graph shapes) + `configs/` skeleton; `openai-agents>=0.14` introduced for `BaseFlowCfg.model_settings`. Storage layer (`mind/store/` + SQLite + `sqlite-vec`) lands separately. |
-| PR4 | `preprocess/` (fetch + format two layers); migrate `parsers/` + `sources/`; delete `quantmind/models/{content,paper,analysis}.py` |
-| PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; delete `quantmind/flow/`, `quantmind/llm/`, `quantmind/config/` |
+| #74 (merged) | `knowledge/` data standard (Flatten / Tree / Graph shapes) + `configs/` skeleton; `openai-agents>=0.14` introduced for `BaseFlowCfg.model_settings` |
+| PR4 (this PR) | `preprocess/` (fetch + format two layers); deletes `parsers/` + `sources/` + `utils/tmp.py`; coverage floor 60→65; 4th import-linter contract (`preprocess` is a leaf) |
+| PR5 | `flows/` + `paper_flow` + `batch_run` + `magic.py`; delete `quantmind/flow/`, `quantmind/llm/`, `quantmind/config/`, `quantmind/models/{content,paper,analysis}.py` |
 | PR6 | `mind/memory/filesystem` MVP + trajectory archive |
-| PR7+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
+| PR7 | `mind/store/` + SQLite + `sqlite-vec` MVP; introduces `preprocess/chunk.py` with `tiktoken` |
+| PR8+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
