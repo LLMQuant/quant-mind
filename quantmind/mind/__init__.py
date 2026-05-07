@@ -5,6 +5,6 @@ PR7+ will add ``mind/store/`` (knowledge store) and
 ``mind/summarize_run`` (trajectory summariser).
 """
 
-from quantmind.mind.memory import Memory
+from quantmind.mind.memory import FilesystemMemory, Memory, MemoryRunHooks
 
-__all__ = ["Memory"]
+__all__ = ["FilesystemMemory", "Memory", "MemoryRunHooks"]
