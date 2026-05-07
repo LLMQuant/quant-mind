@@ -188,6 +188,22 @@ forbidden_modules = [
     "quantmind.models",
 ]
 
+[[tool.importlinter.contracts]]
+name = "mind only depends on knowledge/configs/preprocess/utils + agents SDK"
+type = "forbidden"
+source_modules = ["quantmind.mind"]
+# `mind` MUST NOT import `flows` or `magic` (those depend on `mind`,
+# so the reverse would create a cycle). The deleted transitional
+# packages remain as tripwires against accidental re-introduction.
+forbidden_modules = [
+    "quantmind.flows",
+    "quantmind.magic",
+    "quantmind.config",
+    "quantmind.flow",
+    "quantmind.llm",
+    "quantmind.models",
+]
+
 # ----------------------------------------------------------------------------
 # pytest: configuration + coverage gate
 # ----------------------------------------------------------------------------
