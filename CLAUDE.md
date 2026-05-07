@@ -29,31 +29,33 @@ quantmind/
 Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
 multi-agent handoff, or tool framework. Those come from `openai-agents`.
 
-## Current Repository State (after PR #70 / #73 / #74 / #75 / PR5)
+## Current Repository State (after PR #70 / #73 / #74 / #75 / #76 / PR6)
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | `quantmind/knowledge/` | landed (PR3) | data standard with three shapes: `FlattenKnowledge` (`News` / `Earnings` / `PaperKnowledgeCard`), `TreeKnowledge` (`Paper`), `GraphKnowledge` (placeholder); shared base = `BaseKnowledge` with typed `SourceRef` / `ExtractionRef` provenance + `embedding_text()` contract |
 | `quantmind/configs/` | landed (PR3) | `BaseFlowCfg` / `BaseInput` + per-flow cfg + discriminated-union input types |
 | `quantmind/preprocess/` | landed (PR4) | `fetch/` (`fetch_arxiv` / `fetch_url` / `resolve_doi` / `read_local_file` returning `Fetched` / `RawPaper` / `CrossrefMetadata` frozen dataclasses) + `format/` (`pdf_to_markdown` via PyMuPDF, `html_to_markdown` via trafilatura) + `clean.py` + `time.py`; leaf module — only depends on `quantmind.utils` |
-| `quantmind/flows/` | landed (PR5) | apex layer: `paper_flow` (`PaperInput` → `Paper` via SDK Agent), `batch_run` + `BatchResult` (bounded-concurrency fan-out, `memory=` rejected by design), `_runner.run_with_observability` + `_compose_hooks` + `_archive_run_artifacts` (PR6 stub); only depends on configs/knowledge/preprocess/utils + `agents` SDK |
+| `quantmind/flows/` | landed (PR5, refined PR6) | apex layer: `paper_flow` (`PaperInput` → `Paper` via SDK Agent, now wired with `memory.mcp_servers()` + `memory.tools()`), `batch_run` + `BatchResult` (bounded-concurrency fan-out, `memory=` rejected by design), `_runner.run_with_observability` (PR6: `try/finally` invokes `MemoryRunHooks.persist`); depends on configs/knowledge/preprocess/utils + `mind` + `agents` SDK |
 | `quantmind/magic.py` | landed (PR5) | `resolve_magic_input(natural_language, *, target_flow, ...) -> (input, cfg)` plus `preview_resolve` debug helper; introspects flow signatures and runs a lightweight resolver Agent with `output_type=ResolvedFlowConfig[InputT, CfgT]` |
+| `quantmind/mind/memory/` | landed (PR6) | `Memory` Protocol (granular: `tools()` / `mcp_servers()` / `run_hooks()` / `reset()`) + `FilesystemMemory` MVP (MCP filesystem server via `npx`) + `MemoryRunHooks` accumulator + `RunRecord` trajectory archive under `<memory_dir>/runs/` (atomic write + `runs.jsonl` index); sixth import-linter contract pins `mind` as bounded |
 | `quantmind/utils/logger.py` | permanent | only general-purpose utility |
 
 PR5 removed the transitional packages (`quantmind/{flow,llm,config,models}/`
 and their tests under `tests/{config,models}/`); PR4 had already removed
 `quantmind/parsers/`, `quantmind/sources/`, and `quantmind/utils/tmp.py`.
-The codebase has now converged to the five permanent module roots
-(`flows/`, `configs/`, `knowledge/`, `preprocess/`, `mind/`) plus
-`magic.py` and `utils/`.
+PR6 added `quantmind/mind/memory/` and tightened the `paper_flow` /
+`_runner` signatures to consume the `Memory` Protocol directly.
+
+The codebase now has six permanent module roots (`flows/`, `configs/`,
+`knowledge/`, `preprocess/`, `mind/`) plus `magic.py` and `utils/`.
 
 `basedpyright` runs in standard mode across the whole `quantmind/`
-package — there are no per-module exclusions left. Five `import-linter`
+package — there are no per-module exclusions left. Six `import-linter`
 contracts pin the dependency graph: `utils` and `knowledge` are leaves,
 `configs` only depends on `knowledge`, `preprocess` only depends on
-`utils`, and `flows + magic` is the apex (cannot import the deleted
-transitional packages, which are listed in the contract as a tripwire
-against accidental re-introduction).
+`utils`, `flows + magic` is the apex, and `mind` is a bounded subsystem
+(cannot import `flows` / `magic` / the deleted transitional packages).
 
 ## Development Commands
 
@@ -173,7 +175,7 @@ issue instead.
 | #73 (merged) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
 | #74 (merged) | `knowledge/` data standard (Flatten / Tree / Graph shapes) + `configs/` skeleton; `openai-agents>=0.14` introduced for `BaseFlowCfg.model_settings` |
 | #75 (merged) | `preprocess/` (fetch + format two layers); deletes `parsers/` + `sources/` + `utils/tmp.py`; coverage floor 60→65; 4th import-linter contract |
-| PR5 (this PR) | `flows/` (`paper_flow` + `batch_run` + `BatchResult` + `_runner`) + `magic.py`; deletes `quantmind/{flow,llm,config,models}/`; coverage floor 65→75; 5th import-linter contract pins `flows + magic` as apex |
-| PR6 | `mind/memory/filesystem` MVP + trajectory archive (fills `_archive_run_artifacts` stub) |
+| #76 (merged) | `flows/` (`paper_flow` + `batch_run` + `BatchResult` + `_runner`) + `magic.py`; deletes `quantmind/{flow,llm,config,models}/`; coverage floor 65→75; 5th import-linter contract pins `flows + magic` as apex |
+| PR6 (this PR) | `mind/memory/filesystem` MVP + trajectory archive: `Memory` Protocol + `FilesystemMemory` (MCP filesystem server) + `MemoryRunHooks` + `RunRecord`; tightens `paper_flow.memory` + `_runner` to consume `Memory \| None`; replaces the PR5 `_archive_run_artifacts` stub with `try/finally` invoking `MemoryRunHooks.persist`; 6th import-linter contract pins `mind` boundaries |
 | PR7 | `mind/store/` + SQLite + `sqlite-vec` MVP; introduces `preprocess/chunk.py` with `tiktoken` |
 | PR8+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
