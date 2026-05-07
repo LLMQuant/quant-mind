@@ -299,18 +299,6 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen["input_guardrails"], [in_g])
         self.assertEqual(seen["output_guardrails"], [out_g])
 
-    async def test_memory_accepted_as_no_op(self) -> None:
-        with (
-            patch(
-                "quantmind.flows.paper.Agent",
-                return_value=MagicMock(),
-            ),
-            _patch_runner(_stub_paper()) as runner,
-        ):
-            await paper_flow(RawText(text="x"), memory=object())
-        # The runner sees the memory placeholder forwarded.
-        self.assertIsNotNone(runner.await_args.kwargs["memory"])
-
     async def test_extra_run_hooks_forwarded(self) -> None:
         class _H(RunHooks[Any]):
             pass
@@ -357,3 +345,89 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         ):
             await paper_flow(RawText(text="x"))
         self.assertNotIn("model_settings", seen)
+
+
+class PaperFlowMemoryWiringTests(unittest.IsolatedAsyncioTestCase):
+    async def test_memory_mcp_servers_passed_to_agent(self) -> None:
+        import tempfile
+
+        from quantmind.mind.memory import FilesystemMemory
+
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            with (
+                patch(
+                    "quantmind.flows.paper.Agent",
+                    side_effect=_capture_agent,
+                ),
+                _patch_runner(_stub_paper()),
+            ):
+                await paper_flow(RawText(text="hello"), memory=mem)
+        self.assertEqual(len(seen["mcp_servers"]), 1)
+
+    async def test_no_memory_yields_empty_mcp_servers_and_tools(
+        self,
+    ) -> None:
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            _patch_runner(_stub_paper()),
+        ):
+            await paper_flow(RawText(text="hello"))
+        self.assertEqual(seen["mcp_servers"], [])
+        self.assertEqual(seen["tools"], [])
+
+    async def test_memory_tools_appended_after_extra_tools(self) -> None:
+        from agents import function_tool
+
+        @function_tool
+        def _extra_tool() -> str:
+            return ""
+
+        @function_tool
+        def _memory_tool() -> str:
+            return ""
+
+        class _ToolMemory:
+            def tools(self) -> list:
+                return [_memory_tool]
+
+            def mcp_servers(self) -> list:
+                return []
+
+            def run_hooks(self) -> Any:
+                return None
+
+            async def reset(self) -> None:
+                return None
+
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            _patch_runner(_stub_paper()),
+        ):
+            await paper_flow(
+                RawText(text="x"),
+                extra_tools=[_extra_tool],
+                memory=_ToolMemory(),
+            )
+        # Order: extra_tools first, then memory_tools.
+        self.assertEqual(len(seen["tools"]), 2)
+        self.assertIs(seen["tools"][0], _extra_tool)
+        self.assertIs(seen["tools"][1], _memory_tool)
