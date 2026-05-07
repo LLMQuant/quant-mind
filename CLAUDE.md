@@ -152,7 +152,7 @@ issue instead.
 - ❌ Introduce class-based `BaseFlow` / plugin registry / hook discovery
 - ❌ Wrap `from agents import ...` in a QuantMind-side facade — use the SDK directly
 - ❌ Mix `batch_run` and `memory` (mutually exclusive in MVP; `batch_run` rejects
-  `memory=` at the signature layer — design doc §4.3.5)
+  `memory=` at the signature layer)
 - ❌ Use `Dict[str, Any]` in init functions; use Pydantic models
 - ❌ Add hard deps on observability platforms (Langfuse / Logfire / etc.); document
   integration via `add_trace_processor()` in user-facing cookbook only

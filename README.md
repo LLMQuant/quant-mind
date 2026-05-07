@@ -253,8 +253,7 @@ asyncio.run(main())
 `@modelcontextprotocol/server-filesystem` over stdio). Each run also
 writes `<memory_dir>/runs/<run_id>.json` and appends a one-line
 summary to `<memory_dir>/runs.jsonl`. `FilesystemMemory` is for serial
-loops only — `batch_run` rejects `memory=` at the signature layer
-(see design doc §4.3.5).
+loops only — `batch_run` rejects `memory=` at the signature layer.
 
 > **Note**: QuantMind is mid-migration to OpenAI Agents SDK
 > (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR6 lands

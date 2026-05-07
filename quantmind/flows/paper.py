@@ -8,7 +8,7 @@ variants, fetches and converts the raw payload to markdown via
 
 Customization happens through the configured ``PaperFlowCfg`` (Layer 1)
 or the keyword arguments on this function (Layer 2). To swap the whole
-flow, fork this file (Layer 3 — design doc §9).
+flow, fork this file (Layer 3).
 """
 
 from typing import Any, TypeVar
@@ -76,10 +76,10 @@ async def paper_flow(
 ) -> P | Paper:
     """Extract a ``Paper`` from a typed ``PaperInput``.
 
-    See design doc §4.1 for the rationale on each kwarg. When ``memory``
-    is supplied, ``memory.mcp_servers()`` and ``memory.tools()`` flow
-    through to the Agent unconditionally; trajectory archiving is gated
-    separately by ``cfg.archive_trajectory`` inside the runner.
+    When ``memory`` is supplied, ``memory.mcp_servers()`` and
+    ``memory.tools()`` flow through to the Agent unconditionally;
+    trajectory archiving is gated separately by
+    ``cfg.archive_trajectory`` inside the runner.
 
     Raises:
         UnsupportedContentTypeError: When fetched bytes are not PDF /
