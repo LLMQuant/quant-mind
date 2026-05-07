@@ -45,7 +45,7 @@ def _safe_repr(obj: Any) -> str:
     dump = getattr(obj, "model_dump_json", None)
     if callable(dump):
         try:
-            return dump()
+            return str(dump())
         except Exception:  # noqa: BLE001
             pass
     return str(obj)
@@ -75,7 +75,7 @@ class MemoryRunHooks(RunHooks[Any]):
         self._llm_timer_start: float | None = None
         self._tool_timer_starts: dict[int, float] = {}
 
-    async def on_agent_start(self, ctx: Any, agent: Any) -> None:
+    async def on_agent_start(self, context: Any, agent: Any) -> None:
         self._started_at = datetime.now(timezone.utc)
         self._agent_name = str(getattr(agent, "name", "") or "")
         self._agent_model = str(getattr(agent, "model", "") or "")
@@ -86,7 +86,7 @@ class MemoryRunHooks(RunHooks[Any]):
     async def on_llm_start(self, *_: Any, **__: Any) -> None:
         self._llm_timer_start = time.monotonic()
 
-    async def on_llm_end(self, ctx: Any, agent: Any, response: Any) -> None:
+    async def on_llm_end(self, context: Any, agent: Any, response: Any) -> None:
         duration = (
             (time.monotonic() - self._llm_timer_start)
             if self._llm_timer_start is not None
@@ -106,11 +106,11 @@ class MemoryRunHooks(RunHooks[Any]):
             }
         )
 
-    async def on_tool_start(self, ctx: Any, agent: Any, tool: Any) -> None:
+    async def on_tool_start(self, context: Any, agent: Any, tool: Any) -> None:
         self._tool_timer_starts[id(tool)] = time.monotonic()
 
     async def on_tool_end(
-        self, ctx: Any, agent: Any, tool: Any, result: Any
+        self, context: Any, agent: Any, tool: Any, result: Any
     ) -> None:
         start = self._tool_timer_starts.pop(id(tool), None)
         duration = (time.monotonic() - start) if start is not None else 0.0
@@ -123,7 +123,7 @@ class MemoryRunHooks(RunHooks[Any]):
             }
         )
 
-    async def on_agent_end(self, ctx: Any, agent: Any, output: Any) -> None:
+    async def on_agent_end(self, context: Any, agent: Any, output: Any) -> None:
         self._ended_at = datetime.now(timezone.utc)
         self._output_summary = _truncate(_safe_repr(output))
 
