@@ -92,29 +92,17 @@ convention = "google"
 # ----------------------------------------------------------------------------
 # basedpyright: type checker
 # ----------------------------------------------------------------------------
-# Strategy: explicit include-list of files that survive PR3-PR5 plus the
-# target-architecture module dirs (knowledge/, configs/, preprocess/, flows/,
-# mind/). Transitional modules still scheduled for deletion in PR5
-# (config/, flow/, llm/, models/{analysis,content,paper}.py) are NOT
-# included; they get deleted soon and are not worth modernizing for type
-# checks. parsers/, sources/, utils/tmp.py were removed in PR4.
+# Every module in `quantmind/` is type-checked at "standard" mode. PR5
+# deleted the transitional packages (`config/`, `flow/`, `llm/`,
+# `models/`) so the exclude list is now down to the directories pyright
+# always wants ignored.
 
 [tool.basedpyright]
 include = ["quantmind"]
-# Transitional modules excluded from type checking — they get deleted in
-# PR5 (per CLAUDE.md "Current Repository State" table). New modules
-# (knowledge/, configs/, preprocess/, flows/, mind/, magic.py) automatically
-# get type-checked at "standard" mode as they land — no further config needed.
 exclude = [
     "**/__pycache__",
     "**/.venv",
     "**/build",
-    "quantmind/config",
-    "quantmind/flow",
-    "quantmind/llm",
-    "quantmind/models/analysis.py",
-    "quantmind/models/content.py",
-    "quantmind/models/paper.py",
 ]
 pythonVersion = "3.10"
 typeCheckingMode = "standard"
@@ -131,8 +119,10 @@ reportIncompatibleVariableOverride = "none"
 # import-linter: architectural boundary contracts
 # ----------------------------------------------------------------------------
 # Encodes the target architecture: utils, knowledge, and preprocess are
-# leaves; configs depends only on knowledge. flows (PR5) and mind (PR6+)
-# get their own contracts when they land.
+# leaves; configs depends only on knowledge; flows + magic is the apex
+# layer (PR5). The transitional packages (config/, flow/, llm/, models/)
+# were deleted in PR5; they remain in the forbidden lists as a tripwire
+# against accidental re-introduction during future refactors.
 
 [tool.importlinter]
 root_packages = ["quantmind"]
@@ -142,12 +132,10 @@ name = "utils is a leaf (no inbound deps from quantmind packages)"
 type = "forbidden"
 source_modules = ["quantmind.utils"]
 forbidden_modules = [
-    "quantmind.config",
     "quantmind.configs",
-    "quantmind.flow",
+    "quantmind.flows",
     "quantmind.knowledge",
-    "quantmind.llm",
-    "quantmind.models",
+    "quantmind.magic",
     "quantmind.preprocess",
 ]
 
@@ -156,36 +144,46 @@ name = "knowledge is a leaf (no inbound deps from quantmind packages)"
 type = "forbidden"
 source_modules = ["quantmind.knowledge"]
 forbidden_modules = [
-    "quantmind.config",
     "quantmind.configs",
-    "quantmind.flow",
-    "quantmind.llm",
-    "quantmind.models",
+    "quantmind.flows",
+    "quantmind.magic",
     "quantmind.preprocess",
     "quantmind.utils",
 ]
 
 [[tool.importlinter.contracts]]
-name = "configs only depends on knowledge (transitional modules forbidden)"
+name = "configs only depends on knowledge"
 type = "forbidden"
 source_modules = ["quantmind.configs"]
 forbidden_modules = [
-    "quantmind.config",
-    "quantmind.flow",
-    "quantmind.llm",
-    "quantmind.models",
+    "quantmind.flows",
+    "quantmind.magic",
     "quantmind.preprocess",
 ]
 
 [[tool.importlinter.contracts]]
-name = "preprocess only depends on utils (no inbound deps on configs/knowledge/transitional)"
+name = "preprocess only depends on utils (no inbound deps on configs/knowledge/flows)"
 type = "forbidden"
 source_modules = ["quantmind.preprocess"]
 forbidden_modules = [
-    "quantmind.config",
     "quantmind.configs",
-    "quantmind.flow",
+    "quantmind.flows",
     "quantmind.knowledge",
+    "quantmind.magic",
+]
+
+[[tool.importlinter.contracts]]
+name = "flows + magic is apex (no transitional package imports)"
+type = "forbidden"
+source_modules = [
+    "quantmind.flows",
+    "quantmind.magic",
+]
+# These packages were deleted in PR5; the contract guards against any
+# future code re-introducing them under the same names.
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.flow",
     "quantmind.llm",
     "quantmind.models",
 ]
@@ -196,39 +194,19 @@ forbidden_modules = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage floor 65% after PR4 deleted parsers/sources (the low-coverage
-# drag) and added preprocess/ at >85% line. Will ratchet to 75% in PR5
-# once flow/, llm/, config/, models/{content,paper,analysis}.py are gone.
+# Coverage floor 75% — PR5 deleted the transitional packages so every
+# remaining module is in the target architecture and is well-tested.
 addopts = [
     "--cov=quantmind",
     "--cov-report=term-missing",
-    "--cov-fail-under=65",
+    "--cov-fail-under=75",
     "-ra",
 ]
 asyncio_mode = "auto"
-filterwarnings = [
-    # Pydantic v1 → v2 transition warnings on transitional model code that
-    # gets removed in PR5. Suppress until those modules are gone.
-    "ignore::DeprecationWarning:pydantic.*",
-    "ignore::pydantic.PydanticDeprecatedSince20",
-]
 
 [tool.coverage.run]
 source = ["quantmind"]
 branch = true
-# Transitional modules slated for PR5 deletion. They lost their tests in
-# PR4 (parsers/sources tests were dragging the floor down anyway and were
-# the only callers of flow/, llm/, config/parsers, config/sources). Once
-# PR5 deletes them, this omit list goes empty and the floor ratchets to 75.
-omit = [
-    "quantmind/flow/*",
-    "quantmind/llm/*",
-    "quantmind/config/parsers.py",
-    "quantmind/config/sources.py",
-    "quantmind/config/flows.py",
-    "quantmind/config/registry.py",
-    "quantmind/models/analysis.py",
-]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -240,4 +218,4 @@ exclude_lines = [
 # Branch coverage. Floor moves with the migration:
 #   PR3: 60% (parsers/sources still drag the average down)
 #   PR4: 65% (parsers/sources gone; preprocess >85%)
-#   PR5: 75% target (flow/, llm/, config/, transitional models/ gone)
+#   PR5: 75% (flow/, llm/, config/, transitional models/ gone)

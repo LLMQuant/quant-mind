@@ -154,29 +154,80 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 ### 📚 Usage Examples
 
-#### Fetch and format an arXiv paper
+#### Run a single paper through `paper_flow`
 
 ```python
 import asyncio
 
-from quantmind.preprocess import fetch_arxiv, pdf_to_markdown
+from quantmind.configs import PaperFlowCfg
+from quantmind.configs.paper import ArxivIdentifier
+from quantmind.flows import paper_flow
 
 
 async def main() -> None:
-    raw = await fetch_arxiv("arXiv:2401.12345")
-    markdown = await pdf_to_markdown(raw.bytes)
-    print(f"Title: {raw.title}")
-    print(f"Authors: {', '.join(raw.authors)}")
-    print(markdown[:500])
+    paper = await paper_flow(
+        ArxivIdentifier(id="2401.12345"),
+        cfg=PaperFlowCfg(model="gpt-4o-mini"),
+    )
+    print(paper.model_dump_json(indent=2))
+
+
+asyncio.run(main())
+```
+
+#### Fan out a batch with `batch_run`
+
+```python
+import asyncio
+
+from quantmind.configs import PaperFlowCfg
+from quantmind.configs.paper import ArxivIdentifier
+from quantmind.flows import batch_run, paper_flow
+
+
+async def main() -> None:
+    inputs = [ArxivIdentifier(id=aid) for aid in (
+        "2401.12345", "2401.12346", "2401.12347",
+    )]
+    result = await batch_run(
+        paper_flow,
+        inputs,
+        cfg=PaperFlowCfg(model="gpt-4o-mini"),
+        concurrency=3,
+        on_error="skip",
+        on_progress=lambda done, total: print(f"{done}/{total}"),
+    )
+    print(f"ok={result.success_count} failed={result.failure_count}")
+
+
+asyncio.run(main())
+```
+
+#### Resolve free-form intent with `magic`
+
+```python
+import asyncio
+
+from quantmind.flows import paper_flow
+from quantmind.magic import resolve_magic_input
+
+
+async def main() -> None:
+    inp, cfg = await resolve_magic_input(
+        "Pull arXiv 2401.12345 about cross-sectional momentum; use gpt-4o-mini.",
+        target_flow=paper_flow,
+    )
+    paper = await paper_flow(inp, cfg=cfg)
+    print(paper.model_dump_json(indent=2))
 
 
 asyncio.run(main())
 ```
 
 > **Note**: QuantMind is mid-migration to OpenAI Agents SDK
-> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). The high-level
-> flows/storage APIs land in upcoming PRs; for now the `preprocess/` and
-> `knowledge/` layers are stable.
+> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR5 lands the
+> apex layer (`flows/` + `magic.py`); the remaining work is the `mind/`
+> memory + store layer scheduled for PR6 and PR7.
 
 ---
 
@@ -201,13 +252,13 @@ QuantMind is designed with a larger vision: to become a comprehensive intelligen
 The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
 
 > [!NOTE]
-> **Future Conceptual Example:**
+> **Future Conceptual Example (PR6 brings `FilesystemMemory`):**
 >
 > ```python
-> # The future we are building towards
-> from quantmind.flows import paper_flow, batch_run
+> from quantmind.configs.paper import ArxivIdentifier
+> from quantmind.flows import paper_flow
 > from quantmind.knowledge import Paper
-> from quantmind.mind.memory import FilesystemMemory
+> from quantmind.mind.memory import FilesystemMemory  # PR6
 >
 > memory = FilesystemMemory("./mem/factor-research/")
 > for arxiv_id in arxiv_ids:
