@@ -81,6 +81,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Tests don't need module/function docstrings or strict bugbear rules.
 "tests/**/*.py" = ["D", "B"]
+# Example scripts: top-of-file module docstring is enough; per-function
+# docstrings just clutter short demos.
+"examples/**/*.py" = ["D"]
 "**/__init__.py" = ["D104", "F401"]
 
 [tool.ruff.lint.pycodestyle]
