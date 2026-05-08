@@ -2,8 +2,8 @@
 
 `batch_run` is the single concurrency primitive QuantMind ships in MVP.
 It does NOT support `memory=`; for memory-accumulating workflows users
-write a serial `for` loop themselves (design doc §4.3.5). This keeps the
-batch path stateless and free of cross-run race hazards.
+write a serial `for` loop themselves. This keeps the batch path
+stateless and free of cross-run race hazards.
 """
 
 import asyncio
@@ -93,8 +93,7 @@ async def batch_run(
         raise ValueError(
             "batch_run does not support `memory=` in MVP. For "
             "memory-accumulating workflows write a serial loop instead: "
-            "`for inp in inputs: await flow_fn(inp, cfg=cfg, memory=memory)`. "
-            "See design doc §4.3.5."
+            "`for inp in inputs: await flow_fn(inp, cfg=cfg, memory=memory)`."
         )
     if concurrency < 1:
         raise ValueError(f"concurrency must be >= 1, got {concurrency}")

@@ -1,5 +1,6 @@
 """Tests for ``quantmind.flows._runner``."""
 
+import tempfile
 import unittest
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -8,12 +9,11 @@ from agents import RunHooks
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.flows._runner import (
-    _archive_run_artifacts,
-    _collect_hooks,
     _compose_hooks,
     _CompositeRunHooks,
     run_with_observability,
 )
+from quantmind.mind.memory import FilesystemMemory
 
 
 class _RecordingHooks(RunHooks[Any]):
@@ -45,6 +45,12 @@ class _RecordingHooks(RunHooks[Any]):
         self.log.append((self.label, "on_tool_end"))
 
 
+class _FakeRunResult:
+    def __init__(self, output: str = "ok") -> None:
+        self.final_output = output
+        self.trace_id = "trace_xyz"
+
+
 class ComposeHooksTests(unittest.TestCase):
     def test_empty_returns_none(self) -> None:
         self.assertIsNone(_compose_hooks([]))
@@ -73,7 +79,6 @@ class CompositeRunHooksTests(unittest.IsolatedAsyncioTestCase):
         await composite.on_handoff()
         await composite.on_tool_start()
         await composite.on_tool_end()
-        # Each method fires for both hooks in registration order.
         for method in (
             "on_llm_start",
             "on_llm_end",
@@ -98,26 +103,6 @@ class CompositeRunHooksTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await composite.on_llm_start()
         self.assertEqual(log, [])
-
-
-class CollectHooksTests(unittest.TestCase):
-    def test_memory_contributes_nothing_in_pr5(self) -> None:
-        extra = _RecordingHooks("a", [])
-        # PR5: memory is forwarded but unused.
-        self.assertEqual(_collect_hooks(None, [extra]), [extra])
-        self.assertEqual(_collect_hooks(object(), [extra]), [extra])
-
-    def test_no_extras_returns_empty(self) -> None:
-        self.assertEqual(_collect_hooks(None, []), [])
-
-
-class ArchiveStubTests(unittest.TestCase):
-    def test_archive_is_no_op(self) -> None:
-        cfg = PaperFlowCfg()
-        result = MagicMock()
-        # Must not raise, must return None, must not touch result.
-        self.assertIsNone(_archive_run_artifacts(cfg, None, result))
-        result.assert_not_called()
 
 
 class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
@@ -156,11 +141,10 @@ class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run_cfg.trace_metadata, {"k": "v"})
         self.assertFalse(run_cfg.trace_include_sensitive_data)
         self.assertTrue(run_cfg.tracing_disabled)
-        # No hooks supplied -> Runner.run sees None.
         self.assertIsNone(call.kwargs["hooks"])
 
     async def test_workflow_name_falls_back_to_agent_name(self) -> None:
-        cfg = PaperFlowCfg()  # workflow_name = None
+        cfg = PaperFlowCfg()
         agent = MagicMock()
         agent.name = "paper_extractor"
         fake_result = MagicMock()
@@ -192,8 +176,115 @@ class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
                 agent,
                 "x",
                 cfg=cfg,
-                memory=object(),  # PR6 placeholder
+                memory=None,
                 extra_run_hooks=[hook],
             )
-        # Single hook -> passed through as-is, not wrapped in composite.
         self.assertIs(run_mock.await_args.kwargs["hooks"], hook)
+
+
+class RunnerMemoryWiringTests(unittest.IsolatedAsyncioTestCase):
+    async def test_persist_invoked_on_success(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            cfg = PaperFlowCfg()
+            agent = MagicMock()
+            agent.name = "paper_extractor"
+            with (
+                patch(
+                    "quantmind.flows._runner.Runner.run",
+                    new=AsyncMock(return_value=_FakeRunResult("done")),
+                ),
+                patch(
+                    "quantmind.mind.memory._run_hooks.write_run_record",
+                    new=AsyncMock(),
+                ) as mock_write,
+            ):
+                out = await run_with_observability(
+                    agent,
+                    "input",
+                    cfg=cfg,
+                    memory=mem,
+                    extra_run_hooks=[],
+                )
+            self.assertEqual(out, "done")
+            self.assertEqual(mock_write.await_count, 1)
+            record = mock_write.await_args.args[1]
+            self.assertIsNone(record.error)
+            self.assertEqual(record.trace_id, "trace_xyz")
+
+    async def test_persist_invoked_on_failure_with_error_string(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            cfg = PaperFlowCfg()
+            agent = MagicMock()
+            agent.name = "paper_extractor"
+            boom = RuntimeError("boom")
+            with (
+                patch(
+                    "quantmind.flows._runner.Runner.run",
+                    new=AsyncMock(side_effect=boom),
+                ),
+                patch(
+                    "quantmind.mind.memory._run_hooks.write_run_record",
+                    new=AsyncMock(),
+                ) as mock_write,
+            ):
+                with self.assertRaises(RuntimeError):
+                    await run_with_observability(
+                        agent,
+                        "input",
+                        cfg=cfg,
+                        memory=mem,
+                        extra_run_hooks=[],
+                    )
+            self.assertEqual(mock_write.await_count, 1)
+            record = mock_write.await_args.args[1]
+            self.assertEqual(record.error, "boom")
+
+    async def test_archive_trajectory_false_skips_memory_hooks(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            cfg = PaperFlowCfg(archive_trajectory=False)
+            agent = MagicMock()
+            agent.name = "paper_extractor"
+            with (
+                patch(
+                    "quantmind.flows._runner.Runner.run",
+                    new=AsyncMock(return_value=_FakeRunResult()),
+                ),
+                patch(
+                    "quantmind.mind.memory._run_hooks.write_run_record",
+                    new=AsyncMock(),
+                ) as mock_write,
+            ):
+                await run_with_observability(
+                    agent,
+                    "input",
+                    cfg=cfg,
+                    memory=mem,
+                    extra_run_hooks=[],
+                )
+            self.assertEqual(mock_write.await_count, 0)
+
+    async def test_no_memory_skips_persist(self) -> None:
+        cfg = PaperFlowCfg()
+        agent = MagicMock()
+        agent.name = "paper_extractor"
+        with (
+            patch(
+                "quantmind.flows._runner.Runner.run",
+                new=AsyncMock(return_value=_FakeRunResult()),
+            ),
+            patch(
+                "quantmind.mind.memory._run_hooks.write_run_record",
+                new=AsyncMock(),
+            ) as mock_write,
+        ):
+            await run_with_observability(
+                agent, "input", cfg=cfg, memory=None, extra_run_hooks=[]
+            )
+        self.assertEqual(mock_write.await_count, 0)

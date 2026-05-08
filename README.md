@@ -224,10 +224,42 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+#### Persistent memory across a serial loop
+
+```python
+import asyncio
+
+from quantmind.configs.paper import ArxivIdentifier
+from quantmind.flows import paper_flow
+from quantmind.mind.memory import FilesystemMemory
+
+
+async def main() -> None:
+    mem = FilesystemMemory("./.qm-memory")
+    arxiv_ids = ["2401.12345", "2402.67890", "2403.11111"]
+    for paper_id in arxiv_ids:
+        paper = await paper_flow(
+            ArxivIdentifier(id=paper_id),
+            memory=mem,
+        )
+        print(paper.title)
+    # Trajectory records are now under ./.qm-memory/runs/.
+
+
+asyncio.run(main())
+```
+
+`FilesystemMemory` requires Node.js + `npx` on PATH (the SDK launches
+`@modelcontextprotocol/server-filesystem` over stdio). Each run also
+writes `<memory_dir>/runs/<run_id>.json` and appends a one-line
+summary to `<memory_dir>/runs.jsonl`. `FilesystemMemory` is for serial
+loops only — `batch_run` rejects `memory=` at the signature layer.
+
 > **Note**: QuantMind is mid-migration to OpenAI Agents SDK
-> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR5 lands the
-> apex layer (`flows/` + `magic.py`); the remaining work is the `mind/`
-> memory + store layer scheduled for PR6 and PR7.
+> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR6 lands
+> `mind/memory/` (Memory Protocol + `FilesystemMemory` MVP + trajectory
+> archive); the remaining work is the `mind/store/` knowledge layer
+> scheduled for PR7+.
 
 ---
 
@@ -235,10 +267,11 @@ asyncio.run(main())
 
 - [x] Better `flow` design for user-friendly usage
 - [x] First production level example (Quant Paper Agent)
-- [ ] Migrate Agent layer to OpenAI Agents SDK
-- [ ] Standardize knowledge format with `knowledge/` (Pydantic-based)
+- [x] Migrate Agent layer to OpenAI Agents SDK
+- [x] Standardize knowledge format with `knowledge/` (Pydantic-based)
+- [x] Cross-step working memory (`mind/memory`) for serial document processing
 - [ ] Additional content sources (financial news, blogs, reports)
-- [ ] Cross-step working memory (`mind/memory`) for batch document processing
+- [ ] `mind/store/` — durable knowledge store with hybrid retrieval (PR7+)
 
 ---
 
@@ -252,18 +285,10 @@ QuantMind is designed with a larger vision: to become a comprehensive intelligen
 The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
 
 > [!NOTE]
-> **Future Conceptual Example (PR6 brings `FilesystemMemory`):**
->
-> ```python
-> from quantmind.configs.paper import ArxivIdentifier
-> from quantmind.flows import paper_flow
-> from quantmind.knowledge import Paper
-> from quantmind.mind.memory import FilesystemMemory  # PR6
->
-> memory = FilesystemMemory("./mem/factor-research/")
-> for arxiv_id in arxiv_ids:
->     paper: Paper = await paper_flow(ArxivIdentifier(id=arxiv_id), memory=memory)
-> ```
+> **`FilesystemMemory` landed in PR6.** See the runbook example above
+> (*Persistent memory across a serial loop*) for the canonical usage.
+> Future cognitive layers (`mind/store`, `mind/summarize_run`) build on
+> this foundation — they share the same `<memory_dir>/` layout.
 
 This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
 

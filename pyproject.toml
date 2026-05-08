@@ -81,6 +81,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Tests don't need module/function docstrings or strict bugbear rules.
 "tests/**/*.py" = ["D", "B"]
+# Example scripts: top-of-file module docstring is enough; per-function
+# docstrings just clutter short demos.
+"examples/**/*.py" = ["D"]
 "**/__init__.py" = ["D104", "F401"]
 
 [tool.ruff.lint.pycodestyle]
@@ -182,6 +185,22 @@ source_modules = [
 # These packages were deleted in PR5; the contract guards against any
 # future code re-introducing them under the same names.
 forbidden_modules = [
+    "quantmind.config",
+    "quantmind.flow",
+    "quantmind.llm",
+    "quantmind.models",
+]
+
+[[tool.importlinter.contracts]]
+name = "mind only depends on knowledge/configs/preprocess/utils + agents SDK"
+type = "forbidden"
+source_modules = ["quantmind.mind"]
+# `mind` MUST NOT import `flows` or `magic` (those depend on `mind`,
+# so the reverse would create a cycle). The deleted transitional
+# packages remain as tripwires against accidental re-introduction.
+forbidden_modules = [
+    "quantmind.flows",
+    "quantmind.magic",
     "quantmind.config",
     "quantmind.flow",
     "quantmind.llm",

@@ -2,9 +2,9 @@
 
 `run_with_observability` wraps `Runner.run` with `RunConfig` derived from
 `BaseFlowCfg`, composes user-supplied `RunHooks` (the SDK accepts only a
-single hooks instance per run), and leaves a no-op call site for the
-PR6 trajectory archive. Flow modules call this instead of touching the
-SDK directly so observability behaviour stays in one place.
+single hooks instance per run), and orchestrates the
+`MemoryRunHooks.persist()` call in `finally` so failed runs still
+produce a trajectory record.
 """
 
 from typing import Any
@@ -12,6 +12,7 @@ from typing import Any
 from agents import Agent, RunConfig, RunHooks, Runner
 
 from quantmind.configs import BaseFlowCfg
+from quantmind.mind.memory import Memory, MemoryRunHooks
 
 
 async def run_with_observability(
@@ -19,7 +20,7 @@ async def run_with_observability(
     input: str | list[Any],
     *,
     cfg: BaseFlowCfg,
-    memory: object | None = None,
+    memory: Memory | None = None,
     extra_run_hooks: list[RunHooks[Any]],
 ) -> Any:
     """Build `RunConfig` + composed hooks, run the agent, return final output.
@@ -30,12 +31,12 @@ async def run_with_observability(
         cfg: Flow configuration. Tracing fields and ``max_turns`` are
             forwarded to the SDK; ``workflow_name`` falls back to
             ``"quantmind.<agent.name>"`` when unset.
-        memory: PR6 ``Memory`` placeholder. Currently unused at runtime;
-            the value is forwarded to the trajectory-archive stub so PR6
-            can wire it in without changing call sites.
-        extra_run_hooks: User-supplied hooks. Composed with any
-            memory-derived hooks (none in PR5) into a single
-            ``RunHooks`` instance.
+        memory: Optional ``Memory`` implementation. When set and
+            ``cfg.archive_trajectory`` is True, ``memory.run_hooks()``
+            participates in the run and ``MemoryRunHooks.persist()``
+            is invoked in ``finally`` (so failures archive too).
+        extra_run_hooks: User-supplied hooks composed after the memory
+            hook.
 
     Returns:
         ``RunResult.final_output`` typed by the agent's ``output_type``.
@@ -47,29 +48,40 @@ async def run_with_observability(
         trace_include_sensitive_data=cfg.trace_include_sensitive_data,
         tracing_disabled=cfg.tracing_disabled,
     )
-    hooks = _compose_hooks(_collect_hooks(memory, extra_run_hooks))
-    result = await Runner.run(
-        agent,
-        input,
-        run_config=run_cfg,
-        hooks=hooks,
-        max_turns=cfg.max_turns,
-    )
-    _archive_run_artifacts(cfg, memory, result)
-    return result.final_output
 
+    memory_hooks: MemoryRunHooks | None = None
+    hooks_list: list[RunHooks[Any]] = []
+    if memory is not None and cfg.archive_trajectory:
+        h = memory.run_hooks()
+        if h is not None:
+            hooks_list.append(h)
+            if isinstance(h, MemoryRunHooks):
+                memory_hooks = h
+    hooks_list.extend(extra_run_hooks)
+    composed = _compose_hooks(hooks_list)
 
-def _collect_hooks(
-    memory: object | None,
-    extras: list[RunHooks[Any]],
-) -> list[RunHooks[Any]]:
-    """Return hooks in run order: memory hooks first (PR6), then extras."""
-    hooks: list[RunHooks[Any]] = []
-    # PR6 will append `memory.run_hooks()` here when `memory` exposes the
-    # `Memory` Protocol. PR5 keeps `memory` opaque and contributes no hooks.
-    del memory
-    hooks.extend(extras)
-    return hooks
+    result: Any = None
+    error: BaseException | None = None
+    try:
+        result = await Runner.run(
+            agent,
+            input,
+            run_config=run_cfg,
+            hooks=composed,
+            max_turns=cfg.max_turns,
+        )
+        return result.final_output
+    except BaseException as exc:
+        error = exc
+        raise
+    finally:
+        if memory_hooks is not None:
+            await memory_hooks.persist(
+                workflow_name=workflow_name,
+                result=result,
+                error=error,
+                input_payload=input,
+            )
 
 
 def _compose_hooks(
@@ -87,8 +99,7 @@ class _CompositeRunHooks(RunHooks[Any]):
     """Fan out every lifecycle method to each wrapped hook in order.
 
     Exceptions from earlier hooks short-circuit the rest by design — hooks
-    are integral to the run, not best-effort. PR6's archive hook should
-    catch its own exceptions internally if it wants resilience.
+    are integral to the run, not best-effort.
     """
 
     def __init__(self, inner: list[RunHooks[Any]]) -> None:
@@ -121,17 +132,3 @@ class _CompositeRunHooks(RunHooks[Any]):
     async def on_tool_end(self, *args: Any, **kwargs: Any) -> None:
         for h in self._inner:
             await h.on_tool_end(*args, **kwargs)
-
-
-def _archive_run_artifacts(
-    cfg: BaseFlowCfg,
-    memory: object | None,
-    result: Any,
-) -> None:
-    """No-op stub. PR6 writes a trajectory record under ``<memory_dir>/runs/``.
-
-    Kept as a real call site (rather than commented-out) so PR6 changes
-    one function body, not the runner's public path.
-    """
-    del cfg, memory, result
-    return None

@@ -8,7 +8,7 @@ variants, fetches and converts the raw payload to markdown via
 
 Customization happens through the configured ``PaperFlowCfg`` (Layer 1)
 or the keyword arguments on this function (Layer 2). To swap the whole
-flow, fork this file (Layer 3 — design doc §9).
+flow, fork this file (Layer 3).
 """
 
 from typing import Any, TypeVar
@@ -26,6 +26,7 @@ from quantmind.configs.paper import (
 )
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import Paper
+from quantmind.mind.memory import Memory
 from quantmind.preprocess.fetch import (
     Fetched,
     fetch_arxiv,
@@ -68,15 +69,17 @@ async def paper_flow(
     extra_tools: list[Tool] | None = None,
     extra_instructions: str | None = None,
     output_type: type[P] | None = None,
-    memory: object | None = None,
+    memory: Memory | None = None,
     extra_run_hooks: list[RunHooks[Any]] | None = None,
     extra_input_guardrails: list[Any] | None = None,
     extra_output_guardrails: list[Any] | None = None,
 ) -> P | Paper:
     """Extract a ``Paper`` from a typed ``PaperInput``.
 
-    See design doc §4.1 for the rationale on each kwarg. ``memory`` is a
-    PR6 placeholder — non-None values are accepted but unused in PR5.
+    When ``memory`` is supplied, ``memory.mcp_servers()`` and
+    ``memory.tools()`` flow through to the Agent unconditionally;
+    trajectory archiving is gated separately by
+    ``cfg.archive_trajectory`` inside the runner.
 
     Raises:
         UnsupportedContentTypeError: When fetched bytes are not PDF /
@@ -89,6 +92,9 @@ async def paper_flow(
 
     raw_md, source_meta = await _fetch_and_format(input)
 
+    mcp_servers = memory.mcp_servers() if memory is not None else []
+    memory_tools = memory.tools() if memory is not None else []
+
     # Agent's `model_settings` parameter is non-optional (defaults to a
     # fresh ``ModelSettings()``); only forward when cfg has one set.
     agent_kwargs: dict[str, Any] = {
@@ -97,7 +103,8 @@ async def paper_flow(
             _DEFAULT_INSTRUCTIONS, extra_instructions, cfg
         ),
         "model": cfg.model,
-        "tools": list(extra_tools or []),
+        "tools": [*(extra_tools or []), *memory_tools],
+        "mcp_servers": mcp_servers,
         "output_type": out_type,
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
