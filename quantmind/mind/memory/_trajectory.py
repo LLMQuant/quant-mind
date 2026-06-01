@@ -7,7 +7,10 @@ JSON line per run, append-only).
 
 Cross-process concurrency is undefined; an ``asyncio.Lock`` (held by
 the calling ``FilesystemMemory``) serialises writes within a single
-Python process.
+Python process. Both files and their parent directory entries are
+``flush()``ed / ``os.fsync``ed before the writer returns so a crash
+immediately after ``await write_run_record(...)`` does not leave the
+per-run JSON or the ``runs.jsonl`` line lost in the kernel cache.
 """
 
 import asyncio
@@ -45,9 +48,14 @@ class RunRecord:
 
 
 def generate_run_id(now: datetime) -> str:
-    """Build ``YYYYMMDDTHHMMSSmmm`` (UTC) plus 3 base36 random chars."""
+    """Build ``YYYYMMDDTHHMMSSmmm`` (UTC) plus 6 base36 random chars.
+
+    6 chars give ``36**6 ≈ 2.2e9`` possibilities per millisecond. With
+    realistic LLM-bound run rates (seconds per call) the birthday-paradox
+    collision probability is negligible.
+    """
     stamp = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}"
-    suffix = "".join(secrets.choice(_BASE36) for _ in range(3))
+    suffix = "".join(secrets.choice(_BASE36) for _ in range(6))
     return f"{stamp}{suffix}"
 
 
@@ -67,6 +75,14 @@ def _serialise(record: RunRecord) -> str:
     )
 
 
+def _fsync_directory(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 async def write_run_record(
     memory_dir: Path,
     record: RunRecord,
@@ -77,23 +93,35 @@ async def write_run_record(
 
     Atomicity:
 
-    - The per-run JSON file is written to ``<run_id>.json.tmp`` and
-      then ``os.replace``-d into place; same-FS rename is atomic on
-      POSIX, preventing partial reads.
+    - The per-run JSON file is written to a unique
+      ``.<run_id>.<rand>.tmp`` and ``os.replace``-d into place — POSIX
+      guarantees the rename is atomic on the same filesystem. The
+      unique tmp name keeps two writers from clobbering each other's
+      ``.tmp`` even if their ``run_id`` happens to collide.
     - The ``runs.jsonl`` append is serialised across one Python
       process via ``archive_lock``; cross-process concurrency is
       unsupported (documented in ``FilesystemMemory``).
+    - Both files and their parent directory entries are explicitly
+      ``flush()`` + ``os.fsync`` before the writer returns, so a crash
+      directly after this coroutine awaits will not lose the run record.
     """
     payload = _serialise(record)
     runs_dir = memory_dir / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     final = runs_dir / f"{record.run_id}.json"
-    tmp = runs_dir / f"{record.run_id}.json.tmp"
-    tmp.write_text(payload, encoding="utf-8")
+    tmp = runs_dir / f".{record.run_id}.{secrets.token_hex(8)}.tmp"
+    with tmp.open("w", encoding="utf-8") as fh:
+        fh.write(payload)
+        fh.flush()
+        os.fsync(fh.fileno())
     os.replace(tmp, final)
+    _fsync_directory(runs_dir)
 
     index = memory_dir / "runs.jsonl"
     async with archive_lock:
         with index.open("a", encoding="utf-8") as fh:
             fh.write(payload)
             fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        _fsync_directory(memory_dir)

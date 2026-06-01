@@ -52,7 +52,7 @@ class GenerateRunIdTests(unittest.TestCase):
     def test_format_matches_documented_shape(self) -> None:
         now = datetime(2026, 5, 8, 12, 30, 45, 123456, tzinfo=timezone.utc)
         run_id = generate_run_id(now)
-        self.assertRegex(run_id, r"^20260508T123045123[0-9a-z]{3}$")
+        self.assertRegex(run_id, r"^20260508T123045123[0-9a-z]{6}$")
 
     def test_different_calls_produce_different_ids(self) -> None:
         now = datetime(2026, 5, 8, 12, 30, 45, 123000, tzinfo=timezone.utc)
@@ -69,8 +69,8 @@ class WriteRunRecordTests(unittest.IsolatedAsyncioTestCase):
             await write_run_record(mem_dir, record, archive_lock=asyncio.Lock())
             target = mem_dir / "runs" / "rid001abc.json"
             self.assertTrue(target.exists())
-            tmp = mem_dir / "runs" / "rid001abc.json.tmp"
-            self.assertFalse(tmp.exists())
+            leftovers = list((mem_dir / "runs").glob(".rid001abc.*.tmp"))
+            self.assertEqual(leftovers, [])
             payload = json.loads(target.read_text())
             self.assertEqual(payload["run_id"], "rid001abc")
             self.assertEqual(
