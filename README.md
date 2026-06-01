@@ -146,34 +146,29 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
    .venv\Scripts\activate
    ```
 
-4. **Install dependencies:**
+4. **One-shot setup (recommended):**
 
    ```bash
-   uv pip install -e .
+   bash scripts/setup.sh
    ```
 
-5. **Optional — Install Node.js + `npx` (only if you plan to use `FilesystemMemory`):**
+   This creates `.venv`, installs Python deps (editable, with `[dev]`
+   extras), and audits non-Python dependencies (Node.js / `npx`,
+   etc.). Missing **required** deps fail the script with a clear hint;
+   missing **optional** deps are reported informationally so you know
+   what is unavailable (e.g., `FilesystemMemory` needs Node.js).
 
-   `FilesystemMemory` launches the MCP filesystem server through `npx`,
-   so cross-step memory examples need a Node.js toolchain. Skip this if
-   you do not call `paper_flow(..., memory=FilesystemMemory(...))`.
+   Adding a new external dependency in a future PR means appending one
+   row to `scripts/check_system_deps.py` — the install flow above
+   stays unchanged.
+
+   **Manual fallback** (equivalent to `setup.sh`):
 
    ```bash
-   # macOS (Homebrew)
-   brew install node
-
-   # Linux (Debian/Ubuntu)
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt-get install -y nodejs
-
-   # Verify
-   node -v       # >= 18.x recommended
-   npx --version
+   uv venv
+   uv pip install -e ".[dev]"
+   .venv/bin/python scripts/check_system_deps.py   # optional audit
    ```
-
-   The first run of `npx -y @modelcontextprotocol/server-filesystem`
-   downloads the package into the local npm cache; subsequent runs
-   reuse it.
 
 ### 📚 Usage Examples
 

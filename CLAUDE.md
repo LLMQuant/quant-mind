@@ -61,18 +61,30 @@ contracts pin the dependency graph: `utils` and `knowledge` are leaves,
 
 ### Environment
 
+One-shot bootstrap (recommended):
+
+```bash
+bash scripts/setup.sh
+```
+
+This creates `.venv`, installs Python deps (`uv pip install -e ".[dev]"`),
+and audits external (non-Python) deps via `scripts/check_system_deps.py`.
+Optional deps that are missing are reported informationally; required
+deps that are missing fail the script.
+
+Manual equivalent:
+
 ```bash
 uv venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
+.venv/bin/python scripts/check_system_deps.py   # optional audit
 ```
 
-**Optional Node.js prerequisite.** `FilesystemMemory` (in
-`quantmind/mind/memory/`) launches the MCP filesystem server via
-`npx -y @modelcontextprotocol/server-filesystem`, so any code or
-example that constructs a `FilesystemMemory` needs Node.js + `npx`
-on PATH. Skip if you do not use cross-step memory. Verify with
-`node -v` and `npx --version`.
+**Adding a new external dependency** (e.g., `tiktoken` is pip; node /
+`sqlite-vec` / etc. are external): append one row to
+`scripts/check_system_deps.py::_DEPS`. README install flow does not
+change — `scripts/setup.sh` picks it up automatically.
 
 ### Verify (canonical local check)
 
