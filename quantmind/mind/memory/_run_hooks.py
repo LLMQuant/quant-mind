@@ -46,9 +46,26 @@ def _safe_repr(obj: Any) -> str:
     if callable(dump):
         try:
             return str(dump())
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError):
+            # Pydantic SerializationError subclasses ValueError; other
+            # errors should not be swallowed. Fall through to ``str(obj)``.
             pass
     return str(obj)
+
+
+def _format_error(error: BaseException | None) -> str | None:
+    """Produce a non-empty string for any ``BaseException`` (or ``None``).
+
+    ``str(KeyboardInterrupt())`` and ``str(asyncio.CancelledError())`` are
+    both ``""``; relying on that in a trajectory record would make the
+    error field indistinguishable from "no error" downstream. We therefore
+    always include the exception type, plus the message when present.
+    """
+    if error is None:
+        return None
+    message = str(error)
+    type_name = type(error).__name__
+    return f"{type_name}: {message}" if message else type_name
 
 
 class MemoryRunHooks(RunHooks[Any]):
@@ -115,10 +132,15 @@ class MemoryRunHooks(RunHooks[Any]):
         start = self._tool_timer_starts.pop(id(tool), None)
         duration = (time.monotonic() - start) if start is not None else 0.0
         name = str(getattr(tool, "name", "") or "")
+        # The SDK's ``on_tool_end`` passes the tool's *result* string, not
+        # the *args* — naming the field accordingly avoids downstream
+        # consumers (e.g., dashboards) misreading what they get.
         self._tool_calls.append(
             {
                 "name": name,
-                "args": (_truncate(str(result)) if result is not None else ""),
+                "result_preview": (
+                    _truncate(str(result)) if result is not None else ""
+                ),
                 "duration_s": round(duration, 4),
             }
         )
@@ -165,7 +187,7 @@ class MemoryRunHooks(RunHooks[Any]):
             cost_estimate_usd=0.0,
             input_summary=_truncate(_safe_repr(input_payload)),
             output_summary=self._output_summary,
-            error=str(error) if error is not None else None,
+            error=_format_error(error),
         )
         await write_run_record(
             self._memory_dir, record, archive_lock=self._archive_lock
