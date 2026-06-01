@@ -5,11 +5,12 @@ prints what the trajectory archive looks like on disk afterwards.
 
 What to look for:
 
-- ``./.qm-memory/`` is created with ``notes/`` ``items/`` ``runs/`` and
+- ``./.qm-memory/workspace/`` is created with ``notes/`` ``items/`` and
   a seeded ``README.md`` (the agent's own usage guide for the dir).
-- One ``runs/<run_id>.json`` file lands per ``paper_flow`` call.
-- ``runs.jsonl`` gets one new line per call (a denormalised index of
-  the per-run files — handy for `jq` / `pandas`).
+- One ``./.qm-memory/runs/<run_id>.json`` file lands per
+  ``paper_flow`` call.
+- ``./.qm-memory/runs.jsonl`` gets one new line per call (a
+  denormalised index of the per-run files — handy for `jq` / `pandas`).
 
 Prerequisites: OPENAI_API_KEY in env, Node.js + npx on PATH.
 

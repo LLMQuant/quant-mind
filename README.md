@@ -236,7 +236,7 @@ from quantmind.mind.memory import FilesystemMemory
 
 async def main() -> None:
     mem = FilesystemMemory("./.qm-memory")
-    arxiv_ids = ["2401.12345", "2402.67890", "2403.11111"]
+    arxiv_ids = ["1706.03762", "1810.04805", "2005.11401"]
     for paper_id in arxiv_ids:
         paper = await paper_flow(
             ArxivIdentifier(id=paper_id),
@@ -250,10 +250,11 @@ asyncio.run(main())
 ```
 
 `FilesystemMemory` requires Node.js + `npx` on PATH (the SDK launches
-`@modelcontextprotocol/server-filesystem` over stdio). Each run also
-writes `<memory_dir>/runs/<run_id>.json` and appends a one-line
-summary to `<memory_dir>/runs.jsonl`. `FilesystemMemory` is for serial
-loops only — `batch_run` rejects `memory=` at the signature layer.
+`@modelcontextprotocol/server-filesystem` over stdio). The Agent sees
+`<memory_dir>/workspace/` (`notes/` and `items/`); system trajectory
+records stay outside that MCP root under `<memory_dir>/runs/<run_id>.json`
+and `<memory_dir>/runs.jsonl`. `FilesystemMemory` is for serial loops
+only — `batch_run` rejects `memory=` at the signature layer.
 
 > **Note**: QuantMind is mid-migration to OpenAI Agents SDK
 > (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR6 lands

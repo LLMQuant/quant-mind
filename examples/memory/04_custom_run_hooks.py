@@ -70,6 +70,15 @@ class ConsoleLoggerHooks(RunHooks[Any]):
     async def on_agent_end(self, context: Any, agent: Any, output: Any) -> None:
         print(f"[my-logger] agent end output_type={type(output).__name__}")
 
+    async def on_handoff(
+        self, context: Any, from_agent: Any, to_agent: Any
+    ) -> None:
+        print(
+            f"[my-logger] handoff "
+            f"{getattr(from_agent, 'name', '?')!r} -> "
+            f"{getattr(to_agent, 'name', '?')!r}"
+        )
+
 
 async def main() -> None:
     mem = FilesystemMemory(Path("./.qm-memory"))

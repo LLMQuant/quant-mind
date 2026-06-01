@@ -46,7 +46,7 @@ def main() -> None:
     total_in = sum(r["tokens_total"]["input"] for r in records)
     total_out = sum(r["tokens_total"]["output"] for r in records)
     total_dur = sum(r["duration_seconds"] for r in records)
-    n_failed = sum(1 for r in records if r["error"])
+    n_failed = sum(1 for r in records if r["error"] is not None)
     print()
     print(
         f"Aggregate: tokens_in={total_in} tokens_out={total_out} "

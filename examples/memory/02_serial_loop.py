@@ -9,9 +9,9 @@ What to look for:
 
 - ``./.qm-memory/runs/`` accumulates one trajectory record per loop
   iteration (3 here).
-- ``./.qm-memory/notes/`` may grow if the Agent decides to write notes
-  while extracting (it sees the seeded ``README.md`` and is encouraged
-  to do so).
+- ``./.qm-memory/workspace/notes/`` may grow if the Agent decides to
+  write notes while extracting (it sees the seeded ``README.md`` and is
+  encouraged to do so).
 - ``./.qm-memory/runs.jsonl`` has 3 appended lines after this script.
 
 This is the "memory-accumulating workflow" pattern. ``batch_run``
@@ -64,7 +64,7 @@ async def main() -> None:
         f"\nTrajectory files: {len(list(runs_dir.glob('*.json')))} in {runs_dir}"
     )
 
-    notes_dir = mem.memory_dir / "notes"
+    notes_dir = mem.workspace / "notes"
     notes = list(notes_dir.glob("*"))
     print(f"Notes the agent left: {len(notes)} in {notes_dir}")
     for n in notes[:5]:
