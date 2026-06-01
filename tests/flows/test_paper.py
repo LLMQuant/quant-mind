@@ -216,6 +216,7 @@ class FormatInputTests(unittest.TestCase):
         self.assertNotIn("b:", out)
 
 
+@patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False)
 class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_happy_path_arxiv(self) -> None:
         raw_paper = RawPaper(
@@ -347,6 +348,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("model_settings", seen)
 
 
+@patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False)
 class PaperFlowMemoryWiringTests(unittest.IsolatedAsyncioTestCase):
     async def test_memory_mcp_servers_passed_to_agent(self) -> None:
         import tempfile

@@ -24,6 +24,7 @@ from quantmind.configs.paper import (
     PaperInput,
     RawText,
 )
+from quantmind.flows._providers import configure_provider
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import Paper
 from quantmind.mind.memory import Memory
@@ -92,6 +93,11 @@ async def paper_flow(
 
     raw_md, source_meta = await _fetch_and_format(input)
 
+    # Resolve the provider from cfg.model so the user only needs to set
+    # the model string (e.g., "deepseek-chat" vs "gpt-4o") — no manual
+    # client / api / tracing setup required at the call site.
+    agent_model, cfg = configure_provider(cfg)
+
     mcp_servers = memory.mcp_servers() if memory is not None else []
     memory_tools = memory.tools() if memory is not None else []
 
@@ -102,7 +108,7 @@ async def paper_flow(
         "instructions": _compose_instructions(
             _DEFAULT_INSTRUCTIONS, extra_instructions, cfg
         ),
-        "model": cfg.model,
+        "model": agent_model,
         "tools": [*(extra_tools or []), *memory_tools],
         "mcp_servers": mcp_servers,
         "output_type": out_type,
