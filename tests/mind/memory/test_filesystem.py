@@ -7,25 +7,51 @@ from pathlib import Path
 from agents.mcp import MCPServerStdio
 
 from quantmind.mind.memory._run_hooks import MemoryRunHooks
-from quantmind.mind.memory.filesystem import FilesystemMemory
+from quantmind.mind.memory.filesystem import _MARKER_NAME, FilesystemMemory
 
 
 class FilesystemMemoryInitTests(unittest.TestCase):
     def test_creates_subdirs_and_readme(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             mem = FilesystemMemory(raw)
-            for sub in ("notes", "items", "runs"):
-                self.assertTrue((mem.memory_dir / sub).is_dir())
-            self.assertTrue((mem.memory_dir / "README.md").exists())
+            self.assertTrue((mem.memory_dir / _MARKER_NAME).exists())
+            self.assertTrue(mem.workspace.is_dir())
+            for sub in ("notes", "items"):
+                self.assertTrue((mem.workspace / sub).is_dir())
+            self.assertTrue((mem.memory_dir / "runs").is_dir())
+            self.assertTrue((mem.workspace / "README.md").exists())
 
     def test_readme_only_seeded_once(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             mem = FilesystemMemory(raw)
-            (mem.memory_dir / "README.md").write_text("custom")
+            (mem.workspace / "README.md").write_text("custom")
             FilesystemMemory(raw)
             self.assertEqual(
-                (mem.memory_dir / "README.md").read_text(), "custom"
+                (mem.workspace / "README.md").read_text(), "custom"
             )
+
+    def test_rejects_non_empty_directory_without_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw)
+            (path / "user-data.txt").write_text("x")
+            with self.assertRaises(ValueError):
+                FilesystemMemory(path)
+
+    def test_accepts_non_empty_directory_with_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw)
+            (path / _MARKER_NAME).touch()
+            (path / "user-data.txt").write_text("x")
+            mem = FilesystemMemory(path)
+            self.assertTrue(mem.workspace.is_dir())
+            self.assertTrue((path / "user-data.txt").exists())
+
+    def test_deleted_marker_rejects_existing_memory_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            (mem.memory_dir / _MARKER_NAME).unlink()
+            with self.assertRaises(ValueError):
+                FilesystemMemory(raw)
 
     def test_rejects_root_path(self) -> None:
         with self.assertRaises(ValueError):
@@ -48,6 +74,8 @@ class FilesystemMemoryMethodsTests(unittest.TestCase):
             servers = mem.mcp_servers()
             self.assertEqual(len(servers), 1)
             self.assertIsInstance(servers[0], MCPServerStdio)
+            self.assertEqual(servers[0].params.command, "npx")
+            self.assertEqual(servers[0].params.args[-1], str(mem.workspace))
 
     def test_mcp_servers_returns_fresh_instance_each_call(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -70,13 +98,16 @@ class FilesystemMemoryResetTests(unittest.IsolatedAsyncioTestCase):
     async def test_reset_wipes_subdirs_and_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             mem = FilesystemMemory(raw)
-            (mem.memory_dir / "notes" / "n.md").write_text("x")
-            (mem.memory_dir / "items" / "i.json").write_text("{}")
+            (mem.workspace / "notes" / "n.md").write_text("x")
+            (mem.workspace / "items" / "i.json").write_text("{}")
             (mem.memory_dir / "runs" / "r.json").write_text("{}")
             (mem.memory_dir / "runs.jsonl").write_text("{}\n")
             await mem.reset()
-            for sub in ("notes", "items", "runs"):
-                self.assertTrue((mem.memory_dir / sub).is_dir())
-                self.assertEqual(list((mem.memory_dir / sub).iterdir()), [])
+            for sub in ("notes", "items"):
+                self.assertTrue((mem.workspace / sub).is_dir())
+                self.assertEqual(list((mem.workspace / sub).iterdir()), [])
+            self.assertTrue((mem.memory_dir / "runs").is_dir())
+            self.assertEqual(list((mem.memory_dir / "runs").iterdir()), [])
             self.assertFalse((mem.memory_dir / "runs.jsonl").exists())
-            self.assertTrue((mem.memory_dir / "README.md").exists())
+            self.assertTrue((mem.workspace / "README.md").exists())
+            self.assertTrue((mem.memory_dir / _MARKER_NAME).exists())
