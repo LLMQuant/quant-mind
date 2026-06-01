@@ -241,7 +241,64 @@ class RunnerMemoryWiringTests(unittest.IsolatedAsyncioTestCase):
                     )
             self.assertEqual(mock_write.await_count, 1)
             record = mock_write.await_args.args[1]
-            self.assertEqual(record.error, "boom")
+            self.assertEqual(record.error, "RuntimeError: boom")
+
+    async def test_persist_failure_does_not_mask_run_error(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            cfg = PaperFlowCfg()
+            agent = MagicMock()
+            agent.name = "paper_extractor"
+            boom = RuntimeError("boom")
+            with (
+                patch(
+                    "quantmind.flows._runner.Runner.run",
+                    new=AsyncMock(side_effect=boom),
+                ),
+                patch(
+                    "quantmind.mind.memory._run_hooks.write_run_record",
+                    new=AsyncMock(side_effect=OSError("disk full")),
+                ) as mock_write,
+                patch("quantmind.flows._runner.logger.warning") as warning,
+            ):
+                with self.assertRaises(RuntimeError) as ctx:
+                    await run_with_observability(
+                        agent,
+                        "input",
+                        cfg=cfg,
+                        memory=mem,
+                        extra_run_hooks=[],
+                    )
+            self.assertIs(ctx.exception, boom)
+            self.assertEqual(mock_write.await_count, 1)
+            warning.assert_called_once()
+
+    async def test_persist_failure_surfaces_after_success(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            mem = FilesystemMemory(raw)
+            cfg = PaperFlowCfg()
+            agent = MagicMock()
+            agent.name = "paper_extractor"
+            with (
+                patch(
+                    "quantmind.flows._runner.Runner.run",
+                    new=AsyncMock(return_value=_FakeRunResult("done")),
+                ),
+                patch(
+                    "quantmind.mind.memory._run_hooks.write_run_record",
+                    new=AsyncMock(side_effect=OSError("disk full")),
+                ) as mock_write,
+            ):
+                with self.assertRaises(OSError) as ctx:
+                    await run_with_observability(
+                        agent,
+                        "input",
+                        cfg=cfg,
+                        memory=mem,
+                        extra_run_hooks=[],
+                    )
+            self.assertEqual(str(ctx.exception), "disk full")
+            self.assertEqual(mock_write.await_count, 1)
 
     async def test_archive_trajectory_false_skips_memory_hooks(
         self,

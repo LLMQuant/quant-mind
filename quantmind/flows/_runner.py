@@ -2,9 +2,10 @@
 
 `run_with_observability` wraps `Runner.run` with `RunConfig` derived from
 `BaseFlowCfg`, composes user-supplied `RunHooks` (the SDK accepts only a
-single hooks instance per run), and orchestrates the
-`MemoryRunHooks.persist()` call in `finally` so failed runs still
-produce a trajectory record.
+single hooks instance per run), and orchestrates the trajectory archive
+in `finally` so failed runs still produce a `RunRecord` (with `error`
+set). The persistence call is guarded so its own failure never masks
+the original run exception.
 """
 
 from typing import Any
@@ -12,7 +13,10 @@ from typing import Any
 from agents import Agent, RunConfig, RunHooks, Runner
 
 from quantmind.configs import BaseFlowCfg
-from quantmind.mind.memory import Memory, MemoryRunHooks
+from quantmind.mind.memory import Memory
+from quantmind.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 async def run_with_observability(
@@ -33,8 +37,9 @@ async def run_with_observability(
             ``"quantmind.<agent.name>"`` when unset.
         memory: Optional ``Memory`` implementation. When set and
             ``cfg.archive_trajectory`` is True, ``memory.run_hooks()``
-            participates in the run and ``MemoryRunHooks.persist()``
-            is invoked in ``finally`` (so failures archive too).
+            participates in the run; if the returned hook exposes a
+            ``persist(...)`` coroutine (duck-typed) it is invoked in
+            ``finally`` so failures archive too.
         extra_run_hooks: User-supplied hooks composed after the memory
             hook.
 
@@ -49,14 +54,14 @@ async def run_with_observability(
         tracing_disabled=cfg.tracing_disabled,
     )
 
-    memory_hooks: MemoryRunHooks | None = None
+    persistable_hook: Any = None
     hooks_list: list[RunHooks[Any]] = []
     if memory is not None and cfg.archive_trajectory:
         h = memory.run_hooks()
         if h is not None:
             hooks_list.append(h)
-            if isinstance(h, MemoryRunHooks):
-                memory_hooks = h
+            if callable(getattr(h, "persist", None)):
+                persistable_hook = h
     hooks_list.extend(extra_run_hooks)
     composed = _compose_hooks(hooks_list)
 
@@ -75,13 +80,26 @@ async def run_with_observability(
         error = exc
         raise
     finally:
-        if memory_hooks is not None:
-            await memory_hooks.persist(
-                workflow_name=workflow_name,
-                result=result,
-                error=error,
-                input_payload=input,
-            )
+        if persistable_hook is not None:
+            try:
+                await persistable_hook.persist(
+                    workflow_name=workflow_name,
+                    result=result,
+                    error=error,
+                    input_payload=input,
+                )
+            except BaseException as persist_exc:
+                # Never let an archive failure mask an in-flight run
+                # exception (which is the user's actual problem). When
+                # the run succeeded, surface the archive failure normally.
+                if error is None:
+                    raise
+                logger.warning(
+                    "Failed to persist trajectory record after run failure "
+                    "(%s); original error preserved.",
+                    persist_exc,
+                    exc_info=True,
+                )
 
 
 def _compose_hooks(
