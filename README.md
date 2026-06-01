@@ -152,6 +152,29 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
    uv pip install -e .
    ```
 
+5. **Optional — Install Node.js + `npx` (only if you plan to use `FilesystemMemory`):**
+
+   `FilesystemMemory` launches the MCP filesystem server through `npx`,
+   so cross-step memory examples need a Node.js toolchain. Skip this if
+   you do not call `paper_flow(..., memory=FilesystemMemory(...))`.
+
+   ```bash
+   # macOS (Homebrew)
+   brew install node
+
+   # Linux (Debian/Ubuntu)
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   sudo apt-get install -y nodejs
+
+   # Verify
+   node -v       # >= 18.x recommended
+   npx --version
+   ```
+
+   The first run of `npx -y @modelcontextprotocol/server-filesystem`
+   downloads the package into the local npm cache; subsequent runs
+   reuse it.
+
 ### 📚 Usage Examples
 
 #### Run a single paper through `paper_flow`

@@ -67,6 +67,13 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
+**Optional Node.js prerequisite.** `FilesystemMemory` (in
+`quantmind/mind/memory/`) launches the MCP filesystem server via
+`npx -y @modelcontextprotocol/server-filesystem`, so any code or
+example that constructs a `FilesystemMemory` needs Node.js + `npx`
+on PATH. Skip if you do not use cross-step memory. Verify with
+`node -v` and `npx --version`.
+
 ### Verify (canonical local check)
 
 `scripts/verify.sh` is the single source of truth for "is this branch
