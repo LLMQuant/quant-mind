@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from typing import Optional, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from agents import AgentOutputSchema
 from pydantic import BaseModel
 
 from quantmind.configs import PaperFlowCfg
@@ -68,12 +69,30 @@ class IntrospectFlowSignatureTests(unittest.TestCase):
 
 class PydanticSchemaStrTests(unittest.TestCase):
     def test_basemodel_renders_json_schema(self) -> None:
-        # PaperFlowCfg embeds ModelSettings which has callable fields;
-        # the renderer falls back to a fields summary in that case.
+        # PaperFlowCfg embeds ModelSettings, but model_settings is
+        # SkipJsonSchema'd, so the cfg now renders a FULL JSON schema (no
+        # fields-summary fallback) with model_settings omitted.
         out = _pydantic_schema_str(PaperFlowCfg)
         parsed = json.loads(out)
         self.assertEqual(parsed.get("title"), "PaperFlowCfg")
-        self.assertIn("model", parsed["fields"])
+        self.assertIn("model", parsed["properties"])
+        self.assertNotIn("model_settings", parsed["properties"])
+
+    def test_unschemable_field_falls_back_to_fields_summary(self) -> None:
+        # Defensive fallback in _pydantic_schema_str: a model with a genuinely
+        # un-schemable field still yields a usable name+fields summary.
+        from collections.abc import Callable
+
+        from pydantic import ConfigDict
+
+        class _Unschemable(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+            fn: Callable[[], int]
+
+        out = _pydantic_schema_str(_Unschemable)
+        parsed = json.loads(out)
+        self.assertEqual(parsed["title"], "_Unschemable")
+        self.assertIn("fn", parsed["fields"])
 
     def test_basemodel_with_clean_schema(self) -> None:
         class Clean(BaseModel):
@@ -135,6 +154,10 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
         # Resolver agent was given a name derived from the flow.
         self.assertEqual(captured["name"], "magic_resolver_paper_flow")
         self.assertEqual(captured["model"], "gpt-4o-mini")
+        # Output type is wrapped non-strict so the union/knowledge schema is
+        # accepted (guards the AgentOutputSchema wrap in resolve_magic_input).
+        self.assertIsInstance(captured["output_type"], AgentOutputSchema)
+        self.assertFalse(captured["output_type"].is_strict_json_schema())
 
     async def test_custom_resolver_instructions(self) -> None:
         captured: dict[str, object] = {}
@@ -220,3 +243,21 @@ class PreviewResolveTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("input_obj:", out)
         self.assertIn("cfg_obj:", out)
         self.assertIn("2604.12345", out)
+
+
+class ResolverOutputSchemaTests(unittest.TestCase):
+    def test_resolver_output_type_builds_despite_model_settings(self) -> None:
+        # The real resolver output-type construction (see resolve_magic_input).
+        # Two layers had to be fixed and both are exercised here: SkipJsonSchema
+        # on model_settings lets the schema build at all (no CallableSchema), and
+        # strict_json_schema=False accepts the additionalProperties the
+        # discriminated-union + knowledge models emit. Either layer alone
+        # crashed — caught by the live-fire, not the mocked-Runner tests above.
+        schema_obj = AgentOutputSchema(
+            ResolvedFlowConfig[PaperInput, PaperFlowCfg],
+            strict_json_schema=False,
+        )
+        js = schema_obj.json_schema()
+        self.assertIsInstance(js, dict)
+        # model_settings is intentionally absent from the LLM-facing schema.
+        self.assertNotIn("model_settings", json.dumps(js))

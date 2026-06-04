@@ -19,7 +19,7 @@ import types
 from collections.abc import Awaitable, Callable
 from typing import Any, Generic, TypeVar, Union, get_args, get_origin
 
-from agents import Agent, Runner
+from agents import Agent, AgentOutputSchema, Runner
 from pydantic import BaseModel
 
 from quantmind.configs.base import BaseFlowCfg
@@ -91,7 +91,15 @@ async def resolve_magic_input(
         name=f"magic_resolver_{target_flow.__name__}",
         instructions=instructions,
         model=resolver_model,
-        output_type=ResolvedFlowConfig[input_type, cfg_type],  # type: ignore[valid-type]
+        output_type=AgentOutputSchema(
+            # Two layers, both required: model_settings is SkipJsonSchema'd in
+            # BaseFlowCfg so the schema builds at all (ModelSettings has callable
+            # fields), and strict_json_schema=False accepts the
+            # additionalProperties the discriminated-union + knowledge models
+            # emit (same rationale as flows/paper.py).
+            ResolvedFlowConfig[input_type, cfg_type],  # type: ignore[valid-type]
+            strict_json_schema=False,
+        ),
     )
     result = await Runner.run(resolver, natural_language)
     out = result.final_output

@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from agents import RunHooks
+from agents import AgentOutputSchema, RunHooks
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -25,7 +25,7 @@ from quantmind.flows.paper import (
     _format_input,
     paper_flow,
 )
-from quantmind.knowledge import Paper, SourceRef, TreeNode
+from quantmind.knowledge import Paper, PaperExtraction, SourceRef, TreeNode
 from quantmind.preprocess.fetch import Fetched, RawPaper
 
 
@@ -273,7 +273,31 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             _patch_runner(_stub_paper()),
         ):
             await paper_flow(RawText(text="x"), output_type=MyPaper)
-        self.assertIs(seen["output_type"], MyPaper)
+        # output_type is wrapped in AgentOutputSchema(strict_json_schema=False)
+        # so QuantMind's non-strict knowledge schema is accepted; the override
+        # type is preserved inside the wrapper.
+        self.assertIsInstance(seen["output_type"], AgentOutputSchema)
+        self.assertIs(seen["output_type"].output_type, MyPaper)
+        self.assertFalse(seen["output_type"].is_strict_json_schema())
+
+    async def test_default_output_type_is_slug_tolerant_extraction(
+        self,
+    ) -> None:
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            _patch_runner(_stub_paper()),
+        ):
+            await paper_flow(RawText(text="x"))
+        # No override -> the flow must default to the slug-tolerant extraction
+        # model so the LLM's slug ids get canonicalised to UUIDs.
+        self.assertIsInstance(seen["output_type"], AgentOutputSchema)
+        self.assertIs(seen["output_type"].output_type, PaperExtraction)
 
     async def test_extra_tools_and_guardrails_forwarded(self) -> None:
         seen: dict[str, Any] = {}
