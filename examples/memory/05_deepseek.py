@@ -59,7 +59,10 @@ async def main() -> None:
         cfg=cfg,
         memory=mem,
     )
-    print(f"Extracted paper: {paper.title!r}")
+    root = paper.nodes[paper.root_node_id]
+    print(f"Extracted paper: {root.title!r}")
+    print(f"  authors: {list(paper.authors)}")
+    print(f"  nodes:   {len(paper.nodes)}")
 
     # Sanity-check that the trajectory record landed and captured
     # provider-correct token usage.

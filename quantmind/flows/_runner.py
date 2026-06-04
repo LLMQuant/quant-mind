@@ -8,6 +8,7 @@ set). The persistence call is guarded so its own failure never masks
 the original run exception.
 """
 
+from contextlib import AsyncExitStack
 from typing import Any
 
 from agents import Agent, RunConfig, RunHooks, Runner
@@ -68,14 +69,22 @@ async def run_with_observability(
     result: Any = None
     error: BaseException | None = None
     try:
-        result = await Runner.run(
-            agent,
-            input,
-            run_config=run_cfg,
-            hooks=composed,
-            max_turns=cfg.max_turns,
-        )
-        return result.final_output
+        # MCP servers are async context managers; the SDK does NOT
+        # auto-connect them — list_tools() raises if connect() was
+        # never called. We enter them here so the agent's Runner.run
+        # sees connected servers, and exit them on the way out so the
+        # ``npx`` subprocesses are reaped even on exception.
+        async with AsyncExitStack() as mcp_stack:
+            for server in getattr(agent, "mcp_servers", []) or []:
+                await mcp_stack.enter_async_context(server)
+            result = await Runner.run(
+                agent,
+                input,
+                run_config=run_cfg,
+                hooks=composed,
+                max_turns=cfg.max_turns,
+            )
+            return result.final_output
     except BaseException as exc:
         error = exc
         raise

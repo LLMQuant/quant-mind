@@ -274,7 +274,8 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             _patch_runner(_stub_paper()),
         ):
             await paper_flow(RawText(text="x"), output_type=MyPaper)
-        self.assertIs(seen["output_type"], MyPaper)
+        # paper_flow wraps the output_type in AgentOutputSchema(strict=False).
+        self.assertIs(seen["output_type"].output_type, MyPaper)
 
     async def test_extra_tools_and_guardrails_forwarded(self) -> None:
         seen: dict[str, Any] = {}
@@ -433,3 +434,92 @@ class PaperFlowMemoryWiringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(seen["tools"]), 2)
         self.assertIs(seen["tools"][0], _extra_tool)
         self.assertIs(seen["tools"][1], _memory_tool)
+
+
+class ExtractJsonHelperTests(unittest.TestCase):
+    def test_bare_json_unchanged(self) -> None:
+        from quantmind.flows.paper import _extract_json
+
+        s = '{"k": "v"}'
+        self.assertEqual(_extract_json(s), s)
+
+    def test_strips_fences_with_language_tag(self) -> None:
+        from quantmind.flows.paper import _extract_json
+
+        s = '```json\n{"k": "v"}\n```'
+        self.assertEqual(_extract_json(s), '{"k": "v"}')
+
+    def test_strips_fences_without_language_tag(self) -> None:
+        from quantmind.flows.paper import _extract_json
+
+        s = '```\n{"k": "v"}\n```'
+        self.assertEqual(_extract_json(s), '{"k": "v"}')
+
+    def test_handles_trailing_whitespace(self) -> None:
+        from quantmind.flows.paper import _extract_json
+
+        s = '  ```json\n{"k": "v"}\n```\n\n'
+        self.assertEqual(_extract_json(s), '{"k": "v"}')
+
+
+@patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-test-deepseek"}, clear=False)
+class PaperFlowJsonModeBranchTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for the ``supports_json_schema=False`` branch (DeepSeek-like)."""
+
+    async def test_json_mode_path_skips_output_type_and_sets_extra_body(
+        self,
+    ) -> None:
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        stub_paper = _stub_paper()
+        # Runner returns a JSON string that round-trips through
+        # Paper.model_validate_json — the simplest reliable way is to
+        # round-trip the stub.
+        json_payload = stub_paper.model_dump_json()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            patch(
+                "quantmind.flows.paper.run_with_observability",
+                new=AsyncMock(return_value=json_payload),
+            ),
+        ):
+            out = await paper_flow(
+                RawText(text="x"),
+                cfg=PaperFlowCfg(model="deepseek-chat"),
+            )
+
+        # output_type must NOT be set in the json_object path.
+        self.assertNotIn("output_type", seen)
+        # response_format=json_object must be in extra_body.
+        ms = seen["model_settings"]
+        self.assertEqual(
+            ms.extra_body["response_format"], {"type": "json_object"}
+        )
+        # Instructions must embed the schema for the model to follow.
+        self.assertIn("JSON Schema", seen["instructions"])
+        # Final return must be a parsed Paper instance, not the raw string.
+        self.assertIsInstance(out, Paper)
+        self.assertEqual(out.root_node_id, stub_paper.root_node_id)
+
+    async def test_json_mode_path_strips_markdown_fences(self) -> None:
+        stub_paper = _stub_paper()
+        json_payload = stub_paper.model_dump_json()
+        fenced = f"```json\n{json_payload}\n```"
+
+        with (
+            patch("quantmind.flows.paper.Agent", return_value=MagicMock()),
+            patch(
+                "quantmind.flows.paper.run_with_observability",
+                new=AsyncMock(return_value=fenced),
+            ),
+        ):
+            out = await paper_flow(
+                RawText(text="x"),
+                cfg=PaperFlowCfg(model="deepseek-chat"),
+            )
+        self.assertIsInstance(out, Paper)

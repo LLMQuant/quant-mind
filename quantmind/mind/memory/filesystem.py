@@ -122,6 +122,12 @@ class FilesystemMemory:
         return []
 
     def mcp_servers(self) -> list[MCPServer]:
+        # The SDK default 5s timeout is too tight for the first run of
+        # `npx -y @modelcontextprotocol/server-filesystem` (npm has to
+        # resolve + extract the package on a cold cache, easily 10-20s
+        # on slow connections). Bumping to 30s keeps subsequent
+        # already-cached runs fast (~hundreds of ms to launch) while
+        # making the first-run experience reliable.
         return [
             MCPServerStdio(
                 name="quantmind_memory_fs",
@@ -133,6 +139,7 @@ class FilesystemMemory:
                         str(self.workspace),
                     ],
                 },
+                client_session_timeout_seconds=30.0,
             )
         ]
 

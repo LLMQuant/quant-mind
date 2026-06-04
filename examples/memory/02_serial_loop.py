@@ -56,7 +56,7 @@ async def main() -> None:
     for idx, body in enumerate(_FAKE_PAPERS, start=1):
         print(f"\n=== run {idx}/3 ===")
         paper = await paper_flow(RawText(text=body), memory=mem)
-        print(f"  -> {paper.title!r}")
+        print(f"  -> {paper.nodes[paper.root_node_id].title!r}")
 
     # Quick post-run summary.
     runs_dir = mem.memory_dir / "runs"

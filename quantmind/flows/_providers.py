@@ -35,6 +35,20 @@ _CfgT = TypeVar("_CfgT", bound=BaseFlowCfg)
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderCapabilities:
+    """Provider capability flags consumed by flow output handling."""
+
+    name: str
+    supports_json_schema: bool
+    """True = provider accepts ``response_format={"type":"json_schema",...}``
+    (OpenAI-style structured outputs). False = provider only supports the
+    looser ``{"type":"json_object"}`` mode, in which case the flow must
+    inject the Pydantic schema into the instructions and validate the
+    raw JSON string after the run.
+    """
+
+
+@dataclass(frozen=True, slots=True)
 class _ProviderConfig:
     """How to talk to a specific LLM provider."""
 
@@ -47,6 +61,7 @@ class _ProviderConfig:
     tracing_supported: (
         bool  # False = force-disable to avoid 4xx to platform.openai.com
     )
+    supports_json_schema: bool  # False = paper_flow uses json_object + parse
 
 
 # Order matters: the first prefix that matches ``cfg.model.lower()`` wins.
@@ -62,6 +77,7 @@ _PROVIDERS: tuple[tuple[str, _ProviderConfig], ...] = (
             api_key_env="DEEPSEEK_API_KEY",
             use_chat_completions=True,
             tracing_supported=False,
+            supports_json_schema=False,
         ),
     ),
     (
@@ -72,6 +88,7 @@ _PROVIDERS: tuple[tuple[str, _ProviderConfig], ...] = (
             api_key_env="OPENAI_API_KEY",
             use_chat_completions=False,
             tracing_supported=True,
+            supports_json_schema=True,
         ),
     ),
     (
@@ -82,6 +99,7 @@ _PROVIDERS: tuple[tuple[str, _ProviderConfig], ...] = (
             api_key_env="OPENAI_API_KEY",
             use_chat_completions=False,
             tracing_supported=True,
+            supports_json_schema=True,
         ),
     ),
     (
@@ -92,6 +110,7 @@ _PROVIDERS: tuple[tuple[str, _ProviderConfig], ...] = (
             api_key_env="OPENAI_API_KEY",
             use_chat_completions=False,
             tracing_supported=True,
+            supports_json_schema=True,
         ),
     ),
 )
@@ -107,6 +126,15 @@ def _resolve(model: str) -> _ProviderConfig:
         if model_lc.startswith(prefix):
             return cfg
     return _DEFAULT_PROVIDER
+
+
+def provider_capabilities(model: str) -> ProviderCapabilities:
+    """Public capability lookup for flow output-handling branches."""
+    provider = _resolve(model)
+    return ProviderCapabilities(
+        name=provider.name,
+        supports_json_schema=provider.supports_json_schema,
+    )
 
 
 @lru_cache(maxsize=16)

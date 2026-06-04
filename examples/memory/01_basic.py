@@ -43,7 +43,7 @@ async def main() -> None:
         ),
         memory=mem,
     )
-    print(f"Extracted paper: {paper.title!r}")
+    print(f"Extracted paper: {paper.nodes[paper.root_node_id].title!r}")
 
     # Show what landed under .qm-memory/.
     print(f"\nMemory layout under {memory_dir}:")

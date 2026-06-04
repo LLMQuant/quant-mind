@@ -11,9 +11,11 @@ or the keyword arguments on this function (Layer 2). To swap the whole
 flow, fork this file (Layer 3).
 """
 
-from typing import Any, TypeVar
+import dataclasses
+import json
+from typing import Any, TypeVar, cast
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, ModelSettings, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -24,7 +26,7 @@ from quantmind.configs.paper import (
     PaperInput,
     RawText,
 )
-from quantmind.flows._providers import configure_provider
+from quantmind.flows._providers import configure_provider, provider_capabilities
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import Paper
 from quantmind.mind.memory import Memory
@@ -97,34 +99,90 @@ async def paper_flow(
     # the model string (e.g., "deepseek-chat" vs "gpt-4o") — no manual
     # client / api / tracing setup required at the call site.
     agent_model, cfg = configure_provider(cfg)
+    caps = provider_capabilities(cfg.model)
 
     mcp_servers = memory.mcp_servers() if memory is not None else []
     memory_tools = memory.tools() if memory is not None else []
 
-    # Agent's `model_settings` parameter is non-optional (defaults to a
-    # fresh ``ModelSettings()``); only forward when cfg has one set.
+    base_instructions = _compose_instructions(
+        _DEFAULT_INSTRUCTIONS, extra_instructions, cfg
+    )
+
+    # Two output-handling paths:
+    #
+    # 1. supports_json_schema=True  (OpenAI, ...):
+    #      AgentOutputSchema drives ``response_format={"type":"json_schema"}``.
+    #      The SDK validates against the schema server-side and returns a
+    #      Pydantic instance directly.
+    #
+    # 2. supports_json_schema=False (DeepSeek, ...):
+    #      Provider only accepts ``{"type":"json_object"}`` JSON mode. We
+    #      embed the Pydantic schema text in the instructions, set
+    #      ``model_settings.extra_body.response_format`` to json_object,
+    #      keep output_type=None so the Agent returns the raw string, and
+    #      validate locally with ``out_type.model_validate_json``.
+    if caps.supports_json_schema:
+        instructions = base_instructions
+        # Non-strict still gives Pydantic validation on the SDK side
+        # without forcing every field to be required.
+        output_type_arg: Any = AgentOutputSchema(
+            out_type, strict_json_schema=False
+        )
+        effective_model_settings = cfg.model_settings
+    else:
+        instructions = (
+            base_instructions + "\n\nIMPORTANT — output format:\n"
+            "Return ONLY a single JSON object (no prose, no markdown "
+            "fences) that conforms to this JSON Schema. Every field "
+            "marked as `format: uuid` MUST be a real RFC 4122 UUID "
+            "(e.g., `12345678-1234-5678-1234-567812345678`); do NOT "
+            "emit placeholder strings like `root-uuid-here`. Every "
+            "field marked as `format: date-time` MUST be an ISO 8601 "
+            "timestamp.\n\n"
+            f"```json\n{json.dumps(out_type.model_json_schema(), ensure_ascii=False)}\n```\n"
+        )
+        output_type_arg = None  # raw string return; we parse below
+        # Merge json_object response_format into any user-provided
+        # model_settings.extra_body.
+        base_ms = cfg.model_settings or ModelSettings()
+        # ``extra_body`` is typed as ``httpx.Body`` (a narrow union) but
+        # the SDK forwards it as kwargs to AsyncOpenAI's request layer
+        # which accepts any JSON-serialisable dict. We cast to keep the
+        # branch type-clean without loosening the SDK's signature.
+        existing_extra: dict[str, Any] = dict(
+            cast(dict[str, Any], base_ms.extra_body or {})
+        )
+        existing_extra["response_format"] = {"type": "json_object"}
+        effective_model_settings = dataclasses.replace(
+            base_ms, extra_body=cast(Any, existing_extra)
+        )
+
     agent_kwargs: dict[str, Any] = {
         "name": "paper_extractor",
-        "instructions": _compose_instructions(
-            _DEFAULT_INSTRUCTIONS, extra_instructions, cfg
-        ),
+        "instructions": instructions,
         "model": agent_model,
         "tools": [*(extra_tools or []), *memory_tools],
         "mcp_servers": mcp_servers,
-        "output_type": out_type,
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }
-    if cfg.model_settings is not None:
-        agent_kwargs["model_settings"] = cfg.model_settings
+    if output_type_arg is not None:
+        agent_kwargs["output_type"] = output_type_arg
+    if effective_model_settings is not None:
+        agent_kwargs["model_settings"] = effective_model_settings
     agent: Agent[Any] = Agent(**agent_kwargs)
-    return await run_with_observability(
+    result = await run_with_observability(
         agent,
         _format_input(raw_md, source_meta),
         cfg=cfg,
         memory=memory,
         extra_run_hooks=list(extra_run_hooks or []),
     )
+
+    if caps.supports_json_schema:
+        return result
+    # json_object path: result is a raw string; parse + validate.
+    return out_type.model_validate_json(_extract_json(result))
 
 
 async def _fetch_and_format(
@@ -214,3 +272,24 @@ def _format_input(raw_md: str, source_meta: dict[str, Any]) -> str:
     return (
         f"--- Source metadata ---\n{header}\n\n--- Paper content ---\n{raw_md}"
     )
+
+
+def _extract_json(raw: str) -> str:
+    r"""Strip optional markdown fences around a JSON payload.
+
+    Even when the system prompt forbids markdown fences, some models
+    still wrap their output in ``\`\`\`json ... \`\`\``. We strip that
+    one common case so ``model_validate_json`` does not choke on it;
+    everything else is left untouched and Pydantic surfaces a clear
+    error if the payload is still not valid JSON.
+    """
+    s = raw.strip()
+    if not s.startswith("```"):
+        return s
+    lines = s.splitlines()
+    # Drop the opening fence (``` or ```json).
+    lines = lines[1:]
+    # Drop the closing fence, if present.
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()

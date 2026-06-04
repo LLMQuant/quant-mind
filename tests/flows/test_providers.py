@@ -8,7 +8,12 @@ from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from agents.models.openai_responses import OpenAIResponsesModel
 
 from quantmind.configs import PaperFlowCfg
-from quantmind.flows._providers import _get_client, _resolve, configure_provider
+from quantmind.flows._providers import (
+    _get_client,
+    _resolve,
+    configure_provider,
+    provider_capabilities,
+)
 
 
 class ResolveTests(unittest.TestCase):
@@ -98,3 +103,19 @@ class ConfigureProviderTests(unittest.TestCase):
             m2, _ = configure_provider(cfg)
         # Both Model wrappers should share the same underlying client.
         self.assertIs(m1._client, m2._client)
+
+
+class ProviderCapabilitiesTests(unittest.TestCase):
+    def test_openai_supports_json_schema(self) -> None:
+        caps = provider_capabilities("gpt-4o")
+        self.assertTrue(caps.supports_json_schema)
+        self.assertEqual(caps.name, "openai")
+
+    def test_deepseek_lacks_json_schema(self) -> None:
+        caps = provider_capabilities("deepseek-chat")
+        self.assertFalse(caps.supports_json_schema)
+        self.assertEqual(caps.name, "deepseek")
+
+    def test_unknown_model_inherits_default_caps(self) -> None:
+        caps = provider_capabilities("some-future-model")
+        self.assertTrue(caps.supports_json_schema)  # fallback = OpenAI

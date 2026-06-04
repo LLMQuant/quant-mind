@@ -93,7 +93,7 @@ async def main() -> None:
         memory=mem,
         extra_run_hooks=[ConsoleLoggerHooks()],
     )
-    print(f"\nExtracted: {paper.title!r}")
+    print(f"\nExtracted: {paper.nodes[paper.root_node_id].title!r}")
     print(
         f"\nTrajectory file: "
         f"{sorted((mem.memory_dir / 'runs').glob('*.json'))[-1]}"
