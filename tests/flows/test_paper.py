@@ -17,6 +17,7 @@ from quantmind.configs.paper import (
     LocalFilePath,
     RawText,
 )
+from quantmind.flows._paper_draft import PaperDraft, PaperDraftNode
 from quantmind.flows.paper import (
     UnsupportedContentTypeError,
     _compose_instructions,
@@ -357,3 +358,48 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         ):
             await paper_flow(RawText(text="x"))
         self.assertNotIn("model_settings", seen)
+
+    async def test_default_agent_output_type_is_paper_draft(self) -> None:
+        # The agent must target the strict-schema-safe draft, not the
+        # canonical (UUID/dict) Paper, unless the caller overrides it.
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            _patch_runner(_stub_paper()),
+        ):
+            await paper_flow(RawText(text="x"))
+        self.assertIs(seen["output_type"], PaperDraft)
+
+    async def test_draft_result_converted_to_canonical_paper(self) -> None:
+        raw_paper = RawPaper(
+            bytes=b"%PDF",
+            content_type="application/pdf",
+            arxiv_id="2604.12345",
+            authors=("Alice",),
+        )
+        draft = PaperDraft(
+            root=PaperDraftNode(title="Extracted Title", summary="s")
+        )
+        with (
+            patch(
+                "quantmind.flows.paper.fetch_arxiv",
+                new=AsyncMock(return_value=raw_paper),
+            ),
+            patch(
+                "quantmind.flows.paper.pdf_to_markdown",
+                new=AsyncMock(return_value="MD"),
+            ),
+            _patch_runner(draft),
+        ):
+            out = await paper_flow(ArxivIdentifier(id="2604.12345"))
+        # Converted into the canonical store schema with injected provenance.
+        self.assertIsInstance(out, Paper)
+        self.assertEqual(out.root().title, "Extracted Title")
+        self.assertEqual(out.arxiv_id, "2604.12345")
+        self.assertEqual(out.source.kind, "arxiv")
+        self.assertEqual(out.authors, ["Alice"])

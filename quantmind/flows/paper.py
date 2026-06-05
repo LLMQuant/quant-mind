@@ -24,6 +24,7 @@ from quantmind.configs.paper import (
     PaperInput,
     RawText,
 )
+from quantmind.flows._paper_draft import PaperDraft, draft_to_paper
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import Paper
 from quantmind.preprocess.fetch import (
@@ -37,10 +38,11 @@ from quantmind.preprocess.format import html_to_markdown, pdf_to_markdown
 P = TypeVar("P", bound=Paper)
 
 _DEFAULT_INSTRUCTIONS = """\
-You are extracting a research paper into a structured QuantMind ``Paper``
-TreeKnowledge object. Build the section tree top-down: every node has a
-title and a short summary; leaf nodes additionally carry the section
-markdown content. Cite supporting passages on each node.
+You are extracting a research paper into a structured QuantMind paper tree.
+Build the section tree top-down by nesting each child section under its
+parent's ``children``: every node has a title and a short summary; leaf
+nodes additionally carry the section markdown content. Cite supporting
+passages on each node.
 
 Honour these flags from the run config:
 - extract_methodology={extract_methodology}: when true, every methodology
@@ -48,12 +50,10 @@ Honour these flags from the run config:
 - extract_limitations={extract_limitations}: when true, surface
   limitations as a dedicated top-level child rather than inlining them.
 - asset_class_hint={asset_class_hint!r}: when set, prefer this asset
-  class for ``Paper.asset_classes`` if the paper does not state one
-  explicitly.
+  class for ``asset_classes`` if the paper does not state one explicitly.
 
-Set ``as_of`` to the publication date when given; otherwise use today's
-date. Set the ``source`` provenance ref using the metadata supplied in
-the prompt.
+Identity and provenance (node ids, source, dates, authors) are added by
+the framework afterwards from the fetch metadata — do not invent them.
 """
 
 
@@ -85,7 +85,10 @@ async def paper_flow(
             unpaywall fallback is its own follow-up issue).
     """
     cfg = cfg or PaperFlowCfg()
-    out_type: type[Paper] = output_type or Paper  # type: ignore[assignment]
+    # The agent targets the strict-schema-safe ``PaperDraft`` by default; a
+    # caller-supplied ``output_type`` opts out of the draft mechanism and is
+    # forwarded verbatim (its result is returned unconverted below).
+    out_type: Any = output_type or PaperDraft
 
     raw_md, source_meta = await _fetch_and_format(input)
 
@@ -105,13 +108,19 @@ async def paper_flow(
     if cfg.model_settings is not None:
         agent_kwargs["model_settings"] = cfg.model_settings
     agent: Agent[Any] = Agent(**agent_kwargs)
-    return await run_with_observability(
+    result = await run_with_observability(
         agent,
         _format_input(raw_md, source_meta),
         cfg=cfg,
         memory=memory,
         extra_run_hooks=list(extra_run_hooks or []),
     )
+    # A caller-supplied ``output_type`` already yields a ``Paper`` (subclass);
+    # the default path yields a ``PaperDraft`` we lift into the canonical
+    # store schema, injecting flow-known provenance.
+    if isinstance(result, Paper):
+        return result
+    return draft_to_paper(result, source_meta=source_meta, model=cfg.model)
 
 
 async def _fetch_and_format(
@@ -126,6 +135,7 @@ async def _fetch_and_format(
             "arxiv_id": raw.arxiv_id,
             "title": raw.title,
             "authors": list(raw.authors),
+            "published_at": raw.published_at,
         }
     if isinstance(input, HttpUrl):
         raw = await fetch_url(input.url)
