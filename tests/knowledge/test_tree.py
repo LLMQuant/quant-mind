@@ -143,6 +143,40 @@ class TreeKnowledgeTests(unittest.TestCase):
         tree = _make_tree()
         self.assertEqual(tree.find_path(uuid4()), [])
 
+    def test_find_path_dangling_parent(self):
+        # A parent_id pointing outside the node map must not raise.
+        missing = uuid4()
+        child_id = uuid4()
+        child = TreeNode(
+            node_id=child_id,
+            parent_id=missing,
+            title="Child",
+            summary="orphan",
+        )
+        tree = _SampleTree(
+            as_of=_now(),
+            source=_src(),
+            root_node_id=child_id,
+            nodes={child_id: child},
+        )
+        path = tree.find_path(child_id)
+        self.assertEqual([n.title for n in path], ["Child"])
+
+    def test_find_path_cyclic_parent(self):
+        # A parent_id cycle must terminate, not loop forever.
+        a_id, b_id = uuid4(), uuid4()
+        a = TreeNode(node_id=a_id, parent_id=b_id, title="A", summary="a")
+        b = TreeNode(node_id=b_id, parent_id=a_id, title="B", summary="b")
+        tree = _SampleTree(
+            as_of=_now(),
+            source=_src(),
+            root_node_id=a_id,
+            nodes={a_id: a, b_id: b},
+        )
+        path = tree.find_path(a_id)
+        self.assertEqual({n.title for n in path}, {"A", "B"})
+        self.assertEqual(len(path), 2)
+
     def test_embedding_text_uses_root(self):
         tree = _make_tree()
         self.assertEqual(tree.embedding_text(), "Root\nroot summary")
