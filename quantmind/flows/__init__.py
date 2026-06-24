@@ -7,15 +7,23 @@ Cross-flow utilities live alongside:
 - ``batch_run`` runs any flow over a list of inputs with bounded
   concurrency and aggregated results.
 - ``BatchResult`` is the shape returned by ``batch_run``.
+- ``SessionTokenDashboard`` tracks token usage and renders used-vs-
+  remaining dashboard text from run hooks.
 - ``UnsupportedContentTypeError`` is raised when ``paper_flow`` cannot
   route fetched bytes through the format layer.
 """
 
 from quantmind.flows.batch import BatchResult, batch_run
 from quantmind.flows.paper import UnsupportedContentTypeError, paper_flow
+from quantmind.flows.token_dashboard import (
+    SessionTokenDashboard,
+    TokenDashboardSnapshot,
+)
 
 __all__ = [
     "BatchResult",
+    "SessionTokenDashboard",
+    "TokenDashboardSnapshot",
     "UnsupportedContentTypeError",
     "batch_run",
     "paper_flow",
