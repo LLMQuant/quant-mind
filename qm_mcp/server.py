@@ -8,7 +8,7 @@ contract the brief asked for:
     qm_ingest_pdf(path)         ingest a local PDF / HTML / markdown file
     qm_ingest_arxiv(arxiv_id)   ingest an arXiv paper by id or URL
     qm_ingest_text(text,title)  ingest pasted text
-    qm_query(question, k)       natural-language query (grounded answer + sources)
+    qm_query(question, k, distance_threshold)  natural-language query (grounded answer + sources)
     qm_list_corpus()            list everything ingested
     qm_delete_item(item_id)     remove one item
 
@@ -59,13 +59,18 @@ async def qm_ingest_text(text: str, title: str | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def qm_query(question: str, k: int = 6) -> dict[str, Any]:
+async def qm_query(
+    question: str,
+    k: int = 6,
+    distance_threshold: float = 0.7,
+) -> dict[str, Any]:
     """Ask the corpus a natural-language question.
 
     Returns a grounded answer (cited to ingested sources) plus the top-k
-    matching items.
+    matching items. Chunks with cosine distance > ``distance_threshold`` are
+    filtered; returns empty sources when no candidate clears the threshold.
     """
-    return await _query(question, k=k)
+    return await _query(question, k=k, distance_threshold=distance_threshold)
 
 
 @mcp.tool()
@@ -84,6 +89,7 @@ def qm_delete_item(item_id: str) -> dict[str, Any]:
 
 
 def main() -> None:
+    """Run the MCP server over stdio."""
     mcp.run()
 
 

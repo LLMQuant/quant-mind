@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from qm_mcp.config import load_secrets
 from qm_mcp.embed import embed_text, synthesize_answer
 from qm_mcp.store import CorpusStore
 
+_log = logging.getLogger(__name__)
+
 
 async def query(
     question: str,
     *,
     k: int = 6,
+    distance_threshold: float = 0.7,
     synthesize: bool = True,
     store: CorpusStore | None = None,
 ) -> dict[str, Any]:
@@ -21,6 +25,9 @@ async def query(
 
     Returns ``{question, answer, sources:[{id,title,score,source,authors}]}``.
     ``answer`` is None when ``synthesize=False`` (retrieval-only mode).
+    Chunks with cosine distance > ``distance_threshold`` are filtered out;
+    returns empty sources when no candidates clear the threshold (VECTOR_DISTANCE_THRESHOLD
+    pattern, Ch 14 Gulli).
     """
     load_secrets()
     store = store or CorpusStore()
@@ -34,6 +41,19 @@ async def query(
 
     q_vec = await asyncio.to_thread(embed_text, question)
     hits = store.search(q_vec, k=k)
+
+    # store.search returns cosine similarity (higher = better).
+    # cosine_distance = 1 - similarity; keep only close-enough matches.
+    min_score = 1.0 - distance_threshold
+    hits = [(item_id, score) for item_id, score in hits if score >= min_score]
+
+    if not hits:
+        _log.info(
+            "qm_query: no candidates above threshold %.2f for question %r",
+            distance_threshold,
+            question[:80],
+        )
+        return {"question": question, "answer": None, "sources": []}
 
     sources: list[dict[str, Any]] = []
     contexts: list[dict[str, str]] = []
