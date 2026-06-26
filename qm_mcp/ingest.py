@@ -27,6 +27,7 @@ from qm_mcp.config import (
     load_secrets,
 )
 from qm_mcp.embed import embed_text, summarize_markdown
+from qm_mcp.grpo_suitability import GrpoSuitabilityScorer
 from qm_mcp.store import CorpusStore, make_id
 from quantmind.preprocess.fetch import (
     Fetched,
@@ -37,6 +38,7 @@ from quantmind.preprocess.fetch import (
 from quantmind.preprocess.format import html_to_markdown, pdf_to_markdown
 
 _INGEST_LOG = "ingestion_log.jsonl"
+_grpo_scorer = GrpoSuitabilityScorer()
 # Cap the markdown we persist per item (text only, lives outside git).
 _MARKDOWN_STORE_LIMIT = 400_000
 
@@ -71,6 +73,7 @@ def _append_ingestion_log(record: dict[str, Any]) -> None:
         "source_type": record.get("source_type"),
         "source": record.get("source"),
         "ingested_at": record.get("ingested_at"),
+        "grpo_suitability": record.get("grpo_suitability"),
         "event": "research.ingest",
     }
     with (corpus_dir() / _INGEST_LOG).open("a", encoding="utf-8") as fh:
@@ -149,6 +152,14 @@ async def _persist(
         "markdown": markdown[:_MARKDOWN_STORE_LIMIT],
         "markdown_chars": len(markdown),
         "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "grpo_suitability": _grpo_scorer.score_entry(
+            {
+                "source_type": source_type,
+                "source": source,
+                "markdown": markdown[:_MARKDOWN_STORE_LIMIT],
+                "markdown_chars": len(markdown),
+            }
+        ),
     }
 
     vector = await asyncio.to_thread(embed_text, embed_blob)
