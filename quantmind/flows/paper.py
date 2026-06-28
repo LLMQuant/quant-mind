@@ -13,7 +13,7 @@ flow, fork this file (Layer 3 — design doc §9).
 
 from typing import Any, TypeVar
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -41,6 +41,12 @@ You are extracting a research paper into a structured QuantMind ``Paper``
 TreeKnowledge object. Build the section tree top-down: every node has a
 title and a short summary; leaf nodes additionally carry the section
 markdown content. Cite supporting passages on each node.
+
+CRITICAL: All id, node_id, root_node_id, parent_id, children_ids, and
+tree_id fields MUST be valid UUID4 strings (e.g.
+"550e8400-e29b-41d4-a716-446655440000"). Do NOT use human-readable names
+like "root" or "introduction". Generate a fresh UUID4 for each node and
+reference them consistently.
 
 Honour these flags from the run config:
 - extract_methodology={extract_methodology}: when true, every methodology
@@ -98,7 +104,7 @@ async def paper_flow(
         ),
         "model": cfg.model,
         "tools": list(extra_tools or []),
-        "output_type": out_type,
+        "output_type": AgentOutputSchema(out_type, strict_json_schema=False),
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }
