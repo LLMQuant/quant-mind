@@ -5,6 +5,7 @@ CMakeLists_modified.txt
 
 build/
 *.egg-info
+.venv/
 
 lib/
 bin/
