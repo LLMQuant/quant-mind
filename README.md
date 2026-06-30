@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <b>Transform Financial Knowledge into Actionable Intelligence</b>
+  <b>Turn Unstructured Documents into Durable, Agent-Ready Knowledge</b>
 </p>
 <p align="center">
   <a href="https://github.com/LLMQuant/quant-mind/blob/main/LICENSE">
@@ -30,7 +30,15 @@
 
 ---
 
-**QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge base, enabling AI-powered research at scale.
+**QuantMind** is a finance-proven, agent-centric knowledge extraction library
+built on top of the OpenAI Agents SDK. It gives AI agents better eyes over
+PDF/HTML/text inputs, typed knowledge instead of brittle strings, and a clean
+path toward durable memory and loop-based workflows.
+
+Today, the first production flow is focused on quantitative-finance research.
+But the architecture is intentionally broader: the same preprocess → typed
+config → typed knowledge → agentic workflow stack can be reused for any
+document-heavy domain.
 
 ### 📰 News
 | 🗞️ News        | 📝 Description                                                                 |
@@ -40,26 +48,40 @@
 
 ### 🧐 Overview
 
-QuantMind is a next-generation AI platform that ingests, processes, and structures **every** new piece of quantitative-finance research, including papers, news, blogs, and SEC filings into a **semantic knowledge graph**. Institutional investors, hedge funds, and research teams can now explore the frontier of factor strategies, risk models, and market insights in **seconds**, unlocking alpha that would otherwise remain buried.
+QuantMind is designed for teams building **serious AI-agent workflows** around
+documents, research, and structured memory.
+
+Its current strength is finance-heavy research extraction, but its core value is
+more general:
+
+- fetch or accept raw source material from the web, local files, or inline text
+- normalize it into markdown that an agent can reliably read
+- force output into strict Pydantic knowledge objects
+- preserve provenance so downstream agents can review, cite, and reuse results
+- support repeatable loops instead of one-off prompt chains
 
 ### ✨ Why QuantMind?
 
-The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published.
+#### For AI agents
 
-#### 🌐 The Opportunity
+- **Better eyes**: `preprocess/` turns PDFs, HTML, and raw text into stable
+  markdown before the model sees them.
+- **Better shared language**: `configs/` and `knowledge/` replace ad-hoc JSON
+  with typed inputs, typed outputs, and explicit provenance.
+- **Better loops**: `magic.py`, `flows/`, and `batch_run()` help agents resolve
+  intent, execute work, and repeat tasks predictably.
+- **Better long-term direction**: the `mind/` roadmap is explicitly about
+  durable memory and agent-friendly retrieval, not throwaway prompting.
 
-- **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable
-- **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed
-- **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance
+#### For domain teams
 
----
-
-#### 💡 **QuantMind** solves this by
-
-- 🔍 **Extracting** structured knowledge from any source (PDFs, web pages, APIs)
-- 🧠 **Understanding** content with domain-specific LLMs fine-tuned for finance
-- 💾 **Storing** information in a semantic knowledge graph
-- 🚀 **Retrieving** insights through natural language queries
+- **Finance-first, not finance-only**: the first production flow is optimized
+  for research papers in quant finance, but the layering is reusable for any
+  domain that needs document ingestion, typed extraction, and agentic reuse.
+- **Strict architecture**: dependency boundaries are enforced with
+  `import-linter`, and the repo ships with a single canonical verification loop.
+- **Composable by design**: customization happens at three levels—config,
+  flow kwargs, or forking a flow file.
 
 ---
 
@@ -67,37 +89,36 @@ The financial research landscape is overwhelming. Every day, hundreds of papers,
 
 ![quantmind-outline](assets/quantmind-stage-outline.png)
 
-QuantMind is built on a decoupled, two-stage architecture. This design separates the concerns of data ingestion from intelligent retrieval, ensuring both robustness and flexibility.
+QuantMind is built on a decoupled architecture that separates source handling,
+typed extraction, and future memory/store layers.
 
-#### **Stage 1: Knowledge Extraction**
-
-This layer is responsible for collecting, parsing, and structuring raw information into standardized knowledge units.
+#### **Current production path**
 
 ```text
-Source APIs (arXiv, News, Blogs) → Intelligent Parser → Workflow/Agent → Structured Knowledge Base
+Natural-language intent
+    ↓
+magic.resolve_magic_input(...)
+    ↓
+typed input + typed cfg
+    ↓
+preprocess.fetch + preprocess.format
+    ↓
+flow(agent=OpenAI Agents SDK)
+    ↓
+typed knowledge object with provenance
 ```
 
-- **Source**: Connects to various sources (academic APIs, news feeds, financial blogs, perplexity search source) to pull content
-- **Parser**: Extracts text, tables, and figures from PDFs, HTML, and other formats
-- **Tagger**: Automatically categorizes content into research areas and topics
-- **Workflow/Agent**: Orchestrates the extraction pipeline with quality control and deduplication
+#### **Permanent modules**
 
-#### **Stage 2: Intelligent Retrieval**
+- `quantmind/flows/` — apex layer (`paper_flow`, `batch_run`, observability)
+- `quantmind/configs/` — typed inputs and flow configuration
+- `quantmind/knowledge/` — typed knowledge shapes and provenance contracts
+- `quantmind/preprocess/` — fetch + format + cleaning helpers
+- `quantmind/magic.py` — natural language to typed `(input, cfg)` resolution
+- `quantmind/mind/` — reserved for the upcoming memory/store layer
 
-This layer transforms structured knowledge into actionable insights through various retrieval mechanisms.
-
-```
-Knowledge Base → Embeddings → Solution Scenarios (DeepResearch, RAG, Data MCP, ...)
-```
-
-- **Embedding Generation**: Converts knowledge units into high-dimensional vectors for semantic search
-
-- Solution Scenarios: Multiple retrieval patterns including:
-
-  - **DeepResearch**: Complex multi-hop reasoning across documents
-  - **RAG**: Retrieval-augmented generation for Q&A
-  - **Data MCP**: Structured data access protocols
-  - Custom retrieval patterns based on use case
+See [docs/ARCHITECTURE_FOR_NEW_DOMAINS.md](docs/ARCHITECTURE_FOR_NEW_DOMAINS.md)
+for how to extend this stack beyond finance.
 
 ---
 
@@ -107,7 +128,7 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 **Prerequisites:**
 
-- Python 3.8+
+- Python 3.10+
 - Git
 
 **Installation:**
@@ -154,7 +175,7 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 ### 📚 Usage Examples
 
-#### Run a single paper through `paper_flow`
+#### Run a single finance paper through `paper_flow`
 
 ```python
 import asyncio
@@ -170,6 +191,28 @@ async def main() -> None:
         cfg=PaperFlowCfg(model="gpt-4o-mini"),
     )
     print(paper.model_dump_json(indent=2))
+
+
+asyncio.run(main())
+```
+
+#### Use the same pipeline on a local memo or technical brief
+
+```python
+import asyncio
+from pathlib import Path
+
+from quantmind.configs import PaperFlowCfg
+from quantmind.configs.paper import LocalFilePath
+from quantmind.flows import paper_flow
+
+
+async def main() -> None:
+    doc = await paper_flow(
+        LocalFilePath(path=Path("docs/internal-research-note.md")),
+        cfg=PaperFlowCfg(model="gpt-4o-mini"),
+    )
+    print(doc.root.summary)
 
 
 asyncio.run(main())
@@ -224,32 +267,61 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-> **Note**: QuantMind is mid-migration to OpenAI Agents SDK
-> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR5 lands the
-> apex layer (`flows/` + `magic.py`); the remaining work is the `mind/`
-> memory + store layer scheduled for PR6 and PR7.
+### 🔁 Agentic loops and durable memory
+
+QuantMind is being tuned for workflows where multiple agents can understand one
+another through **shared typed artifacts**, not just prompt conventions.
+
+Today, that means:
+
+- resolving loose intent into strict inputs with `magic.resolve_magic_input()`
+- extracting typed knowledge with `paper_flow`
+- scaling stateless fan-out work with `batch_run()`
+- preserving provenance for review and downstream reuse
+
+Next, that means:
+
+- filesystem-backed working memory under `mind/memory`
+- a store layer for retrieval and longer-lived agent loops
+- stronger multi-step patterns for review, refinement, and replay
+
+If you are building agent teams, think of QuantMind as the layer that provides
+stable inputs, stable outputs, and a durable path from observation to memory.
 
 ---
 
 ### 🗺️ Roadmap
 
-- [x] Better `flow` design for user-friendly usage
-- [x] First production level example (Quant Paper Agent)
-- [ ] Migrate Agent layer to OpenAI Agents SDK
-- [ ] Standardize knowledge format with `knowledge/` (Pydantic-based)
-- [ ] Additional content sources (financial news, blogs, reports)
-- [ ] Cross-step working memory (`mind/memory`) for batch document processing
+- [x] Remove the legacy in-repo agent runtime
+- [x] Reposition QuantMind on top of OpenAI Agents SDK
+- [x] Land the permanent module roots: `flows/`, `configs/`, `knowledge/`,
+  `preprocess/`, `magic.py`
+- [x] Ship a canonical verification loop (`scripts/verify.sh`)
+- [ ] Add filesystem-backed working memory in `mind/memory`
+- [ ] Add the store/retrieval layer in `mind/store`
+- [ ] Expand beyond the first paper flow with more domain flows
+- [ ] Improve multi-agent loop patterns, observability, and replay support
+- [ ] Keep agent-facing docs and extension paths under regular review during
+  active weekly iteration
 
 ---
 
 ### The Vision: An Intelligent Research Framework
 
 > [!IMPORTANT]
-> **This section describes our long-term vision, not current capabilities.** While QuantMind today provides a solid knowledge extraction framework, the features described below represent our aspirational goals for future development.
+> **This section describes our long-term vision, not current capabilities.**
+> QuantMind already ships a useful extraction stack, but the broader memory and
+> retrieval story is still under construction.
 
-QuantMind is designed with a larger vision: to become a comprehensive intelligence layer for all financial knowledge. We're building toward a system that understands the interconnections between academic research, market news, analyst reports, and social sentiment—creating a unified knowledge base that powers better financial decisions.
+QuantMind is being shaped into a durable intelligence layer for document-heavy
+workflows. Finance remains a major proving ground, but the long-term value is
+larger: helping AI agents see source material clearly, preserve structured
+understanding over time, and operate in loops that do not lose context between
+runs.
 
-The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
+The near-term roadmap starts with papers and research-heavy workflows. The
+longer-term goal is a reusable foundation for agentic knowledge work across
+domains.
 
 > [!NOTE]
 > **Future Conceptual Example (PR6 brings `FilesystemMemory`):**
@@ -265,7 +337,8 @@ The foundation we're building today—starting with papers—will expand to enco
 >     paper: Paper = await paper_flow(ArxivIdentifier(id=arxiv_id), memory=memory)
 > ```
 
-This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
+This future state represents the shift from one-off extraction to reusable,
+memory-aware, agentic knowledge systems.
 
 ------
 
@@ -279,11 +352,11 @@ We welcome contributions of all forms, from bug reports to feature development.
 **Quick Start for Contributors:**
 
 1. **Fork** the repository
-2. **Setup development environment**:
+2. **Setup the development environment**:
 
    ```bash
    uv venv && source .venv/bin/activate
-   uv pip install -e .
+   uv pip install -e ".[dev]"
    ./scripts/pre-commit-setup.sh
    ```
 
@@ -295,7 +368,7 @@ We welcome contributions of all forms, from bug reports to feature development.
 
 - Open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss significant changes
 - Use our issue templates for bug reports and feature requests
-- Ensure all pre-commit hooks pass before submitting PR
+- Ensure `bash scripts/verify.sh` passes before submitting PR
 
 ### License
 
