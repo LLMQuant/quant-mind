@@ -65,13 +65,20 @@ class DraftNode(BaseModel):
     children: list["DraftNode"] = Field(default_factory=list)
 
 class DraftPaper(BaseModel):
+    # DraftPaper IS the root node: it carries the root's node-like fields
+    # directly (content/citations/children) plus paper metadata. A live run
+    # showed gpt-4o-mini emits top-level sections as `children`/`citations`
+    # rather than nesting them under a separate `root:` field, so the schema
+    # matches that natural shape instead of fighting it.
     title: str
     summary: str
     published_date: date | None = None   # model reads it from the PDF; feeds as_of
     arxiv_id: str | None = None
     authors: list[str] = Field(default_factory=list)
     asset_classes: list[str] = Field(default_factory=list)
-    root: DraftNode
+    content: str | None = None
+    citations: list[DraftCitation] = Field(default_factory=list)
+    children: list["DraftNode"] = Field(default_factory=list)
 ```
 
 Assembly (pure, deterministic, no I/O):
@@ -90,7 +97,9 @@ def assemble_paper(
 
 Behaviour:
 - Generate `paper_id = uuid4()` up front (needed for `Citation.tree_id`).
-- DFS over `draft.root`; for each `DraftNode` mint `uuid4()` and build a
+- Wrap the `DraftPaper`'s own node-like fields (`title`, `summary`,
+  `content`, `citations`, `children`) into a root `DraftNode`, then DFS from
+  it; for each `DraftNode` mint `uuid4()` and build a
   `TreeNode(node_id, parent_id, position, title, summary, content,
   children_ids, citations)`.
   - `position` = index among its siblings.
