@@ -273,7 +273,10 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             _patch_runner(_stub_paper()),
         ):
             await paper_flow(RawText(text="x"), output_type=MyPaper)
-        self.assertIs(seen["output_type"], MyPaper)
+        # paper_flow wraps the output type in a non-strict AgentOutputSchema
+        # (recursive TreeKnowledge is not strict-JSON-schema compatible); the
+        # override must still propagate through as the wrapped type.
+        self.assertIs(seen["output_type"].output_type, MyPaper)
 
     async def test_extra_tools_and_guardrails_forwarded(self) -> None:
         seen: dict[str, Any] = {}

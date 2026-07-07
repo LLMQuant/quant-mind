@@ -13,7 +13,7 @@ flow, fork this file (Layer 3 — design doc §9).
 
 from typing import Any, TypeVar
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -98,7 +98,11 @@ async def paper_flow(
         ),
         "model": cfg.model,
         "tools": list(extra_tools or []),
-        "output_type": out_type,
+        # `Paper` is a recursive TreeKnowledge whose `nodes: dict[UUID,
+        # TreeNode]` maps to an open-ended `additionalProperties` object,
+        # which the SDK's default strict JSON schema mode rejects. Wrap the
+        # output type non-strict so the schema is accepted.
+        "output_type": AgentOutputSchema(out_type, strict_json_schema=False),
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }
