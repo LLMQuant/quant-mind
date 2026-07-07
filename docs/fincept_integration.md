@@ -26,21 +26,24 @@ fincept-ai-ops (FastAPI)
 
 ## Usage Example
 
-```python
-from quantmind import QuantMindClient
+    import asyncio
+    from pathlib import Path
 
-client = QuantMindClient(api_key="...")
+    from quantmind.configs import PaperFlowCfg
+    from quantmind.configs.paper import LocalFilePath
+    from quantmind.flows import paper_flow
 
-# Search for momentum factor research
-results = client.search(
-    query="momentum factor decay regime change",
-    top_k=5,
-    filters={"source_type": "paper", "year_gte": 2020}
-)
 
-for r in results:
-    print(r.title, r.insight_summary, r.confidence_score)
-```
+    async def main() -> None:
+        doc = await paper_flow(
+            LocalFilePath(path=Path("path/to/document.pdf")),
+            cfg=PaperFlowCfg(model="gpt-4o-mini"),
+        )
+        # Persist / index this JSON in Fincept's storage layer.
+        print(doc.model_dump(mode="json"))
+
+
+    asyncio.run(main())
 
 ## Synergy with Fincept
 
