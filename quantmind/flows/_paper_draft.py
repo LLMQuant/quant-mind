@@ -6,9 +6,19 @@ The Agent produces a ``DraftPaper``: a nested tree carrying only content
 dangling references impossible by construction.
 """
 
-from datetime import date
+from datetime import date, datetime
+from typing import TypeVar
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from quantmind.knowledge import (
+    Citation,
+    ExtractionRef,
+    Paper,
+    SourceRef,
+    TreeNode,
+)
 
 
 class DraftCitation(BaseModel):
@@ -45,3 +55,67 @@ class DraftPaper(BaseModel):
     authors: list[str] = Field(default_factory=list)
     asset_classes: list[str] = Field(default_factory=list)
     root: DraftNode
+
+
+P = TypeVar("P", bound=Paper)
+
+
+def assemble_paper(
+    draft: DraftPaper,
+    *,
+    source: SourceRef,
+    source_id: str,
+    as_of: datetime,
+    extraction: ExtractionRef,
+    out_type: type[P],
+) -> P:
+    """Walk ``draft``, mint UUIDs, and build a fully-wired ``Paper``.
+
+    Every node gets a fresh ``uuid4()``; ``parent_id`` / ``children_ids`` /
+    ``root_node_id`` and each citation's ``node_id`` / ``tree_id`` are set by
+    this function so the LLM never has to emit an id.
+    """
+    paper_id = uuid4()
+    nodes: dict[UUID, TreeNode] = {}
+
+    def _build(node: DraftNode, parent_id: UUID | None, position: int) -> UUID:
+        node_id = uuid4()
+        children_ids = [
+            _build(child, node_id, i) for i, child in enumerate(node.children)
+        ]
+        citations = [
+            Citation(
+                source_id=source_id,
+                page=c.page,
+                char_offset=c.char_offset,
+                quote=c.quote,
+                tree_id=paper_id,
+                node_id=node_id,
+            )
+            for c in node.citations
+        ]
+        nodes[node_id] = TreeNode(
+            node_id=node_id,
+            parent_id=parent_id,
+            position=position,
+            title=node.title,
+            summary=node.summary,
+            content=node.content,
+            citations=citations,
+            children_ids=children_ids,
+        )
+        return node_id
+
+    root_id = _build(draft.root, None, 0)
+
+    return out_type(
+        id=paper_id,
+        as_of=as_of,
+        source=source,
+        extraction=extraction,
+        root_node_id=root_id,
+        nodes=nodes,
+        arxiv_id=draft.arxiv_id,
+        authors=list(draft.authors),
+        asset_classes=list(draft.asset_classes),
+    )
