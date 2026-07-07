@@ -1,11 +1,12 @@
 """Tests for ``quantmind.flows.paper``."""
 
 import unittest
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from agents import RunHooks
+from agents import AgentOutputSchema, RunHooks
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -18,10 +19,13 @@ from quantmind.configs.paper import (
 from quantmind.flows._paper_draft import DraftPaper
 from quantmind.flows.paper import (
     UnsupportedContentTypeError,
+    _as_of,
     _compose_instructions,
     _fetch_and_format,
     _format_by_content_type,
     _format_input,
+    _source_id,
+    _source_ref,
     paper_flow,
 )
 from quantmind.knowledge import Paper
@@ -204,6 +208,39 @@ class FormatInputTests(unittest.TestCase):
         self.assertNotIn("b:", out)
 
 
+class ProvenanceHelperTests(unittest.TestCase):
+    def test_source_ref_web_maps_to_http(self) -> None:
+        ref = _source_ref({"source": "web", "url": "https://x/y"})
+        self.assertEqual(ref.kind, "http")
+        self.assertEqual(ref.uri, "https://x/y")
+
+    def test_source_ref_local(self) -> None:
+        ref = _source_ref({"source": "local", "path": "/tmp/p.pdf"})
+        self.assertEqual(ref.kind, "local")
+        self.assertEqual(ref.uri, "/tmp/p.pdf")
+
+    def test_source_ref_inline_fallback(self) -> None:
+        ref = _source_ref({"source": "inline"})
+        self.assertEqual(ref.kind, "manual")
+        self.assertIsNone(ref.uri)
+
+    def test_source_id_local_and_web(self) -> None:
+        self.assertEqual(
+            _source_id({"source": "local", "path": "/tmp/p.pdf"}), "/tmp/p.pdf"
+        )
+        self.assertEqual(
+            _source_id({"source": "web", "url": "https://x"}), "https://x"
+        )
+
+    def test_as_of_uses_published_date(self) -> None:
+        draft = DraftPaper(
+            title="T", summary="s", published_date=date(2023, 12, 7)
+        )
+        self.assertEqual(
+            _as_of(draft), datetime(2023, 12, 7, tzinfo=timezone.utc)
+        )
+
+
 class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_happy_path_arxiv(self) -> None:
         raw_paper = RawPaper(
@@ -340,3 +377,20 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         ):
             await paper_flow(RawText(text="x"))
         self.assertNotIn("model_settings", seen)
+
+    async def test_agent_output_type_is_nonstrict_draftpaper(self) -> None:
+        seen: dict[str, Any] = {}
+
+        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
+            seen.update(kwargs)
+            return MagicMock()
+
+        with (
+            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
+            _patch_runner(_stub_draft()),
+        ):
+            await paper_flow(RawText(text="x"))
+        schema = seen["output_type"]
+        self.assertIsInstance(schema, AgentOutputSchema)
+        self.assertIs(schema.output_type, DraftPaper)
+        self.assertFalse(schema.is_strict_json_schema())

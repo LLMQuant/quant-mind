@@ -151,8 +151,8 @@ input → _fetch_and_format → (markdown, source_meta)
   emits ids).
 - `assemble_paper` is pure and unit-testable; no network, no clock beyond
   `as_of` fallback.
-- `DraftPaper.root` is required, so a malformed draft still triggers the SDK's
-  normal validation-retry path.
+- `DraftPaper.title` / `summary` are required, so a malformed draft still
+  triggers the SDK's normal validation-retry path.
 
 ## Testing (TDD)
 
