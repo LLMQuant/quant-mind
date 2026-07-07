@@ -1,11 +1,9 @@
 """Tests for ``quantmind.flows.paper``."""
 
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 from agents import RunHooks
 
@@ -17,6 +15,7 @@ from quantmind.configs.paper import (
     LocalFilePath,
     RawText,
 )
+from quantmind.flows._paper_draft import DraftNode, DraftPaper
 from quantmind.flows.paper import (
     UnsupportedContentTypeError,
     _compose_instructions,
@@ -25,22 +24,15 @@ from quantmind.flows.paper import (
     _format_input,
     paper_flow,
 )
-from quantmind.knowledge import Paper, SourceRef, TreeNode
+from quantmind.knowledge import Paper
 from quantmind.preprocess.fetch import Fetched, RawPaper
 
 
-def _stub_paper() -> Paper:
-    root_id = uuid4()
-    root = TreeNode(node_id=root_id, title="root", summary="stub")
-    return Paper(
-        as_of=datetime(2026, 5, 7, tzinfo=timezone.utc),
-        source=SourceRef(
-            kind="arxiv",
-            uri="arxiv:2604.12345",
-            fetched_at=datetime(2026, 5, 7, tzinfo=timezone.utc),
-        ),
-        root_node_id=root_id,
-        nodes={root_id: root},
+def _stub_draft() -> DraftPaper:
+    return DraftPaper(
+        title="stub",
+        summary="stub",
+        root=DraftNode(title="root", summary="stub"),
     )
 
 
@@ -223,7 +215,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             content_type="application/pdf",
             arxiv_id="2604.12345",
         )
-        stub = _stub_paper()
+        stub = _stub_draft()
         with (
             patch(
                 "quantmind.flows.paper.fetch_arxiv",
@@ -236,7 +228,8 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             _patch_runner(stub) as runner,
         ):
             out = await paper_flow(ArxivIdentifier(id="2604.12345"))
-        self.assertIs(out, stub)
+        self.assertIsInstance(out, Paper)
+        self.assertEqual(out.root().title, "root")
         runner.assert_awaited_once()
 
     async def test_extra_instructions_passed_to_agent(self) -> None:
@@ -246,7 +239,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             seen.update(kwargs)
             return MagicMock(name="agent", _name="paper_extractor")
 
-        stub = _stub_paper()
+        stub = _stub_draft()
         with (
             patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
             _patch_runner(stub),
@@ -256,27 +249,18 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
                 extra_instructions="EXTRA-USER-DIRECTIVE",
             )
         self.assertIn("EXTRA-USER-DIRECTIVE", seen["instructions"])
-        self.assertIn("structured QuantMind", seen["instructions"])
+        self.assertIn("nested draft tree", seen["instructions"])
 
     async def test_output_type_override_propagated(self) -> None:
-        seen: dict[str, Any] = {}
-
         class MyPaper(Paper):
             pass
 
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock()
-
         with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+            patch("quantmind.flows.paper.Agent", return_value=MagicMock()),
+            _patch_runner(_stub_draft()),
         ):
-            await paper_flow(RawText(text="x"), output_type=MyPaper)
-        # paper_flow wraps the output type in a non-strict AgentOutputSchema
-        # (recursive TreeKnowledge is not strict-JSON-schema compatible); the
-        # override must still propagate through as the wrapped type.
-        self.assertIs(seen["output_type"].output_type, MyPaper)
+            out = await paper_flow(RawText(text="x"), output_type=MyPaper)
+        self.assertIsInstance(out, MyPaper)
 
     async def test_extra_tools_and_guardrails_forwarded(self) -> None:
         seen: dict[str, Any] = {}
@@ -290,7 +274,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         out_g = MagicMock()
         with (
             patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+            _patch_runner(_stub_draft()),
         ):
             await paper_flow(
                 RawText(text="x"),
@@ -308,7 +292,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
                 "quantmind.flows.paper.Agent",
                 return_value=MagicMock(),
             ),
-            _patch_runner(_stub_paper()) as runner,
+            _patch_runner(_stub_draft()) as runner,
         ):
             await paper_flow(RawText(text="x"), memory=object())
         # The runner sees the memory placeholder forwarded.
@@ -324,7 +308,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
                 "quantmind.flows.paper.Agent",
                 return_value=MagicMock(),
             ),
-            _patch_runner(_stub_paper()) as runner,
+            _patch_runner(_stub_draft()) as runner,
         ):
             await paper_flow(RawText(text="x"), extra_run_hooks=[hook])
         self.assertEqual(runner.await_args.kwargs["extra_run_hooks"], [hook])
@@ -342,7 +326,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         cfg = PaperFlowCfg(model_settings=ms)
         with (
             patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+            _patch_runner(_stub_draft()),
         ):
             await paper_flow(RawText(text="x"), cfg=cfg)
         self.assertIs(seen["model_settings"], ms)
@@ -356,7 +340,7 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+            _patch_runner(_stub_draft()),
         ):
             await paper_flow(RawText(text="x"))
         self.assertNotIn("model_settings", seen)
