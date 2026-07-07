@@ -12,6 +12,7 @@ from quantmind.configs.base import BaseFlowCfg, BaseInput
 from quantmind.configs.earnings import EarningsFlowCfg, EarningsInput
 from quantmind.configs.news import NewsFlowCfg, NewsInput
 from quantmind.configs.paper import PaperFlowCfg, PaperInput
+from quantmind.configs.recoverable import RawFallbackNode, RecoverableValidation
 
 __all__ = [
     "BaseFlowCfg",
@@ -22,4 +23,6 @@ __all__ = [
     "NewsInput",
     "PaperFlowCfg",
     "PaperInput",
+    "RawFallbackNode",
+    "RecoverableValidation",
 ]

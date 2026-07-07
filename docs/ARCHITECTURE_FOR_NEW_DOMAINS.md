@@ -1,6 +1,6 @@
-# Extending QuantMind Beyond Finance
+# Extending QuantMind Beyond a Single Domain
 
-QuantMind currently ships a finance-first extraction flow, but the architecture
+QuantMind currently ships a paper-oriented extraction flow, but the architecture
 is meant to support broader agentic knowledge work. This guide explains which
 parts are stable, which parts are domain-specific today, and how to extend the
 stack without fighting the current design.
@@ -23,14 +23,14 @@ quantmind/
 These layers already work well for agent teams because they create a strict
 contract between source material, extraction, and downstream reuse.
 
-## What is finance-specific today
+## What is domain-specific today
 
 The first production flow is `paper_flow`, and its output schema is
 `quantmind.knowledge.Paper`. That flow is optimized for research-paper style
-documents and keeps finance-specific fields such as `asset_classes`.
+documents and still includes some finance-origin fields such as `asset_classes`.
 
 That does **not** make the whole repository finance-only. It means the current
-reference implementation is finance-first while the underlying architecture is
+reference implementation is paper-first while the underlying architecture is
 already reusable:
 
 - `preprocess/` is domain-agnostic
@@ -125,9 +125,11 @@ hidden agreements in prompt text when a Pydantic object can carry the contract.
 
 The repository is explicitly moving toward a memory-aware architecture:
 
-- `mind/memory/` is the planned working-memory layer
-- `mind/store/` is the planned retrieval/store layer
+- `mind/memory.py` provides the current L1/L2/L3 memory primitives
+- `mind/store/` remains the planned retrieval/store layer
 - `flows/_runner.py` already reserves the runtime seam for memory integration
+- `flows/governance.py` enforces policy for loop budgets, tool allowlists,
+  fallback behavior, and L3 commit gates
 
 Until those land, treat QuantMind as a strong typed-extraction layer with a
 clear upgrade path toward durable agent loops.

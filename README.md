@@ -30,12 +30,12 @@
 
 ---
 
-**QuantMind** is a finance-proven, agent-centric knowledge extraction library
+**QuantMind** is an agent-centric knowledge extraction library
 built on top of the OpenAI Agents SDK. It gives AI agents better eyes over
 PDF/HTML/text inputs, typed knowledge instead of brittle strings, and a clean
 path toward durable memory and loop-based workflows.
 
-Today, the first production flow is focused on quantitative-finance research.
+Today, the first production flow is focused on research-paper extraction.
 But the architecture is intentionally broader: the same preprocess → typed
 config → typed knowledge → agentic workflow stack can be reused for any
 document-heavy domain.
@@ -51,8 +51,8 @@ document-heavy domain.
 QuantMind is designed for teams building **serious AI-agent workflows** around
 documents, research, and structured memory.
 
-Its current strength is finance-heavy research extraction, but its core value is
-more general:
+Its current strength is typed research extraction, but its core value is
+domain-agnostic:
 
 - fetch or accept raw source material from the web, local files, or inline text
 - normalize it into markdown that an agent can reliably read
@@ -73,11 +73,11 @@ more general:
 - **Better long-term direction**: the `mind/` roadmap is explicitly about
   durable memory and agent-friendly retrieval, not throwaway prompting.
 
-#### For domain teams
+#### For engineering teams
 
-- **Finance-first, not finance-only**: the first production flow is optimized
-  for research papers in quant finance, but the layering is reusable for any
-  domain that needs document ingestion, typed extraction, and agentic reuse.
+- **Domain-ready by design**: the first production flow is paper-oriented, but
+  the layering is reusable for any domain that needs document ingestion, typed
+  extraction, and agentic reuse.
 - **Strict architecture**: dependency boundaries are enforced with
   `import-linter`, and the repo ships with a single canonical verification loop.
 - **Composable by design**: customization happens at three levels—config,
@@ -115,10 +115,19 @@ typed knowledge object with provenance
 - `quantmind/knowledge/` — typed knowledge shapes and provenance contracts
 - `quantmind/preprocess/` — fetch + format + cleaning helpers
 - `quantmind/magic.py` — natural language to typed `(input, cfg)` resolution
-- `quantmind/mind/` — reserved for the upcoming memory/store layer
+- `quantmind/mind/` — hybrid memory primitives (L1/L2/L3)
+- `quantmind/flows/governance.*` — policy loader + runtime gates
 
 See [docs/ARCHITECTURE_FOR_NEW_DOMAINS.md](docs/ARCHITECTURE_FOR_NEW_DOMAINS.md)
 for how to extend this stack beyond finance.
+
+#### Governance and loop observability
+
+QuantMind now treats governance as executable policy instead of passive config.
+Tool allowlists, loop budgets, fallback behavior, and L3 commit gates are
+declared in `quantmind/flows/governance.yaml` and enforced at runtime.
+This maps directly to loop SLI/SLO operations: every loop is expected to be
+traceable, budgeted, and quality-gated before durable writes.
 
 ---
 

@@ -1,7 +1,7 @@
-"""QuantMind: Intelligent Knowledge Extraction and Retrieval Framework.
+"""QuantMind: Intelligent knowledge extraction for agentic workflows.
 
-QuantMind transforms unstructured financial content into a queryable knowledge graph
-through a two-stage architecture focused on knowledge extraction and intelligent retrieval.
+QuantMind transforms unstructured documents into typed, provenance-aware
+artifacts that can be validated, governed, and reused in durable loops.
 """
 
 __version__ = "0.0.1"
