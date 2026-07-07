@@ -44,7 +44,14 @@ class DraftNode(BaseModel):
 
 
 class DraftPaper(BaseModel):
-    """Top-level LLM output: paper metadata + the root draft node."""
+    """Top-level LLM output — the paper as the root of a nested section tree.
+
+    ``DraftPaper`` *is* the root node: it carries the paper's ``title`` /
+    ``summary`` (plus optional ``content`` / ``citations``) and its
+    ``children`` are the paper's top-level sections, each of which may nest
+    further. This matches how the model naturally emits a document, rather
+    than forcing a single ``root`` field.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -54,7 +61,9 @@ class DraftPaper(BaseModel):
     arxiv_id: str | None = None
     authors: list[str] = Field(default_factory=list)
     asset_classes: list[str] = Field(default_factory=list)
-    root: DraftNode
+    content: str | None = None
+    citations: list[DraftCitation] = Field(default_factory=list)
+    children: list["DraftNode"] = Field(default_factory=list)
 
 
 P = TypeVar("P", bound=Paper)
@@ -106,7 +115,14 @@ def assemble_paper(
         )
         return node_id
 
-    root_id = _build(draft.root, None, 0)
+    root_draft = DraftNode(
+        title=draft.title,
+        summary=draft.summary,
+        content=draft.content,
+        citations=draft.citations,
+        children=draft.children,
+    )
+    root_id = _build(root_draft, None, 0)
 
     return out_type(
         id=paper_id,

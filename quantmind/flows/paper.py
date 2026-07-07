@@ -40,11 +40,13 @@ from quantmind.preprocess.format import html_to_markdown, pdf_to_markdown
 P = TypeVar("P", bound=Paper)
 
 _DEFAULT_INSTRUCTIONS = """\
-You are extracting a research paper into a nested draft tree. Produce a
-DraftPaper with a top-level ``title`` and ``summary`` and a ``root`` node.
-Every node has a ``title`` and a short ``summary``; put the section body
-Markdown in ``content`` on the nodes that carry text. Nest subsections under
-their parent via ``children``.
+You are extracting a research paper into a nested draft tree. The top-level
+DraftPaper IS the root of the tree: give it the paper's ``title`` and a short
+``summary``, and put the paper's top-level sections in its ``children``. Every
+node (the paper itself and each section) has a ``title`` and a short
+``summary``; put the section body Markdown in ``content`` on the nodes that
+carry text. Nest subsections under their parent section via that section's
+``children``.
 
 Do NOT invent identifiers of any kind — the system assigns all ids. Attach
 supporting ``citations`` (quote + page) to the node they support; never

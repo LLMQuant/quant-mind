@@ -15,7 +15,7 @@ from quantmind.configs.paper import (
     LocalFilePath,
     RawText,
 )
-from quantmind.flows._paper_draft import DraftNode, DraftPaper
+from quantmind.flows._paper_draft import DraftPaper
 from quantmind.flows.paper import (
     UnsupportedContentTypeError,
     _compose_instructions,
@@ -29,11 +29,7 @@ from quantmind.preprocess.fetch import Fetched, RawPaper
 
 
 def _stub_draft() -> DraftPaper:
-    return DraftPaper(
-        title="stub",
-        summary="stub",
-        root=DraftNode(title="root", summary="stub"),
-    )
+    return DraftPaper(title="root", summary="stub")
 
 
 def _patch_runner(return_value: Any) -> Any:
