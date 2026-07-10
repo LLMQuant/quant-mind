@@ -1,144 +1,91 @@
 # Contributing to QuantMind
 
-Thank you for contributing to QuantMind! This guide provides essential information for developers.
+Thank you for contributing to QuantMind! This guide covers environment
+setup and the contribution process. The canonical development workflow
+(commit format, PR format, component development) lives in the
+`quantmind-dev` skill — `.claude/skills/quantmind-dev/SKILL.md` /
+`.agents/skills/quantmind-dev/SKILL.md` — and the repository-wide rules
+live in `AGENTS.md` / `CLAUDE.md`. If you develop with a coding agent, it
+will pick these up automatically.
 
 ## 🚀 Quick Setup
 
 1. **Fork and clone** the repository
 2. **Set up environment**:
+
    ```bash
    uv venv && source .venv/bin/activate
-   uv pip install -e .
+   uv pip install -e ".[dev]"
    ```
+
 3. **Install pre-commit hooks**:
+
    ```bash
    ./scripts/pre-commit-setup.sh
    ```
 
-## 🛠️ Development Setup
+## ✅ Verification
 
-### Pre-commit Hooks
-
-We use pre-commit hooks to ensure code quality and consistency. These hooks automatically format code, run linting, and perform other quality checks before each commit.
-
-**Install pre-commit hooks:**
+`scripts/verify.sh` is the single source of truth for "is this branch
+shippable". CI runs the exact same script, so a green local run means a
+green PR:
 
 ```bash
-# Automated setup (recommended)
-./scripts/pre-commit-setup.sh
-
-# Or manual setup
-pip install pre-commit
-pre-commit install
-pre-commit install --hook-type pre-push
+bash scripts/verify.sh
 ```
 
-**What the hooks do:**
+It runs five fast-fail steps: `ruff format --check`, `ruff check`,
+`basedpyright`, `lint-imports`, `pytest --cov` (with a branch-coverage
+floor configured in `pyproject.toml`).
 
-- **On every commit:**
-  - Code formatting with `ruff format` (80-char line length)
-  - Linting with `ruff check --fix` (auto-fixes issues)
-  - File quality checks (trailing whitespace, EOF, YAML syntax)
-  - Safety checks (large files, merge conflicts)
-
-- **On push to remote:**
-  - Full unit test suite via `scripts/unittest.sh`
-
-**Manual execution:**
+**Hooks**: the pre-commit stage runs formatting/lint and file hygiene
+checks; the pre-push stage runs the full `scripts/verify.sh`. If a hook
+fails, fix the issue — don't bypass with `--no-verify`.
 
 ```bash
-# Run formatting and linting
-./scripts/lint.sh
-
-# Run all pre-commit hooks on all files
+# Run all pre-commit hooks manually
 pre-commit run --all-files
 
-# Run specific tests
-./scripts/unittest.sh tests/quantmind/sources/
-./scripts/unittest.sh all  # Run all tests
+# Run targeted tests while iterating
+pytest tests/<module>/
 ```
-
-**Troubleshooting:**
-
-- If hooks fail, fix the issues and commit again
-- To skip hooks temporarily (not recommended): `git commit --no-verify`
-- Update hooks: `pre-commit autoupdate`
 
 ## 📝 Development Standards
 
-### Code Requirements
-- **Location**: All new code in `quantmind/` module
-- **Style**: Google-style docstrings, 80-char line length
-- **Architecture**: Abstract base classes + dependency injection
-- **Type Safety**: Pydantic models + comprehensive type hints
-
-### Testing
-- **Unit tests**: Required in `tests/quantmind/` (mirror module structure)
-- **Coverage**: Test success and error cases
-- **Mocking**: Mock external APIs and file systems
-
-### Documentation
-- **Examples**: Add to `examples/quantmind/` for new features
-- **Docstrings**: Google-style format for all public methods
-
-## 🏗️ Contribution Types
-
-### New Sources
-- Extend `BaseSource[ContentType]` in `quantmind/sources/`
-- Add config in `quantmind/config/sources.py`
-- Include tests and usage example
-
-### New Parsers
-- Extend `BaseParser` in `quantmind/parsers/`
-- Handle multiple content formats with error handling
-
-### New Taggers
-- Extend `BaseTagger` in `quantmind/tagger/`
-- Support rule-based and ML approaches
-
-### Storage Backends
-- Extend `BaseStorage` in `quantmind/storage/`
-- Implement indexing, querying, and concurrent access
+- **Architecture**: QuantMind is a domain library on top of the OpenAI
+  Agents SDK — functions over classes, `Protocol` over ABC, no CLI, no
+  agent-runtime rebuilding. See `AGENTS.md` / `CLAUDE.md` for the stable
+  constraints and the module map.
+- **Style**: Google-style docstrings, English comments, 80-char lines
+  (enforced by ruff).
+- **Types**: Pydantic models at boundaries, frozen dataclasses internally;
+  comprehensive type hints (`basedpyright` runs in standard mode).
+- **Dependency boundaries**: enforced by `import-linter`
+  (`pyproject.toml`); don't work around a failing contract.
+- **Tests**: required under `tests/<module>/` (mirror the module
+  structure), `unittest.TestCase`, mock external services, cover success
+  and failure paths.
+- **Examples**: one focused example under `examples/<module>/` for each
+  new feature.
 
 ## 🔄 Pull Request Process
 
-1. **Create feature branch** from `master`
-2. **Follow conventional commits**: `type(scope): description`
-3. **Pre-commit hooks** run automatically on commit/push
-4. **Before submitting**:
-   ```bash
-   pre-commit run --all-files
-   ./scripts/unittest.sh all
-   ```
-5. **Submit PR** using our template
+1. **Create a feature branch** from `master`.
+2. **Follow Conventional Commits**: `type(scope): description`, in English.
+3. **Verify before submitting**: `bash scripts/verify.sh` must be green.
+4. **Submit the PR** using the template — English body, reference the
+   related issue, and state the verification you performed.
+5. Keep PRs small and focused
+   ([Google eng practices](https://google.github.io/eng-practices/review/developer/small-cls.html)).
 
-### PR Checklist
-- [ ] Code in `quantmind/` following architecture patterns
-- [ ] Unit tests with comprehensive coverage
-- [ ] Usage example (for new features)
-- [ ] All pre-commit hooks pass
-- [ ] Conventional commit format
-
-## 💡 Development Tips
-
-```bash
-# Run specific tests
-pytest tests/quantmind/sources/
-pytest tests/quantmind/models/
-
-# Test CLI functionality
-quantmind extract "test query" --max-papers 5
-quantmind config show
-
-# Check code quality
-./scripts/lint.sh
-```
+For significant changes (new modules, new dependencies, API redesigns),
+open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss
+first.
 
 ## ❓ Questions?
 
 - Check existing [issues](https://github.com/LLMQuant/quant-mind/issues)
 - Review architecture patterns in existing code
-- Look at `examples/` for usage patterns
-- See `CLAUDE.md` for detailed architecture
+- See `AGENTS.md` / `CLAUDE.md` for repository-wide rules
 
 Thank you for contributing! 🚀
