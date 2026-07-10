@@ -1,42 +1,82 @@
-# AI Development Guide
+# QuantMind — Agent Instructions
 
-> The following context is a bundle of best practices for AI development. Please follow the guidance strictly.
+Guidance for coding agents contributing to this repository. Keep this file
+aligned with `CLAUDE.md` (same core rules); update both in the same change.
 
-## Avoid Meaningless Wrapper Methods
+## What This Is
 
-**Core Rule:** If a method only does simple data access + basic error checking, use it inline directly.
+QuantMind is a knowledge extraction and retrieval library for quantitative
+finance, built **on top of** the OpenAI Agents SDK. It is a domain library,
+not an agent framework: runtime, tracing, tool scaffolding, and multi-agent
+handoff all come from `openai-agents`.
 
-One-sentence Decision Criteria: **"Does this method do any actual work beyond wrapping the call?"**
+## Module Map
 
-### Simplified Comparison
+| Module | Role |
+|--------|------|
+| `quantmind/knowledge/` | Pydantic data standard (`FlattenKnowledge` / `TreeKnowledge` / `GraphKnowledge`) — dependency leaf |
+| `quantmind/configs/` | Flow cfg + typed inputs (`BaseFlowCfg`, discriminated unions) — depends only on `knowledge` |
+| `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
+| `quantmind/flows/` | Apex layer: end-to-end pipeline functions (`paper_flow`, `batch_run`) |
+| `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
+| `quantmind/mind/` | Cognitive layer (memory protocol); landing via the Agents SDK migration (#71) |
+| `quantmind/utils/` | Logger only — keep it that way |
 
-```python
-# ❌ Meaningless wrapper
-def _get_llm(self, identifier: str):
-    if identifier not in self._llm_blocks:
-        raise KeyError(f"LLM block '{identifier}' not found")
-    return self._llm_blocks[identifier]
+The pre-migration agent runtime was removed and archived on the
+`archive/agent-runtime-final` branch. Reference it for history; never
+resurrect it into master.
 
-# ✅ Direct usage
-llm_block = self._llm_blocks[identifier]  # KeyError naturally thrown
+## Setup and Verification
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+bash scripts/verify.sh   # canonical "is this branch shippable" check
 ```
 
-### Keep wrappers when they provide
+`scripts/verify.sh` runs five fast-fail steps (`ruff format --check`,
+`ruff check`, `basedpyright`, `lint-imports`, `pytest --cov`). CI runs the
+exact same script, so a green local run means a green PR. Do not bypass
+pre-commit / pre-push hooks unless the user explicitly authorizes it — fix
+the underlying issue instead.
 
-- **Complex logic**: Conditional logic, data transformation, loops
-- **Abstract interfaces**: Abstract methods, public APIs
-- **Side effects**: Logging, state changes, external calls
+## Architecture Constraints (stable)
 
-**Remember:** Encapsulation should hide complexity, not add complexity.
+1. **Library, not framework** — functions over classes, `Protocol` over ABC,
+   no plugin registries, no hook discovery, no CLI.
+2. **Do not rebuild the agent runtime** — use `openai-agents` directly; no
+   QuantMind-side facades over `from agents import ...`.
+3. **Pydantic at boundaries, frozen dataclass internally** — Pydantic
+   (`frozen=True`, `extra="forbid"`) for anything exposed to an LLM or a
+   user; frozen dataclasses for internal value types.
+4. **Import boundaries are contracts** — `import-linter` (configured in
+   `pyproject.toml`) pins the dependency graph; never work around a failing
+   contract.
+5. **Absolute imports** across module boundaries.
+6. **No meaningless wrappers** — a method must add logic, abstraction, or a
+   side effect beyond the call it wraps; otherwise inline it.
 
-## Impl with Unit Test and Example
+## Tests and Examples
 
-If you are implementing a new feature, please implement the unit test and example.
+A new feature ships with a unit test **and** a focused example:
 
-- For unit test, add in `tests/<module_name>`, and inherit the `unittest.TestCase` class.
-- For example, add in `examples/<module_name>`, and just demo the simple usage. (do not add too many use cases in single file)
+- Tests: `tests/<module>/`, subclass `unittest.TestCase`, mock external
+  services, cover success and failure paths.
+- Examples: `examples/<module>/`, one simple usage per file.
 
-## Comment Style
+## Communication
 
-- All comments should be in English.
-- All comments should be in the Google style.
+- Commit messages: English, Conventional Commits.
+- PR titles, PR bodies, and issue bodies: English.
+- Code comments and docstrings: English, Google style.
+
+## Development Workflows
+
+For commit, pull-request, or component-implementation tasks, load the
+`quantmind-dev` skill and follow the matching reference:
+
+- `.agents/skills/quantmind-dev/SKILL.md` (this toolchain)
+- `.claude/skills/quantmind-dev/SKILL.md` (Claude Code)
+
+The two copies are identical; when changing the skill, update both in the
+same change.
