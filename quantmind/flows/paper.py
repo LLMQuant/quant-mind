@@ -13,7 +13,7 @@ flow, fork this file (Layer 3 — design doc §9).
 
 from typing import Any, TypeVar
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -98,7 +98,10 @@ async def paper_flow(
         ),
         "model": cfg.model,
         "tools": list(extra_tools or []),
-        "output_type": out_type,
+        # `Paper.nodes` is a dict-typed field; strict-mode structured output
+        # (the Agents SDK default) cannot represent dict types at all, so
+        # this flow always runs non-strict.
+        "output_type": AgentOutputSchema(out_type, strict_json_schema=False),
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }

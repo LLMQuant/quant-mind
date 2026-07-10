@@ -18,7 +18,7 @@ def _src() -> SourceRef:
 
 
 def _single_node_paper(**overrides) -> Paper:
-    root_id = uuid4()
+    root_id = str(uuid4())
     root = TreeNode(
         node_id=root_id,
         parent_id=None,
@@ -65,7 +65,7 @@ class PaperTreeTests(unittest.TestCase):
 
 class PaperKnowledgeCardTests(unittest.TestCase):
     def test_minimal(self):
-        paper_id = uuid4()
+        paper_id = str(uuid4())
         card = PaperKnowledgeCard(
             as_of=_now(),
             source=_src(),
@@ -81,7 +81,7 @@ class PaperKnowledgeCardTests(unittest.TestCase):
         card = PaperKnowledgeCard(
             as_of=_now(),
             source=_src(),
-            paper_id=uuid4(),
+            paper_id=str(uuid4()),
             summary="s",
             methodology="m",
             key_findings=["f1", "f2"],
@@ -95,7 +95,7 @@ class PaperKnowledgeCardTests(unittest.TestCase):
         card = PaperKnowledgeCard(
             as_of=_now(),
             source=_src(),
-            paper_id=uuid4(),
+            paper_id=str(uuid4()),
             summary="momentum study",
             key_findings=["beats SPX", "robust to costs"],
         )
