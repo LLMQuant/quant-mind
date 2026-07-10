@@ -9,7 +9,6 @@ summarisation), then a `PaperKnowledgeCard` derived from the root summary.
 """
 
 from typing import Literal
-from uuid import UUID
 
 from pydantic import Field
 
@@ -41,7 +40,7 @@ class PaperKnowledgeCard(FlattenKnowledge):
 
     item_type: Literal["paper_card"] = "paper_card"
 
-    paper_id: UUID
+    paper_id: str
     summary: str
     methodology: str | None = None
     key_findings: list[str] = Field(default_factory=list)

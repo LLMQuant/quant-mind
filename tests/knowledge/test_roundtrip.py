@@ -3,7 +3,7 @@
 These tests guard the contract that powers ``Agent(output_type=...)``: the
 LLM returns JSON, the Agents SDK calls ``model_validate_json`` on it, and
 the result must equal what we would have produced via ``model_dump_json``.
-Tree schemas are the trickiest because of ``dict[UUID, TreeNode]`` keys.
+Tree schemas are the trickiest because of ``dict[str, TreeNode]`` keys.
 """
 
 import unittest
@@ -66,7 +66,7 @@ class FlattenRoundTripTests(unittest.TestCase):
         card = PaperKnowledgeCard(
             as_of=_now(),
             source=_src("arxiv"),
-            paper_id=uuid4(),
+            paper_id=str(uuid4()),
             summary="momentum study",
             methodology="cross-sectional",
             key_findings=["beats SPX"],
@@ -93,8 +93,8 @@ class FlattenRoundTripTests(unittest.TestCase):
 
 class TreeRoundTripTests(unittest.TestCase):
     def _build_paper(self) -> Paper:
-        leaf_id = uuid4()
-        root_id = uuid4()
+        leaf_id = str(uuid4())
+        root_id = str(uuid4())
         leaf = TreeNode(
             node_id=leaf_id,
             parent_id=root_id,
@@ -122,11 +122,11 @@ class TreeRoundTripTests(unittest.TestCase):
             nodes={root_id: root, leaf_id: leaf},
         )
 
-    def test_paper_dict_uuid_keys_round_trip(self):
+    def test_paper_dict_str_keys_round_trip(self):
         p = self._build_paper()
         revived = Paper.model_validate_json(p.model_dump_json())
         self.assertEqual(p, revived)
-        # UUID keys are preserved through the JSON detour.
+        # String keys are preserved through the JSON detour.
         self.assertEqual(set(revived.nodes.keys()), set(p.nodes.keys()))
         # Helper still works on the revived instance.
         self.assertEqual(revived.root().title, "Cross-Sectional Momentum")

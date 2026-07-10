@@ -74,7 +74,12 @@ class BaseKnowledge(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     # Identity
-    id: UUID = Field(default_factory=uuid4)
+    #
+    # `str` rather than `UUID`: this field is part of every knowledge type's
+    # LLM-facing structured-output schema, and an extractor agent naturally
+    # sets it to a domain identifier (e.g. an arXiv id) rather than leaving
+    # the default UUID4. `str` accepts both; `UUID` rejects the former.
+    id: str = Field(default_factory=lambda: str(uuid4()))
     item_type: str
     schema_version: str = "1.0"
 

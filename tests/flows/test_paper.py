@@ -30,7 +30,7 @@ from quantmind.preprocess.fetch import Fetched, RawPaper
 
 
 def _stub_paper() -> Paper:
-    root_id = uuid4()
+    root_id = str(uuid4())
     root = TreeNode(node_id=root_id, title="root", summary="stub")
     return Paper(
         as_of=datetime(2026, 5, 7, tzinfo=timezone.utc),
@@ -273,7 +273,11 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             _patch_runner(_stub_paper()),
         ):
             await paper_flow(RawText(text="x"), output_type=MyPaper)
-        self.assertIs(seen["output_type"], MyPaper)
+        # `output_type` is wrapped in a non-strict `AgentOutputSchema` because
+        # `Paper.nodes` is a dict-typed field, which strict-mode structured
+        # output cannot represent.
+        self.assertIs(seen["output_type"].output_type, MyPaper)
+        self.assertFalse(seen["output_type"].is_strict_json_schema())
 
     async def test_extra_tools_and_guardrails_forwarded(self) -> None:
         seen: dict[str, Any] = {}

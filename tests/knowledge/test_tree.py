@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime, timezone
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -32,10 +32,10 @@ def _make_tree() -> _SampleTree:
     │   └── a2
     └── b
     """
-    a1_id, a2_id = uuid4(), uuid4()
-    a_id = uuid4()
-    b_id = uuid4()
-    root_id = uuid4()
+    a1_id, a2_id = str(uuid4()), str(uuid4())
+    a_id = str(uuid4())
+    b_id = str(uuid4())
+    root_id = str(uuid4())
     a1 = TreeNode(
         node_id=a1_id,
         parent_id=a_id,
@@ -88,7 +88,7 @@ class TreeNodeTests(unittest.TestCase):
         self.assertEqual(n.summary, "s")
         self.assertIsNone(n.content)
         self.assertEqual(n.children_ids, [])
-        self.assertIsInstance(n.node_id, UUID)
+        self.assertIsInstance(n.node_id, str)
 
     def test_default_node_id_unique(self):
         a = TreeNode(title="t", summary="s")
@@ -141,7 +141,7 @@ class TreeKnowledgeTests(unittest.TestCase):
 
     def test_find_path_unknown(self):
         tree = _make_tree()
-        self.assertEqual(tree.find_path(uuid4()), [])
+        self.assertEqual(tree.find_path(str(uuid4())), [])
 
     def test_embedding_text_uses_root(self):
         tree = _make_tree()

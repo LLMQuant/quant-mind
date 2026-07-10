@@ -12,11 +12,23 @@ a coarse pre-filter, never as a replacement for that reasoning.
 """
 
 from collections.abc import Iterator
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from quantmind.knowledge._base import BaseKnowledge, Citation
+
+
+def _new_node_id() -> str:
+    """Default node id: a UUID4 rendered as a string.
+
+    Plain ``str`` rather than ``UUID`` because ``nodes`` below is a dict
+    keyed by node id, and OpenAI's strict-mode structured output does not
+    support dict-typed fields at all -- so the extractor agent runs with
+    ``strict_json_schema=False`` and is free to choose readable slugs
+    ("introduction", "methodology") instead of UUIDs. ``str`` accepts both.
+    """
+    return str(uuid4())
 
 
 class TreeNode(BaseModel):
@@ -30,14 +42,14 @@ class TreeNode(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    node_id: UUID = Field(default_factory=uuid4)
-    parent_id: UUID | None = None
+    node_id: str = Field(default_factory=_new_node_id)
+    parent_id: str | None = None
     position: int = 0
     title: str
     summary: str
     content: str | None = None
     citations: list[Citation] = Field(default_factory=list)
-    children_ids: list[UUID] = Field(default_factory=list)
+    children_ids: list[str] = Field(default_factory=list)
 
     def embedding_text(self) -> str:
         """Default: title + summary. Override per domain if needed."""
@@ -53,19 +65,19 @@ class TreeKnowledge(BaseKnowledge):
     complete tree.
     """
 
-    root_node_id: UUID
-    nodes: dict[UUID, TreeNode]
+    root_node_id: str
+    nodes: dict[str, TreeNode]
 
     def root(self) -> TreeNode:
         return self.nodes[self.root_node_id]
 
-    def children_of(self, node_id: UUID) -> list[TreeNode]:
+    def children_of(self, node_id: str) -> list[TreeNode]:
         node = self.nodes[node_id]
         return [self.nodes[c] for c in node.children_ids]
 
     def walk_dfs(self) -> Iterator[TreeNode]:
         """Depth-first traversal starting at the root."""
-        stack: list[UUID] = [self.root_node_id]
+        stack: list[str] = [self.root_node_id]
         while stack:
             node_id = stack.pop()
             node = self.nodes[node_id]
@@ -73,12 +85,12 @@ class TreeKnowledge(BaseKnowledge):
             # Reverse so children are visited in declared order.
             stack.extend(reversed(node.children_ids))
 
-    def find_path(self, node_id: UUID) -> list[TreeNode]:
+    def find_path(self, node_id: str) -> list[TreeNode]:
         """Root-to-node path. Empty if `node_id` is not in the tree."""
         if node_id not in self.nodes:
             return []
         path: list[TreeNode] = []
-        cursor: UUID | None = node_id
+        cursor: str | None = node_id
         while cursor is not None:
             node = self.nodes[cursor]
             path.append(node)
