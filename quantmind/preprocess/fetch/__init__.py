@@ -17,15 +17,21 @@ from quantmind.preprocess.fetch.http import (
     DEFAULT_USER_AGENT,
     fetch_url,
 )
+from quantmind.preprocess.fetch.fxmacrodata import (
+    DEFAULT_FXMACRODATA_BASE_URL,
+    fetch_fxmacrodata_calendar,
+)
 from quantmind.preprocess.fetch.local import read_local_file
 
 __all__ = [
     "ArxivIdParseError",
     "CrossrefMetadata",
+    "DEFAULT_FXMACRODATA_BASE_URL",
     "DEFAULT_USER_AGENT",
     "Fetched",
     "RawPaper",
     "fetch_arxiv",
+    "fetch_fxmacrodata_calendar",
     "fetch_url",
     "read_local_file",
     "resolve_doi",
