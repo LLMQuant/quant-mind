@@ -1,5 +1,6 @@
 """Tests for ``quantmind.flows.governance``."""
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,11 +23,14 @@ class GovernanceLoaderTests(unittest.TestCase):
         self.assertIn("tolerant_ingestion", policy.scenarios)
 
     def test_load_empty_policy_raises(self) -> None:
-        empty_path = Path(__file__).with_name("empty_governance.yaml")
-        empty_path.write_text("", encoding="utf-8")
-        self.addCleanup(empty_path.unlink)
-        with self.assertRaises(GovernancePolicyError):
-            load_governance_policy(empty_path)
+        # Use a temp directory instead of writing into the repo's tests/
+        # tree; keeps the test safe in read-only envs and under parallel
+        # test runs.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            empty_path = Path(tmp_dir) / "empty_governance.yaml"
+            empty_path.write_text("", encoding="utf-8")
+            with self.assertRaises(GovernancePolicyError):
+                load_governance_policy(empty_path)
 
 
 class ToolAllowlistTests(unittest.TestCase):

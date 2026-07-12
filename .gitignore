@@ -33,3 +33,6 @@ docs/superpowers/
 .coverage
 htmlcov/
 coverage.xml
+
+# Tool/hook caches that get regenerated locally and should not be tracked.
+.impeccable/

@@ -125,9 +125,14 @@ for how to extend this stack beyond finance.
 
 QuantMind now treats governance as executable policy instead of passive config.
 Tool allowlists, loop budgets, fallback behavior, and L3 commit gates are
-declared in `quantmind/flows/governance.yaml` and enforced at runtime.
-This maps directly to loop SLI/SLO operations: every loop is expected to be
-traceable, budgeted, and quality-gated before durable writes.
+declared in `quantmind/flows/governance.yaml` and exposed via
+`quantmind.flows.governance` helpers (e.g. `ensure_tool_allowed`,
+`loop_budget_manager`, `enforce_l3_commit_gates`). Callers opt in by passing
+the loaded `GovernancePolicy` (or a default-loaded one) into entry points such
+as `magic.resolve_magic_input(..., governance_policy=...)`; the helpers are
+not auto-wired into every flow. This maps directly to loop SLI/SLO operations:
+loops that opt in are expected to be traceable, budgeted, and quality-gated
+before durable writes.
 
 ---
 

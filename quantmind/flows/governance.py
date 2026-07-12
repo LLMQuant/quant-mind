@@ -7,6 +7,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from quantmind.configs import RawFallbackNode
+from quantmind.mind.memory import L3CommitRequirements, can_commit_to_l3
 
 
 class GovernancePolicyError(ValueError):
@@ -47,7 +48,12 @@ class GlobalGovernanceSettings(BaseModel):
 
 
 class L3CommitPolicy(BaseModel):
-    """Hard gates required before committing to durable memory."""
+    """Hard gates required before committing to durable memory.
+
+    Mirrors :class:`quantmind.mind.memory.L3CommitRequirements` field for
+    field so that :func:`enforce_l3_commit_gates` can delegate to the shared
+    ``can_commit_to_l3`` helper. Keep these defaults in sync.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -56,6 +62,16 @@ class L3CommitPolicy(BaseModel):
     require_schema_validity: bool = True
     require_dedup_check: bool = True
     require_contradiction_check: bool = True
+
+    def to_requirements(self) -> L3CommitRequirements:
+        """Convert to the dataclass used by ``mind.memory``."""
+        return L3CommitRequirements(
+            min_confidence=self.min_confidence,
+            require_provenance=self.require_provenance,
+            require_schema_validity=self.require_schema_validity,
+            require_dedup_check=self.require_dedup_check,
+            require_contradiction_check=self.require_contradiction_check,
+        )
 
 
 class GovernancePolicy(BaseModel):
@@ -190,20 +206,19 @@ def enforce_l3_commit_gates(
     dedup_ok: bool,
     contradiction_free: bool,
 ) -> bool:
-    """Return true only when all configured L3 commit gates pass."""
-    rules = policy.l3_commit
-    confidence = float(artifact.get("validation_confidence", 0.0))
-    if confidence < rules.min_confidence:
-        return False
-    if rules.require_provenance and not artifact.get("provenance"):
-        return False
-    if rules.require_schema_validity and not schema_valid:
-        return False
-    if rules.require_dedup_check and not dedup_ok:
-        return False
-    if rules.require_contradiction_check and not contradiction_free:
-        return False
-    return True
+    """Return true only when all configured L3 commit gates pass.
+
+    Delegates to :func:`quantmind.mind.memory.can_commit_to_l3` so there is
+    a single source of truth for L3 commit gating semantics across flows
+    and the mind/memory engine.
+    """
+    return can_commit_to_l3(
+        artifact,
+        schema_valid=schema_valid,
+        dedup_ok=dedup_ok,
+        contradiction_free=contradiction_free,
+        requirements=policy.l3_commit.to_requirements(),
+    )
 
 
 def _default_policy_path() -> Path:
