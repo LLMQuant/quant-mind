@@ -1,10 +1,4 @@
-"""Preprocess layer — fetch + format two-stage data prep.
-
-Imports are surfaced at the package root for the common path
-(``from quantmind.preprocess import fetch_arxiv, pdf_to_markdown``) but
-sub-modules remain available for callers that prefer the explicit path
-(``from quantmind.preprocess.fetch.arxiv import fetch_arxiv``).
-"""
+"""Preprocess layer for fetching, formatting, and source normalization."""
 
 from quantmind.preprocess.clean import (
     collapse_whitespace,
@@ -14,10 +8,17 @@ from quantmind.preprocess.clean import (
 from quantmind.preprocess.fetch import (
     ArxivIdParseError,
     CrossrefMetadata,
+    FeedItem,
+    FetchAttemptsExhausted,
     Fetched,
+    FetchPolicy,
+    HttpFetcher,
+    RawFeed,
     RawPaper,
     fetch_arxiv,
+    fetch_rss_feed,
     fetch_url,
+    parse_feed,
     read_local_file,
     resolve_doi,
 )
@@ -26,27 +27,92 @@ from quantmind.preprocess.format import (
     html_to_markdown,
     pdf_to_markdown,
 )
+from quantmind.preprocess.news import (
+    BodySource,
+    NewsCandidate,
+    NewsTickerHint,
+    RawNewsDocument,
+    build_news_dedup_key,
+    build_sec_news_dedup_key,
+    canonicalize_source_url,
+    extract_exchange_ticker_hints,
+    feed_item_to_news_document,
+    fetch_news_document,
+    news_content_hash,
+    news_document_from_fetched,
+    normalize_news_text,
+    preprocess_feed_item,
+    preprocess_news_document,
+    preprocess_news_url,
+)
 from quantmind.preprocess.time import (
     business_days_between,
     parse_filing_date,
+    parse_news_datetime,
     to_utc,
+)
+from quantmind.preprocess.wire import (
+    PR_NEWSWIRE,
+    RawWireArtifact,
+    WireDocument,
+    WireFeedConfig,
+    WireFetchFailure,
+    WireFetchResult,
+    WireItemMapping,
+    WireProvider,
+    build_wire_identity,
+    fetch_wire_documents,
 )
 
 __all__ = [
     "ArxivIdParseError",
+    "BodySource",
     "CrossrefMetadata",
+    "FeedItem",
+    "FetchAttemptsExhausted",
+    "FetchPolicy",
     "Fetched",
+    "HttpFetcher",
+    "NewsCandidate",
+    "NewsTickerHint",
+    "PR_NEWSWIRE",
     "PdfParseError",
+    "RawFeed",
+    "RawNewsDocument",
     "RawPaper",
+    "RawWireArtifact",
+    "WireDocument",
+    "WireFeedConfig",
+    "WireFetchFailure",
+    "WireFetchResult",
+    "WireItemMapping",
+    "WireProvider",
+    "build_news_dedup_key",
+    "build_sec_news_dedup_key",
+    "build_wire_identity",
     "business_days_between",
+    "canonicalize_source_url",
     "collapse_whitespace",
     "dedupe_lines",
+    "extract_exchange_ticker_hints",
+    "feed_item_to_news_document",
     "fetch_arxiv",
+    "fetch_news_document",
+    "fetch_rss_feed",
     "fetch_url",
+    "fetch_wire_documents",
     "html_to_markdown",
+    "news_content_hash",
+    "news_document_from_fetched",
+    "normalize_news_text",
     "normalize_unicode",
+    "parse_feed",
     "parse_filing_date",
+    "parse_news_datetime",
     "pdf_to_markdown",
+    "preprocess_feed_item",
+    "preprocess_news_document",
+    "preprocess_news_url",
     "read_local_file",
     "resolve_doi",
     "to_utc",
