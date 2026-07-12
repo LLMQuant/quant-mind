@@ -1,0 +1,12 @@
+<rss version="2.0">
+  <channel>
+    <title>Sanitized PR Newswire feed</title>
+    <item>
+      <title>Example Energy Shares an Operations Update</title>
+      <link>https://example.test/prn/releases/operations-update</link>
+      <guid>prn-example-001</guid>
+      <pubDate>Wed, 17 Apr 2024 12:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Example Energy shared a short operations teaser.</p>]]></description>
+    </item>
+  </channel>
+</rss>

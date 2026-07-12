@@ -29,6 +29,15 @@ class Fetched:
     headers: dict[str, str] = field(default_factory=dict)
     """Selected response headers (HTTP fetches only); empty dict otherwise."""
 
+    status_code: int | None = None
+    """HTTP status code when fetched over HTTP; otherwise ``None``."""
+
+    resolved_url: str | None = None
+    """Final URL after redirects; otherwise ``None``."""
+
+    fetched_at: datetime | None = None
+    """UTC capture time for HTTP evidence; otherwise ``None``."""
+
 
 @dataclass(frozen=True, slots=True)
 class RawPaper(Fetched):

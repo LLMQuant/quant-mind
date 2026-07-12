@@ -6,6 +6,7 @@ expected to be aware (tz-attached); naive ones are treated as UTC.
 """
 
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 
 # ISO 8601 + the common journal/news layouts. Order matters: more specific
 # patterns first so ``2024-04-15T10:30:00Z`` doesn't get partial-matched
@@ -68,6 +69,38 @@ def parse_filing_date(value: str) -> datetime:
     raise ValueError(
         f"could not parse date {value!r}; tried {len(_DATE_FORMATS)} formats"
     ) from last_error
+
+
+def parse_news_datetime(value: str) -> datetime:
+    """Parse an RFC 822 or ISO-8601 news timestamp into UTC.
+
+    Args:
+        value: News timestamp string.
+
+    Returns:
+        A timezone-aware UTC datetime.
+
+    Raises:
+        ValueError: If the timestamp is empty or unsupported.
+    """
+    text = value.strip()
+    if not text:
+        raise ValueError("empty news datetime string")
+
+    try:
+        return parse_filing_date(text)
+    except ValueError as iso_error:
+        try:
+            parsed = parsedate_to_datetime(text)
+        except (TypeError, ValueError) as rfc_error:
+            raise ValueError(
+                f"could not parse news datetime {value!r}"
+            ) from rfc_error
+        if parsed is None:
+            raise ValueError(
+                f"could not parse news datetime {value!r}"
+            ) from iso_error
+        return to_utc(parsed)
 
 
 def business_days_between(a: date, b: date) -> int:
