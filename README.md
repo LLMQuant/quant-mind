@@ -154,6 +154,8 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 ### 📚 Usage Examples
 
+Component-specific guides and architecture notes live under [`docs/`](docs/).
+
 #### Run a single paper through `paper_flow`
 
 ```python
@@ -174,40 +176,6 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
-
-#### Fetch PR Newswire releases
-
-```python
-import asyncio
-
-from quantmind.preprocess import (
-    PR_NEWSWIRE,
-    FetchPolicy,
-    WireFeedConfig,
-    fetch_wire_documents,
-)
-
-
-async def main() -> None:
-    result = await fetch_wire_documents(
-        WireFeedConfig(
-            provider=PR_NEWSWIRE,
-            feed_urls=(
-                "https://www.prnewswire.com/rss/news-releases-list.rss",
-            ),
-            fetch_policy=FetchPolicy(min_interval_seconds=0.25),
-        )
-    )
-    print(f"documents={result.success_count}")
-    print(f"failures={result.failure_count}")
-
-
-asyncio.run(main())
-```
-
-Each successful `WireDocument` retains the raw feed entry, raw article HTML,
-and cleaned Markdown. Feed and item failures are recorded in the result without
-stopping the remaining batch.
 
 #### Fan out a batch with `batch_run`
 
