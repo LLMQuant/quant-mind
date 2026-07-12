@@ -1,179 +1,83 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working in
+this repository. Keep this file aligned with `AGENTS.md` (same core rules);
+update both in the same change.
 
-## Project Overview
+## What This Is
 
-QuantMind is an intelligent knowledge extraction and retrieval framework for quantitative
-finance. As of 2026-04, it is being **repositioned as a domain library that runs on top
-of OpenAI Agents SDK**, rather than as a self-contained agent framework.
+QuantMind is a knowledge extraction and retrieval library for quantitative
+finance, built **on top of** the OpenAI Agents SDK. It is a domain library,
+not an agent framework: runtime, tracing, tool scaffolding, and multi-agent
+handoff all come from `openai-agents`.
 
-The pre-pivot agent runtime (`brain/`, `tools/`, `storage/`, `tagger/`, custom Tool ABC,
-custom MultiStepAgent / Memory) was removed in PR #70. A full snapshot of the removed
-code is preserved on the `archive/agent-runtime-final` branch on origin — reference it
-if you need historical context, never resurrect it into master.
+## Module Map
 
-## Target Architecture (post-migration)
+| Module | Role |
+|--------|------|
+| `quantmind/knowledge/` | Pydantic data standard (`FlattenKnowledge` / `TreeKnowledge` / `GraphKnowledge`) — dependency leaf |
+| `quantmind/configs/` | Flow cfg + typed inputs (`BaseFlowCfg`, discriminated unions) — depends only on `knowledge` |
+| `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
+| `quantmind/flows/` | Apex layer: end-to-end pipeline functions (`paper_flow`, `batch_run`) |
+| `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
+| `quantmind/mind/` | Cognitive layer (memory protocol); landing via the Agents SDK migration (#71) |
+| `quantmind/utils/` | Logger only — keep it that way |
 
-```
-quantmind/
-├── flows/        # e2e pipeline functions (paper_flow, news_flow, ...)
-├── knowledge/    # Pydantic schemas (KnowledgeItem subclasses: Paper, News, ...)
-├── preprocess/   # fetch (arxiv/http/doi/local) + format (pdf/html/markdown)
-├── mind/         # cognitive layer; mind/memory/ is the MVP (filesystem-backed)
-├── configs/      # centralized cfg + input types (BaseFlowCfg + per-flow types)
-├── magic.py      # resolve_magic_input: natural language -> (input, cfg)
-└── utils/        # logger only
-```
+The pre-migration agent runtime was removed and archived on the
+`archive/agent-runtime-final` branch. Reference it for history; never
+resurrect it into master.
 
-Key principle: QuantMind does NOT rebuild Agent runtime, lifecycle hooks, tracing,
-multi-agent handoff, or tool framework. Those come from `openai-agents`.
-
-## Current Repository State (after PR #70 / #73 / #74 / #75 / PR5)
-
-| Module | Status | Notes |
-|--------|--------|-------|
-| `quantmind/knowledge/` | landed (PR3) | data standard with three shapes: `FlattenKnowledge` (`News` / `Earnings` / `PaperKnowledgeCard`), `TreeKnowledge` (`Paper`), `GraphKnowledge` (placeholder); shared base = `BaseKnowledge` with typed `SourceRef` / `ExtractionRef` provenance + `embedding_text()` contract |
-| `quantmind/configs/` | landed (PR3) | `BaseFlowCfg` / `BaseInput` + per-flow cfg + discriminated-union input types |
-| `quantmind/preprocess/` | landed (PR4) | `fetch/` (`fetch_arxiv` / `fetch_url` / `resolve_doi` / `read_local_file` returning `Fetched` / `RawPaper` / `CrossrefMetadata` frozen dataclasses) + `format/` (`pdf_to_markdown` via PyMuPDF, `html_to_markdown` via trafilatura) + `clean.py` + `time.py`; leaf module — only depends on `quantmind.utils` |
-| `quantmind/flows/` | landed (PR5) | apex layer: `paper_flow` (`PaperInput` → `Paper` via SDK Agent), `batch_run` + `BatchResult` (bounded-concurrency fan-out, `memory=` rejected by design), `_runner.run_with_observability` + `_compose_hooks` + `_archive_run_artifacts` (PR6 stub); only depends on configs/knowledge/preprocess/utils + `agents` SDK |
-| `quantmind/magic.py` | landed (PR5) | `resolve_magic_input(natural_language, *, target_flow, ...) -> (input, cfg)` plus `preview_resolve` debug helper; introspects flow signatures and runs a lightweight resolver Agent with `output_type=ResolvedFlowConfig[InputT, CfgT]` |
-| `quantmind/utils/logger.py` | permanent | only general-purpose utility |
-
-PR5 removed the transitional packages (`quantmind/{flow,llm,config,models}/`
-and their tests under `tests/{config,models}/`); PR4 had already removed
-`quantmind/parsers/`, `quantmind/sources/`, and `quantmind/utils/tmp.py`.
-The codebase has now converged to the five permanent module roots
-(`flows/`, `configs/`, `knowledge/`, `preprocess/`, `mind/`) plus
-`magic.py` and `utils/`.
-
-`basedpyright` runs in standard mode across the whole `quantmind/`
-package — there are no per-module exclusions left. Five `import-linter`
-contracts pin the dependency graph: `utils` and `knowledge` are leaves,
-`configs` only depends on `knowledge`, `preprocess` only depends on
-`utils`, and `flows + magic` is the apex (cannot import the deleted
-transitional packages, which are listed in the contract as a tripwire
-against accidental re-introduction).
-
-## Development Commands
-
-### Environment
+## Setup and Verification
 
 ```bash
-uv venv
-source .venv/bin/activate
+uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
+bash scripts/verify.sh   # canonical "is this branch shippable" check
 ```
 
-### Verify (canonical local check)
+`scripts/verify.sh` runs five fast-fail steps (`ruff format --check`,
+`ruff check`, `basedpyright`, `lint-imports`, `pytest --cov`). CI runs the
+exact same script, so a green local run means a green PR. Do not bypass
+pre-commit / pre-push hooks unless the user explicitly authorizes it — fix
+the underlying issue instead.
 
-`scripts/verify.sh` is the single source of truth for "is this branch
-shippable". CI (`.github/workflows/verify.yml`) runs the exact same script,
-so a green local run means a green PR. Run it before every push:
+## Architecture Constraints (stable)
 
-```bash
-bash scripts/verify.sh
-```
+1. **Library, not framework** — functions over classes, `Protocol` over ABC,
+   no plugin registries, no hook discovery, no CLI.
+2. **Do not rebuild the agent runtime** — use `openai-agents` directly; no
+   QuantMind-side facades over `from agents import ...`.
+3. **Pydantic at boundaries, frozen dataclass internally** — Pydantic
+   (`frozen=True`, `extra="forbid"`) for anything exposed to an LLM or a
+   user; frozen dataclasses for internal value types.
+4. **Import boundaries are contracts** — `import-linter` (configured in
+   `pyproject.toml`) pins the dependency graph; never work around a failing
+   contract.
+5. **Absolute imports** across module boundaries.
+6. **No meaningless wrappers** — a method must add logic, abstraction, or a
+   side effect beyond the call it wraps; otherwise inline it.
 
-It runs five steps in fixed order, fast-failing on the first error:
+## Tests and Examples
 
-1. `ruff format --check` — formatting must be clean
-2. `ruff check` — lint (D, E, F, I, W, B, W505) must pass
-3. `basedpyright` — standard-mode type check on permanent + new modules
-4. `lint-imports` — architectural boundary contracts must hold
-5. `pytest --cov` — tests pass with ≥ 75% branch coverage (raised from 65
-   in PR5 after the transitional packages were deleted)
+A new feature ships with a unit test **and** a focused example:
 
-Pre-commit hooks (`.pre-commit-config.yaml`):
-- pre-commit stage: trailing whitespace / EOF / ruff / ruff-format (fast)
-- pre-push stage: full `scripts/verify.sh`
+- Tests: `tests/<module>/`, subclass `unittest.TestCase`, mock external
+  services, cover success and failure paths.
+- Examples: `examples/<module>/`, one simple usage per file.
 
-Don't bypass hooks unless the user explicitly authorizes — fix the underlying
-issue instead.
+## Communication
 
-## Architecture Principles
+- Commit messages: English, Conventional Commits.
+- PR titles, PR bodies, and issue bodies: English.
+- Code comments and docstrings: English, Google style.
 
-1. **No framework, just lib** — Functions over classes; Protocol over ABC; no plugin
-   registries or hook discovery
-2. **Pure functions** — Flows are `async def run(...)`, not classes; state passed as
-   args; side effects via explicit hooks
-3. **Pydantic at boundaries, frozen dataclass internally** — Pydantic for anything
-   exposed to LLM (`output_type=`, cfg, input); frozen dataclass for internal value
-   types
-4. **Batch is first-class** — `batch_run(flow_fn, inputs, ...)` will land in PR4
-   (concurrency + error handling + progress aggregation). Users do NOT write
-   `asyncio.gather` boilerplate themselves
-5. **Customization 3 layers** — cfg (YAML/CLI), kwargs (Python `extra_*` flow args),
-   building blocks (fork the flow file). Each layer has explicit extension points
-6. **Observability 3 layers** — SDK auto-tracing, external processors via
-   `add_trace_processor()`, local trajectory archive under `<memory_dir>/runs/`
-7. **No CLI** — User-facing entry is a runbook script (5 lines of Python), not a
-   framework command. Magic input is the loose-input UX, resolved by an Agent
-8. **Magic input first** — Users describe intent in natural language;
-   `magic.resolve_magic_input(...)` returns a structured `(input, cfg)` tuple
+## Development Workflows
 
-## Conventions When Editing
+For commit, pull-request, or component-implementation tasks, load the
+`quantmind-dev` skill and follow the matching reference:
 
-- **Schemas**: Pydantic, `extra="forbid"`, `frozen=True`. All `BaseKnowledge`
-  subclasses must require `as_of: datetime` (financial time-sensitivity is mandatory)
-  and provide a typed `source: SourceRef` (no bare strings). Subclasses MUST
-  override `embedding_text()` so the store layer knows what to embed.
-- **Knowledge shapes**: pick one of `FlattenKnowledge` (atomic card),
-  `TreeKnowledge` (hierarchical artifact), or wait for `GraphKnowledge`
-  (placeholder). Whole-document objects are `TreeKnowledge` even when a
-  flatten card exists alongside (e.g. `Paper` vs `PaperKnowledgeCard`).
-- **Configs**: Extend `BaseFlowCfg` (lands in PR2); never use `Dict[str, Any]` in
-  init signatures
-- **Tools**: SDK's `@function_tool` decorator; do NOT subclass anything
-- **Memory backends**: Implement the `Memory` Protocol with granular `tools()`,
-  `mcp_servers()`, `run_hooks()`, `reset()` — each may return an empty list. Do not
-  force MCP on every implementation
-- **Tests**: Subclasses of `unittest.TestCase` in `tests/<module>/`. Mock external
-  dependencies; cover both success and failure paths
-- **Imports**: Absolute (`from quantmind.knowledge import Paper`); no relative
-  imports across module boundaries
+- `.claude/skills/quantmind-dev/SKILL.md` (Claude Code)
+- `.agents/skills/quantmind-dev/SKILL.md` (other agent toolchains)
 
-## Communication Conventions
-
-- **PR descriptions and issue bodies must be written in English**, regardless of the
-  language of the conversation that triggered them. They are read by external audiences
-  (search indexers, future maintainers, contributors who don't read Chinese).
-- Commit messages: English, conventional-commit style (`feat:` / `fix:` / `refactor:` /
-  `docs:` / `chore:` ...).
-- Inline PR review comments and issue discussion threads may be in whichever language
-  fits the participants.
-
-## Things NOT to Do
-
-- ❌ Rebuild Agent runtime / Tool ABC / lifecycle hook abstraction
-- ❌ Add a CLI (`argparse`/`typer`/`click`); users run Python runbook scripts
-- ❌ Introduce class-based `BaseFlow` / plugin registry / hook discovery
-- ❌ Wrap `from agents import ...` in a QuantMind-side facade — use the SDK directly
-- ❌ Mix `batch_run` and `memory` (mutually exclusive in MVP; `batch_run` rejects
-  `memory=` at the signature layer — design doc §4.3.5)
-- ❌ Use `Dict[str, Any]` in init functions; use Pydantic models
-- ❌ Add hard deps on observability platforms (Langfuse / Logfire / etc.); document
-  integration via `add_trace_processor()` in user-facing cookbook only
-- ❌ Build embedding-based memory before filesystem memory has shipped and stabilized
-
-## Reference Material
-
-- OpenAI Agents SDK docs: <https://openai.github.io/openai-agents-python/>
-- Lifecycle / RunHooks API: <https://openai.github.io/openai-agents-python/ref/lifecycle/>
-- MCP integration (filesystem server): <https://openai.github.io/openai-agents-python/mcp/>
-- Tracing (auto-capture, processors, disable): <https://openai.github.io/openai-agents-python/tracing/>
-- Original SDK announcement: <https://openai.com/index/the-next-evolution-of-the-agents-sdk/>
-- Removed agent runtime snapshot: `archive/agent-runtime-final` branch on origin
-
-## Roadmap (post-PR1)
-
-| PR | Focus |
-|----|-------|
-| #70 (merged) | Clean removal of self-built agent runtime |
-| #73 (merged) | Golden Harness — `scripts/verify.sh` with ruff + basedpyright + import-linter + pytest --cov, plus matching CI |
-| #74 (merged) | `knowledge/` data standard (Flatten / Tree / Graph shapes) + `configs/` skeleton; `openai-agents>=0.14` introduced for `BaseFlowCfg.model_settings` |
-| #75 (merged) | `preprocess/` (fetch + format two layers); deletes `parsers/` + `sources/` + `utils/tmp.py`; coverage floor 60→65; 4th import-linter contract |
-| PR5 (this PR) | `flows/` (`paper_flow` + `batch_run` + `BatchResult` + `_runner`) + `magic.py`; deletes `quantmind/{flow,llm,config,models}/`; coverage floor 65→75; 5th import-linter contract pins `flows + magic` as apex |
-| PR6 | `mind/memory/filesystem` MVP + trajectory archive (fills `_archive_run_artifacts` stub) |
-| PR7 | `mind/store/` + SQLite + `sqlite-vec` MVP; introduces `preprocess/chunk.py` with `tiktoken` |
-| PR8+ | Second flow (news/earnings) / observability cookbook / longer-term modules |
+The two copies are identical; when changing the skill, update both in the
+same change.

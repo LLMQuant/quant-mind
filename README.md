@@ -184,7 +184,9 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 ### 📚 Usage Examples
 
-#### Run a single finance paper through `paper_flow`
+Component-specific guides and architecture notes live under [`docs/`](docs/).
+
+#### Run a single paper through `paper_flow`
 
 ```python
 import asyncio

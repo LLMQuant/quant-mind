@@ -1,144 +1,93 @@
 # Contributing to QuantMind
 
-Thank you for contributing to QuantMind.
+Thank you for contributing to QuantMind! This guide covers environment
+setup and the contribution process. The canonical development workflow
+(commit format, PR format, component development) lives in the
+`quantmind-dev` skill — `.claude/skills/quantmind-dev/SKILL.md` /
+`.agents/skills/quantmind-dev/SKILL.md` — and the repository-wide rules
+live in `AGENTS.md` / `CLAUDE.md`. If you develop with a coding agent, it
+will pick these up automatically.
 
 QuantMind is now a **domain library on top of the OpenAI Agents SDK**, not a
 self-contained agent framework. The first production flow is finance-first, but
 the architecture is intentionally useful for broader agentic knowledge work.
 
-## 🚀 Quick setup
+1. **Fork and clone** the repository
+2. **Set up environment**:
 
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-./scripts/pre-commit-setup.sh
-```
+   ```bash
+   uv venv && source .venv/bin/activate
+   uv pip install -e ".[dev]"
+   ```
 
-If `uv` is unavailable in your environment, a standard Python venv is an
-acceptable fallback:
+3. **Install pre-commit hooks**:
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
+   ```bash
+   ./scripts/pre-commit-setup.sh
+   ```
 
-## ✅ Canonical verification loop
+## ✅ Verification
 
-Run this before every push:
+`scripts/verify.sh` is the single source of truth for "is this branch
+shippable". CI runs the exact same script, so a green local run means a
+green PR:
 
 ```bash
 bash scripts/verify.sh
 ```
 
-This is the single source of truth for branch health. It runs:
+It runs five fast-fail steps: `ruff format --check`, `ruff check`,
+`basedpyright`, `lint-imports`, `pytest --cov` (with a branch-coverage
+floor configured in `pyproject.toml`).
 
-1. `ruff format --check`
-2. `ruff check`
-3. `basedpyright`
-4. `lint-imports`
-5. `pytest --cov`
+**Hooks**: the pre-commit stage runs formatting/lint and file hygiene
+checks; the pre-push stage runs the full `scripts/verify.sh`. If a hook
+fails, fix the issue — don't bypass with `--no-verify`.
 
-CI runs the same script.
+```bash
+# Run all pre-commit hooks manually
+pre-commit run --all-files
 
-## 🏗️ Current architecture
+# Run targeted tests while iterating
+pytest tests/<module>/
+```
 
-The permanent module roots are:
+## 📝 Development Standards
 
-- `quantmind/flows/` — apex orchestration layer
-- `quantmind/configs/` — typed inputs and config
-- `quantmind/knowledge/` — typed knowledge shapes and provenance
-- `quantmind/preprocess/` — fetch + format + clean
-- `quantmind/magic.py` — natural-language resolver
-- `quantmind/mind/` — upcoming memory/store work
-- `quantmind/utils/` — logger only
-
-Do **not** re-introduce the deleted transitional/runtime packages such as
-`quantmind.flow`, `quantmind.config`, `quantmind.llm`, or `quantmind.models`.
-
-## 🧭 Design rules
-
-- Prefer **pure functions** over framework classes.
-- Use the **OpenAI Agents SDK directly**; do not build a new runtime wrapper.
-- Keep **Pydantic models at boundaries** and small internal value types simple.
-- Use **absolute imports** across module boundaries.
-- Keep **comments and docstrings in English** with Google-style formatting.
-- Preserve architectural boundaries enforced by `import-linter`.
-
-## 🧪 Testing expectations
-
-- Add or update tests under `tests/` when behavior changes.
-- New feature work should cover both success and failure paths.
-- Mock external services and network calls.
-- Keep coverage above the configured floor.
-
-For implementation work, add a simple example when it helps demonstrate the new
-behavior clearly.
-
-## 🧩 Common contribution paths
-
-### New knowledge type
-
-- Add a schema under `quantmind/knowledge/`
-- Choose the right base shape (`FlattenKnowledge`, `TreeKnowledge`, or future
-  `GraphKnowledge`)
-- Implement `embedding_text()`
-- Add tests under `tests/knowledge/`
-
-### New flow
-
-- Add a typed input/config module under `quantmind/configs/`
-- Add a pure `async def ..._flow(...)` under `quantmind/flows/`
-- Use `preprocess/` helpers instead of duplicating fetch/format logic
-- Return a typed knowledge object
-- Add tests under `tests/flows/`
-
-### New source or format support
-
-- Add leaf functionality under `quantmind/preprocess/`
-- Keep `preprocess/` independent of `configs/`, `knowledge/`, and `flows/`
-- Add focused tests under `tests/preprocess/`
+- **Architecture**: QuantMind is a domain library on top of the OpenAI
+  Agents SDK — functions over classes, `Protocol` over ABC, no CLI, no
+  agent-runtime rebuilding. See `AGENTS.md` / `CLAUDE.md` for the stable
+  constraints and the module map.
+- **Style**: Google-style docstrings, English comments, 80-char lines
+  (enforced by ruff).
+- **Types**: Pydantic models at boundaries, frozen dataclasses internally;
+  comprehensive type hints (`basedpyright` runs in standard mode).
+- **Dependency boundaries**: enforced by `import-linter`
+  (`pyproject.toml`); don't work around a failing contract.
+- **Tests**: required under `tests/<module>/` (mirror the module
+  structure), `unittest.TestCase`, mock external services, cover success
+  and failure paths.
+- **Examples**: one focused example under `examples/<module>/` for each
+  new feature.
 
 ### New domain extension
 
-If you are adapting QuantMind beyond finance, read
-`docs/ARCHITECTURE_FOR_NEW_DOMAINS.md` first and keep the extension aligned with
-the existing layering.
+1. **Create a feature branch** from `master`.
+2. **Follow Conventional Commits**: `type(scope): description`, in English.
+3. **Verify before submitting**: `bash scripts/verify.sh` must be green.
+4. **Submit the PR** using the template — English body, reference the
+   related issue, and state the verification you performed.
+5. Keep PRs small and focused
+   ([Google eng practices](https://google.github.io/eng-practices/review/developer/small-cls.html)).
 
-## 🔄 Pull request expectations
-
-Before submitting a PR:
-
-```bash
-pre-commit run --all-files
-bash scripts/verify.sh
-```
-
-Also make sure:
-
-- commits use conventional-commit style (`feat:`, `fix:`, `docs:`, `refactor:`)
-- PR titles and descriptions are written in English
-- docs are updated when behavior or extension points change
-
-## 🤖 Agent-facing documentation
-
-QuantMind is increasingly consumed by AI agents as well as humans. Treat the
-following files as product surfaces:
-
-- `README.md`
-- `CONTRIBUTING.md`
-- `docs/ARCHITECTURE_FOR_NEW_DOMAINS.md`
-
-If you change architecture, memory semantics, or extension paths, update the
-relevant documentation in the same PR. During active iteration, these agent-
-facing docs should be reviewed regularly so agent workflows do not drift away
-from the real codebase.
+For significant changes (new modules, new dependencies, API redesigns),
+open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss
+first.
 
 ## ❓Questions?
 
 - Check existing [issues](https://github.com/LLMQuant/quant-mind/issues)
-- Review `CLAUDE.md` for the detailed architecture context
-- Read `docs/ARCHITECTURE_FOR_NEW_DOMAINS.md` for extension guidance
+- Review architecture patterns in existing code
+- See `AGENTS.md` / `CLAUDE.md` for repository-wide rules
 
 Thank you for contributing.
