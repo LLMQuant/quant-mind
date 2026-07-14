@@ -32,17 +32,20 @@ resurrect it into master.
 ```bash
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-bash scripts/verify.sh              # deterministic offline golden gate
-python scripts/verify_news_e2e.py   # live PR Newswire component gate
+bash scripts/verify.sh              # deterministic required verification
+python scripts/verify_news_e2e.py   # live-network news smoke test
 ```
 
 `scripts/verify.sh` runs five fast-fail steps (`ruff format --check`,
 `ruff check`, `basedpyright`, `lint-imports`, `pytest --cov`) and must remain
-network-free. Public-network integrations have separate bounded live gates;
-run each applicable gate when changing that component and before publishing.
-The current component catalog and commands live in `docs/README.md`. Do not
-bypass pre-commit / pre-push hooks unless the user explicitly authorizes it —
-fix the underlying issue instead.
+network-free. `.github/workflows/ci.yml` is the required deterministic CI
+workflow. Public-network integrations have separate bounded smoke tests;
+`.github/workflows/e2e.yml` owns their scheduled, manual, and path-filtered
+component jobs. Run each applicable smoke test when changing that component
+and before publishing. External PR Newswire availability must not block
+unrelated changes. The component catalog and commands live in `docs/README.md`.
+Do not bypass pre-commit / pre-push hooks unless the user explicitly authorizes
+it — fix the underlying issue instead.
 
 ## Architecture Constraints (stable)
 

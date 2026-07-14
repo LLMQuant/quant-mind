@@ -26,7 +26,7 @@ will pick these up automatically.
 
 ## ✅ Verification
 
-`scripts/verify.sh` is the deterministic offline golden gate for every PR:
+`scripts/verify.sh` is the deterministic required verification for every PR:
 
 ```bash
 bash scripts/verify.sh
@@ -34,16 +34,23 @@ bash scripts/verify.sh
 
 It runs five fast-fail steps: `ruff format --check`, `ruff check`,
 `basedpyright`, `lint-imports`, `pytest --cov` (with a branch-coverage
-floor configured in `pyproject.toml`). It stays network-free.
+floor configured in `pyproject.toml`). It stays network-free, and the required
+`.github/workflows/ci.yml` workflow runs the same harness after file-hygiene
+hooks.
 
-Public-network integrations have separate bounded live component gates.
-Run every applicable gate when changing that component and before publishing;
-the current commands are listed in [`docs/README.md`](docs/README.md). For
-example, PR Newswire uses:
+Public-network integrations have separate bounded live component smoke tests.
+`.github/workflows/e2e.yml` owns their scheduled, manual, and path-filtered
+jobs. Run every applicable test when changing that component and before
+publishing; the current commands are listed in
+[`docs/README.md`](docs/README.md). For example, PR Newswire uses:
 
 ```bash
 python scripts/verify_news_e2e.py
 ```
+
+This command uses the real public network. External PR Newswire availability
+must not block unrelated changes, so the E2E workflow only runs for relevant
+pull-request paths and is not a required merge check.
 
 **Hooks**: the pre-commit stage runs formatting/lint and file hygiene
 checks; the pre-push stage runs the full `scripts/verify.sh`. If a hook
@@ -82,8 +89,8 @@ pytest tests/<module>/
 
 1. **Create a feature branch** from `master`.
 2. **Follow Conventional Commits**: `type(scope): description`, in English.
-3. **Verify before submitting**: the offline golden gate and every applicable
-   live component gate must be green.
+3. **Verify before submitting**: deterministic verification and every
+   applicable live-network component smoke test must be green.
 4. **Submit the PR** using the template — English body, reference the
    related issue, and state the verification you performed.
 5. Keep PRs small and focused

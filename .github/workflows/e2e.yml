@@ -1,8 +1,21 @@
-name: news-e2e
+name: e2e
 
 on:
   pull_request:
     branches: [master]
+    paths:
+      - '.github/workflows/e2e.yml'
+      - 'scripts/verify_news_e2e.py'
+      - 'quantmind/preprocess/_news_types.py'
+      - 'quantmind/preprocess/clean.py'
+      - 'quantmind/preprocess/news.py'
+      - 'quantmind/preprocess/pr_newswire.py'
+      - 'quantmind/preprocess/time.py'
+      - 'quantmind/preprocess/format/html.py'
+      - 'quantmind/preprocess/fetch/__init__.py'
+      - 'quantmind/preprocess/fetch/_types.py'
+      - 'quantmind/preprocess/fetch/http.py'
+      - 'quantmind/preprocess/fetch/rss.py'
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -15,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  news-e2e:
+  news:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

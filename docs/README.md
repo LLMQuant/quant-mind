@@ -24,29 +24,35 @@ layer shown in the catalog.
 
 ## Public-Network Sources
 
-| Source | Source selection | Operation | Live component gate |
+| Source | Source selection | Operation | Live-network component smoke test |
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
 
-The PR Newswire gate checks the public RSS feed and a complete preceding
-24-hour listing window without fetching article pages. Its GitHub workflow
-runs on pull requests, daily, and on manual dispatch.
+The PR Newswire smoke test checks the public RSS feed and a complete preceding
+24-hour listing window without fetching article pages. It depends on the real
+public network. The `news` job in `.github/workflows/e2e.yml` runs daily, on
+manual dispatch, and only on pull requests that change its dependency paths.
+It is not a required merge check, so external PR Newswire availability cannot
+block unrelated changes.
 
 ## Verification
 
-Run the deterministic offline golden gate for every change:
+Run the deterministic required verification for every change:
 
 ```bash
 bash scripts/verify.sh
 ```
 
 It covers formatting, linting, typing, import boundaries, unit tests, and
-coverage, and must remain network-free. When a change affects a public-network
-component, also run every applicable live gate listed above.
+coverage, and must remain network-free. The required `.github/workflows/ci.yml`
+workflow runs this same harness after file-hygiene hooks. When a change affects
+a public-network component, also run every applicable live-network smoke test
+listed above; `.github/workflows/e2e.yml` owns those component jobs.
 
 ## Adding a Public Operation or Source
 
 Use the `quantmind-dev` component workflow. A public operation is not complete
 until its typed contract, package exports, offline tests, focused example,
 design or guide, and catalog row agree. A public-network source additionally
-needs mocked source tests plus a bounded live verifier and CI workflow.
+needs mocked source tests plus a bounded live verifier and component job in
+`.github/workflows/e2e.yml`.
