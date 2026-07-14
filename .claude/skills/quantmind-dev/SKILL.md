@@ -11,7 +11,9 @@ Development workflow for contributing to the QuantMind codebase.
 
 1. Read the repository root `AGENTS.md` or `CLAUDE.md` for the stable
    architecture constraints and the module map.
-2. Pick exactly one workflow reference below; do not load the others.
+2. Read `docs/README.md` when the task adds, changes, or uses a public
+   operation or public-network source.
+3. Pick exactly one workflow reference below; do not load the others.
 
 ## Select Workflow
 
@@ -24,8 +26,11 @@ A feature task usually chains all three: develop → commit → pull request.
 
 ## Rules
 
-- `bash scripts/verify.sh` is the single "shippable" gate. CI runs the same
-  script; run it before every push and before marking a PR ready.
+- `bash scripts/verify.sh` is the deterministic offline golden gate. Run it
+  before every push and before marking a PR ready.
+- Public-network integrations have separate bounded live component gates.
+  Run every applicable gate listed in `docs/README.md` when changing that
+  component and before publishing.
 - Never bypass pre-commit / pre-push hooks (`--no-verify`) unless the user
   explicitly authorizes it.
 - New features ship with a unit test and a focused example (see

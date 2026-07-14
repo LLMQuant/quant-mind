@@ -26,9 +26,7 @@ will pick these up automatically.
 
 ## ✅ Verification
 
-`scripts/verify.sh` is the single source of truth for "is this branch
-shippable". CI runs the exact same script, so a green local run means a
-green PR:
+`scripts/verify.sh` is the deterministic offline golden gate for every PR:
 
 ```bash
 bash scripts/verify.sh
@@ -36,7 +34,16 @@ bash scripts/verify.sh
 
 It runs five fast-fail steps: `ruff format --check`, `ruff check`,
 `basedpyright`, `lint-imports`, `pytest --cov` (with a branch-coverage
-floor configured in `pyproject.toml`).
+floor configured in `pyproject.toml`). It stays network-free.
+
+Public-network integrations have separate bounded live component gates.
+Run every applicable gate when changing that component and before publishing;
+the current commands are listed in [`docs/README.md`](docs/README.md). For
+example, PR Newswire uses:
+
+```bash
+python scripts/verify_news_e2e.py
+```
 
 **Hooks**: the pre-commit stage runs formatting/lint and file hygiene
 checks; the pre-push stage runs the full `scripts/verify.sh`. If a hook
@@ -58,8 +65,9 @@ pytest tests/<module>/
   constraints and the module map.
 - **Style**: Google-style docstrings, English comments, 80-char lines
   (enforced by ruff).
-- **Types**: Pydantic models at boundaries, frozen dataclasses internally;
-  comprehensive type hints (`basedpyright` runs in standard mode).
+- **Types**: Pydantic for inputs, configs, and knowledge schemas; frozen
+  dataclasses for deterministic runtime evidence; comprehensive type hints
+  (`basedpyright` runs in standard mode).
 - **Dependency boundaries**: enforced by `import-linter`
   (`pyproject.toml`); don't work around a failing contract.
 - **Tests**: required under `tests/<module>/` (mirror the module
@@ -67,12 +75,15 @@ pytest tests/<module>/
   and failure paths.
 - **Examples**: one focused example under `examples/<module>/` for each
   new feature.
+- **Public operations and sources**: update the component catalog in
+  `docs/README.md`; public-network sources also require a bounded live check.
 
 ## 🔄 Pull Request Process
 
 1. **Create a feature branch** from `master`.
 2. **Follow Conventional Commits**: `type(scope): description`, in English.
-3. **Verify before submitting**: `bash scripts/verify.sh` must be green.
+3. **Verify before submitting**: the offline golden gate and every applicable
+   live component gate must be green.
 4. **Submit the PR** using the template — English body, reference the
    related issue, and state the verification you performed.
 5. Keep PRs small and focused

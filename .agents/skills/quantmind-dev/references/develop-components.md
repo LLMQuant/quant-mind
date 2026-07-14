@@ -18,10 +18,12 @@ apply throughout.
    or a side effect beyond the call it wraps). No premature abstractions —
    extract shared code when the second real caller appears, not before.
 4. **Add the unit test and the example** (sections below).
-5. **Update the public surface** if needed: module `__init__.py` exports
-   and user-facing docs (`README.md`, `docs/`) for user-visible features.
-6. **Verify**: targeted `pytest tests/<module>/` while iterating;
-   `bash scripts/verify.sh` before handoff.
+5. **Update the public surface** if needed: package exports, the relevant
+   design or guide, and the catalog in `docs/README.md`. Update the root
+   README only when its overview or quick start changes.
+6. **Verify**: run targeted tests while iterating, the offline golden gate
+   before handoff, and every applicable live component gate for changed
+   public-network integrations.
 
 ## Module Routing
 
@@ -46,9 +48,9 @@ apply throughout.
   objects are `TreeKnowledge` even when a flatten card exists alongside
   (e.g. `Paper` vs `PaperKnowledgeCard`).
 
-### `quantmind/configs/` — flow cfg + typed inputs
+### `quantmind/configs/` — operation cfg + typed inputs
 
-- Extend `BaseFlowCfg`; inputs are discriminated-union Pydantic types.
+- Extend `BaseFlowCfg`; inputs are Pydantic models or discriminated unions.
 - Never `Dict[str, Any]` in signatures — model it.
 
 ### `quantmind/preprocess/` — deterministic data prep
@@ -60,10 +62,11 @@ apply throughout.
 
 ### `quantmind/flows/` and `quantmind/magic.py` — apex layer
 
-- Flows are pure `async def` functions, not classes; state passes as
-  arguments; side effects go through explicit hooks.
-- Use the OpenAI Agents SDK directly (`Agent`, `@function_tool`,
-  `output_type=`); never wrap `from agents import ...` in a facade.
+- Agent-facing operations are `async def` functions, not classes; state passes
+  as arguments and side effects are explicit.
+- Semantic operations use the OpenAI Agents SDK directly (`Agent`,
+  `@function_tool`, `output_type=`); deterministic operations do not add an
+  LLM. Never wrap `from agents import ...` in a facade.
 - Fan-out goes through `batch_run` (bounded concurrency, error policy);
   `batch_run` rejects `memory=` at the signature layer by design.
 
@@ -78,6 +81,34 @@ apply throughout.
 
 - Logger only. New general-purpose helpers need maintainer sign-off via an
   issue first; the default answer is "put it in the module that uses it".
+
+## Public Operation Checklist
+
+An agent-facing operation is complete only when all of these agree:
+
+1. Typed input and config models, exported from `quantmind.configs`.
+2. One intent-oriented `async def` operation exported from `quantmind.flows`,
+   with its result contract exported from the canonical owning layer.
+3. Offline success and failure tests plus a magic-introspection test when the
+   operation follows the `(input, *, cfg)` convention.
+4. One runnable common-path example under `examples/<module>/`.
+5. A relevant design or guide and one row in `docs/README.md`.
+
+Do not add a registry solely for discovery; package exports and the component
+catalog are the discovery surfaces.
+
+## Public-Network Source Checklist
+
+When adding a source to an existing operation:
+
+1. Update the typed source selection and the operation's direct dispatch.
+2. Keep acquisition policy internal. Add a shared provider abstraction only
+   after a second implementation demonstrates shared behavior.
+3. Add offline mocked tests for parsing, boundaries, continuation after item
+   failures, and completeness semantics.
+4. Update the source table and design under `docs/`.
+5. Add or update a bounded live verifier and GitHub workflow. Keep live
+   network work out of `scripts/verify.sh`.
 
 ## Tests
 
@@ -101,5 +132,6 @@ apply throughout.
 
 - Docstrings: English, Google style, required on public functions and
   models.
-- User-visible behavior changes update `README.md` (usage section) and
-  `docs/` where applicable.
+- Public behavior changes update the relevant design or guide and the catalog
+  in `docs/README.md`. Update the root README only for top-level positioning
+  or quick-start changes.
