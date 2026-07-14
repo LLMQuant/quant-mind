@@ -9,11 +9,15 @@ Development workflow for contributing to the QuantMind codebase.
 
 ## Start Here
 
-1. Read the repository root `AGENTS.md` or `CLAUDE.md` for the stable
+1. Use the repository [`contexts/README.md`](../../../contexts/README.md) to
+   select the development context for this contribution.
+2. Read the repository root `AGENTS.md` or `CLAUDE.md` for the stable
    architecture constraints and the module map.
-2. Read `docs/README.md` when the task adds, changes, or uses a public
+3. Read `docs/README.md` when the task adds, changes, or uses a public
    operation or public-network source.
-3. Pick exactly one workflow reference below; do not load the others.
+4. When creating, updating, or triaging an issue or pull request, use the
+   canonical [repository label guidance](../../../contexts/dev/labels.md).
+5. Pick exactly one workflow reference below; do not load the others.
 
 ## Select Workflow
 

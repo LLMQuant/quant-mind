@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working in
 this repository. Keep this file aligned with `AGENTS.md` (same core rules);
 update both in the same change.
 
+Use [`contexts/README.md`](contexts/README.md) as the repository information
+entry point for either development or library-usage work.
+
 ## What This Is
 
 QuantMind is a knowledge extraction and retrieval library for quantitative

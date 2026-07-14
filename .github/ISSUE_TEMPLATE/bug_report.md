@@ -2,7 +2,7 @@
 name: 🐛 Bug Report
 about: Report a bug to help us improve QuantMind
 title: 'bug: [brief description of the bug]'
-labels: ['bug', 'needs-triage']
+labels: ['type: bug']
 assignees: ''
 ---
 
