@@ -62,7 +62,7 @@ apply throughout.
 
 ### `quantmind/flows/` and `quantmind/magic.py` — apex layer
 
-- Agent-facing operations are `async def` functions, not classes; state passes
+- Public operations are `async def` functions, not classes; state passes
   as arguments and side effects are explicit.
 - Semantic operations use the OpenAI Agents SDK directly (`Agent`,
   `@function_tool`, `output_type=`); deterministic operations do not add an
@@ -84,15 +84,16 @@ apply throughout.
 
 ## Public Operation Checklist
 
-An agent-facing operation is complete only when all of these agree:
+A public operation is complete only when all of these agree:
 
-1. Typed input and config models, exported from `quantmind.configs`.
-2. One intent-oriented `async def` operation exported from `quantmind.flows`,
+1. A stage and name consistent with `docs/design/en/operations.md`.
+2. Typed input and config models, exported from `quantmind.configs`.
+3. One intent-oriented `async def` operation exported from `quantmind.flows`,
    with its result contract exported from the canonical owning layer.
-3. Offline success and failure tests plus a magic-introspection test when the
+4. Offline success and failure tests plus a magic-introspection test when the
    operation follows the `(input, *, cfg)` convention.
-4. One runnable common-path example under `examples/<module>/`.
-5. A relevant design or guide and one row in `docs/README.md`.
+5. One runnable common-path example under `examples/<module>/`.
+6. A relevant design or guide and one row in `docs/README.md`.
 
 Do not add a registry solely for discovery; package exports and the component
 catalog are the discovery surfaces.

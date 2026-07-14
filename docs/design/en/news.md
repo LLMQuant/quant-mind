@@ -7,6 +7,10 @@ QuantMind. The MVP supports PR Newswire only. It is deliberately small: one
 intent-oriented collection operation, one time-window input, deterministic
 preprocessing, and explicit partial-failure reporting.
 
+Its public name follows the
+[operation naming contract](operations.md): collection returns source-faithful
+evidence and remains separate from semantic knowledge extraction.
+
 The primary requirement is that any caller can request a complete, one-shot
 collection of a past time window. A daily poll is therefore not a separate
 operation; it is simply a short window evaluated on a schedule.
@@ -30,9 +34,9 @@ operation; it is simply a short window evaluated on a schedule.
    rule-based pruning, target schemas, and scheduling belong to the consuming
    data pipeline.
 
-## Agent-Facing Contract
+## Public API Contract
 
-Agents use one entry point:
+Callers use one entry point:
 
 ```python
 from datetime import datetime, timezone
@@ -59,10 +63,10 @@ entry points.
 works with the common typed-operation and magic-input tooling. Its only
 collection-specific field is `retain_raw_html`, which controls whether fetched
 article HTML bytes remain in the result. It defaults to `False`, which is the
-agent-safe and storage-efficient behavior. The article is still fetched,
+conservative and storage-efficient behavior. The article is still fetched,
 hashed, parsed, and represented by metadata; only its byte payload is
 discarded. The deterministic collector does not otherwise consume the shared
-model, tracing, or agent-run fields.
+model, tracing, or SDK-run fields.
 
 ### Collection records are not knowledge
 
@@ -71,7 +75,7 @@ QuantMind keeps source evidence and semantic extraction as separate contracts:
 | Operation | Result | Canonical layer |
 |-----------|--------|-----------------|
 | `collect_news` | Source-faithful documents, artifacts, failures, and coverage | `quantmind.preprocess` |
-| future `news_flow` | Extracted financial events | `quantmind.knowledge.News` |
+| future `extract_news_knowledge` | Extracted financial events | `quantmind.knowledge.News` |
 
 `NewsDocument` is therefore not a `KnowledgeItem`. It carries HTTP evidence,
 raw bytes, parsing output, and collection status that remain useful before any
@@ -224,7 +228,7 @@ generic batch-operation base class.
 
 When a second source is implemented, compare its real behavior with PR
 Newswire first. Extract a shared provider interface only for behavior the two
-implementations genuinely share. The agent-facing
+implementations genuinely share. The public
 `collect_news(NewsWindow, *, cfg)` contract should remain unchanged.
 
 ## Adding a Public News Source

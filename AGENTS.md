@@ -17,7 +17,7 @@ handoff all come from `openai-agents`.
 | `quantmind/knowledge/` | Pydantic data standard (`FlattenKnowledge` / `TreeKnowledge` / `GraphKnowledge`) — dependency leaf |
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
 | `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
-| `quantmind/flows/` | Apex layer: agent-facing operations (`paper_flow`, `collect_news`, `batch_run`) |
+| `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
 | `quantmind/mind/` | Cognitive layer (memory protocol); landing via the Agents SDK migration (#71) |
 | `quantmind/utils/` | Logger only — keep it that way |
@@ -59,6 +59,9 @@ fix the underlying issue instead.
 5. **Absolute imports** across module boundaries.
 6. **No meaningless wrappers** — a method must add logic, abstraction, or a
    side effect beyond the call it wraps; otherwise inline it.
+7. **Name public operations by intent** — follow
+   `docs/design/en/operations.md`; use stage verbs, and reserve `pipeline` for
+   deliberate multi-stage composition.
 
 ## Tests and Examples
 
