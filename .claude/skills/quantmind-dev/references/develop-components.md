@@ -21,9 +21,9 @@ apply throughout.
 5. **Update the public surface** if needed: package exports, the relevant
    design or guide, and the catalog in `docs/README.md`. Update the root
    README only when its overview or quick start changes.
-6. **Verify**: run targeted tests while iterating, the offline golden gate
-   before handoff, and every applicable live component gate for changed
-   public-network integrations.
+6. **Verify**: run targeted tests while iterating, deterministic required
+   verification before handoff, and every applicable live-network component
+   smoke test for changed public-network integrations.
 
 ## Module Routing
 
@@ -108,8 +108,15 @@ When adding a source to an existing operation:
 3. Add offline mocked tests for parsing, boundaries, continuation after item
    failures, and completeness semantics.
 4. Update the source table and design under `docs/`.
-5. Add or update a bounded live verifier and GitHub workflow. Keep live
-   network work out of `scripts/verify.sh`.
+5. Add or update a component-specific
+   `scripts/verify_<component>_e2e.py` and list its command in
+   `docs/README.md`.
+6. Add or update the component's named job in the existing
+   `.github/workflows/e2e.yml` and extend the workflow's precise pull-request
+   path filter. When multiple live jobs exist, use GitHub-native per-job change
+   detection so only affected component jobs run. Do not add a separate
+   workflow, generic runner or registry, or base E2E class. Keep live network
+   work out of `scripts/verify.sh`.
 
 ## Tests
 

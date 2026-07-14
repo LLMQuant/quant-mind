@@ -56,3 +56,11 @@ until its typed contract, package exports, offline tests, focused example,
 design or guide, and catalog row agree. A public-network source additionally
 needs mocked source tests plus a bounded live verifier and component job in
 `.github/workflows/e2e.yml`.
+
+Each live component owns one `scripts/verify_<component>_e2e.py` command and
+one named job in the existing `e2e.yml`. Extend the workflow's precise PR path
+filter for the component. When multiple live jobs exist, use GitHub-native
+per-job change detection so only affected component jobs run. Add commands only
+to the catalog above; root agent guidance stays component-neutral. Do not
+create a workflow per component or a generic E2E runner, registry, or base
+class.

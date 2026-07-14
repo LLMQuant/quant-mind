@@ -7,16 +7,17 @@ How to open and maintain a pull request against QuantMind.
 1. Branch from `master`; keep the PR small and focused — one PR equals one
    reviewable change (see
    [Google eng practices on small CLs](https://google.github.io/eng-practices/review/developer/small-cls.html)).
-2. Run the deterministic offline golden gate:
+2. Run the deterministic required verification:
 
    ```bash
    bash scripts/verify.sh
    ```
 
 3. If the change affects a public-network integration, run every applicable
-   live component gate listed in `docs/README.md`.
+   live-network component smoke test listed in `docs/README.md`.
 
-Do not open or mark ready a PR with a red offline or applicable live gate.
+Do not open or mark ready a PR with red deterministic verification or an
+applicable red live-network smoke test.
 
 ## Title
 
@@ -39,10 +40,10 @@ and make sure the body covers:
    if one exists.
 2. **Related issue** — reference it when one exists (`Closes #NN` /
    `Part of #NN`).
-3. **Verification performed** — state the exact offline and applicable live
-   commands you ran (e.g. `bash scripts/verify.sh`; targeted
-   `pytest tests/<module>/`; a component verifier; manual example run) so the
-   reviewer does not have to guess.
+3. **Verification performed** — state the exact deterministic and applicable
+   live-network commands you ran (e.g. `bash scripts/verify.sh`; targeted
+   `pytest tests/<module>/`; a component-specific verifier; manual example
+   run) so the reviewer does not have to guess.
 
 Keep the template checklist and remove items that do not apply.
 
