@@ -2,7 +2,7 @@
 name: ✨ Feature Request
 about: Suggest a new feature or enhancement for QuantMind
 title: 'feat: [brief description of the feature]'
-labels: ['enhancement', 'needs-triage']
+labels: ['type: feature']
 assignees: ''
 ---
 
