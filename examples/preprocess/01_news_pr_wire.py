@@ -19,6 +19,6 @@ raw = RawNewsDocument(
 
 candidate = preprocess_news_document(raw)
 
-print(candidate.dedup_key)
+print(candidate.identity)
 print(candidate.content_hash)
 print([hint.symbol for hint in candidate.ticker_hints])

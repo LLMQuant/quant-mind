@@ -1,41 +1,37 @@
-"""News-flow configuration + input discriminated union."""
+"""Intent-oriented input and configuration for news collection."""
 
-from typing import Annotated, Literal, Union
+from datetime import timezone
+from typing import Literal
 
-from pydantic import Field
+from pydantic import AwareDatetime, field_validator, model_validator
+from typing_extensions import Self
 
 from quantmind.configs.base import BaseFlowCfg, BaseInput
 
 
-class RssFeed(BaseInput):
-    """RSS/Atom feed URL to be polled for items."""
+class NewsWindow(BaseInput):
+    """A replayable source window using the half-open interval [start, end)."""
 
-    type: Literal["rss"] = "rss"
-    url: str
+    type: Literal["window"] = "window"
+    source: Literal["pr-newswire"]
+    start: AwareDatetime
+    end: AwareDatetime
 
+    @field_validator("start", "end")
+    @classmethod
+    def normalize_to_utc(cls, value: AwareDatetime) -> AwareDatetime:
+        """Normalize aware timestamps so collectors receive one timezone."""
+        return value.astimezone(timezone.utc)
 
-class HttpUrl(BaseInput):
-    """Single news article URL."""
-
-    type: Literal["http"] = "http"
-    url: str
-
-
-class Headline(BaseInput):
-    """Inline headline text (no body fetching)."""
-
-    type: Literal["headline"] = "headline"
-    text: str
-
-
-NewsInput = Annotated[
-    Union[RssFeed, HttpUrl, Headline],
-    Field(discriminator="type"),
-]
+    @model_validator(mode="after")
+    def validate_order(self) -> Self:
+        """Reject empty or reversed collection windows."""
+        if self.end <= self.start:
+            raise ValueError("NewsWindow requires end to be after start")
+        return self
 
 
 class NewsFlowCfg(BaseFlowCfg):
-    """Knobs specific to news_flow."""
+    """News behavior that changes the returned collection data."""
 
-    materiality_threshold: Literal["low", "medium", "high"] = "medium"
-    entities_hint: list[str] = Field(default_factory=list)
+    retain_raw_html: bool = False

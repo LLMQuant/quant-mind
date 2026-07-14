@@ -25,6 +25,12 @@ NewsSourceType = Literal[
     "regulatory_news",
 ]
 BodySource = Literal["feed", "article"]
+NewsFailureStage = Literal[
+    "discovery_fetch",
+    "discovery_parse",
+    "article_fetch",
+    "article_parse",
+]
 
 _SOURCE_PREFIX: dict[str, str] = {
     "company_8k": "sec",
@@ -80,6 +86,70 @@ class NewsTickerHint:
 
 
 @dataclass(frozen=True, slots=True)
+class NewsArtifact:
+    """Raw evidence and fetch metadata retained for replay or auditing."""
+
+    bytes: bytes | None
+    content_hash: str
+    content_type: str
+    source_url: str | None
+    resolved_url: str | None
+    status_code: int | None
+    headers: dict[str, str] = field(default_factory=dict)
+    fetched_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewsDocument:
+    """One source observation with cleaned text and its raw evidence."""
+
+    source: str
+    identity: str
+    cleaned_markdown: str
+    content_hash: str
+    discovery_artifact: NewsArtifact
+    article_artifact: NewsArtifact
+    payload_id: str | None = None
+    canonical_url: str | None = None
+    title: str | None = None
+    publisher: str | None = None
+    published_at: datetime | None = None
+    ticker_hints: tuple[NewsTickerHint, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NewsFailure:
+    """Lightweight record for one recoverable collection failure."""
+
+    source: str
+    stage: NewsFailureStage
+    source_url: str
+    item_id: str | None
+    error_type: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class NewsBatch:
+    """Observed documents, failures, and discovery-coverage status."""
+
+    documents: tuple[NewsDocument, ...] = ()
+    failures: tuple[NewsFailure, ...] = ()
+    observed_count: int = 0
+    complete: bool = False
+
+    @property
+    def success_count(self) -> int:
+        """Number of successfully collected observations."""
+        return len(self.documents)
+
+    @property
+    def failure_count(self) -> int:
+        """Number of recorded recoverable failures."""
+        return len(self.failures)
+
+
+@dataclass(frozen=True, slots=True)
 class RawNewsDocument:
     """Raw news document ready for source-agnostic preprocessing."""
 
@@ -100,7 +170,7 @@ class NewsCandidate:
     body_text: str
     content_hash: str
     source_type: NewsSourceType
-    dedup_key: str
+    identity: str
     source_url: str | None = None
     title: str | None = None
     publisher: str | None = None
@@ -319,7 +389,7 @@ def preprocess_news_document(raw: RawNewsDocument) -> NewsCandidate:
         body_text=body_text,
         content_hash=news_content_hash(body_text),
         source_type=raw.source_type,
-        dedup_key=build_news_dedup_key(
+        identity=build_news_identity(
             source_type=raw.source_type,
             source_url=source_url,
             payload_id=raw.payload_id,
@@ -345,13 +415,13 @@ def news_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def build_news_dedup_key(
+def build_news_identity(
     *,
     source_type: NewsSourceType,
     source_url: str | None = None,
     payload_id: str | None = None,
 ) -> str:
-    """Build a deterministic source-document dedup key.
+    """Build a deterministic source-document identity.
 
     Press-release/wire rows use the payload id when available and otherwise
     fall back to the canonical source URL. The identity is hashed so callers do
@@ -361,27 +431,27 @@ def build_news_dedup_key(
     if not identity and source_url:
         identity = canonicalize_source_url(source_url)
     if not identity:
-        raise ValueError("news dedup key requires payload_id or source_url")
+        raise ValueError("news identity requires payload_id or source_url")
     prefix = _SOURCE_PREFIX[source_type]
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return f"{prefix}:{digest}"
 
 
-def build_sec_news_dedup_key(
+def build_sec_news_identity(
     *,
     accession_number: str,
     section_key: str,
 ) -> str:
-    """Build a stable 8-K EX-99.x news dedup key."""
+    """Build a stable 8-K EX-99.x news identity."""
     accession = accession_number.strip()
     section = section_key.strip().lower()
     if not accession or not section:
-        raise ValueError("SEC news dedup key requires accession and section")
+        raise ValueError("SEC news identity requires accession and section")
     return f"sec:{accession}:{section}"
 
 
 def canonicalize_source_url(url: str) -> str:
-    """Normalise source URLs for stable dedup identity."""
+    """Normalise source URLs for stable source identity."""
     parsed = urlsplit(url.strip())
     query = [
         (key, value)

@@ -1,50 +1,69 @@
-"""Tests for configs.news."""
+"""Tests for the intent-oriented news configuration."""
 
 import unittest
+from datetime import datetime, timedelta, timezone
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
-from quantmind.configs.news import (
-    Headline,
-    HttpUrl,
-    NewsFlowCfg,
-    NewsInput,
-    RssFeed,
-)
+from quantmind.configs import NewsFlowCfg, NewsWindow
 
 
 class NewsFlowCfgTests(unittest.TestCase):
-    def test_defaults(self):
-        cfg = NewsFlowCfg()
-        self.assertEqual(cfg.model, "gpt-4o")
-        self.assertEqual(cfg.materiality_threshold, "medium")
+    def test_raw_html_is_not_retained_by_default(self) -> None:
+        self.assertFalse(NewsFlowCfg().retain_raw_html)
 
 
-class NewsInputTests(unittest.TestCase):
-    def setUp(self):
-        self.adapter = TypeAdapter(NewsInput)
-
-    def test_rss(self):
-        v = self.adapter.validate_python(
-            {"type": "rss", "url": "https://feeds.example.com/markets"}
+class NewsWindowTests(unittest.TestCase):
+    def test_normalizes_aware_timestamps_to_utc(self) -> None:
+        window = NewsWindow(
+            source="pr-newswire",
+            start=datetime(
+                2026,
+                7,
+                13,
+                8,
+                tzinfo=timezone(timedelta(hours=8)),
+            ),
+            end=datetime(
+                2026,
+                7,
+                14,
+                8,
+                tzinfo=timezone(timedelta(hours=8)),
+            ),
         )
-        self.assertIsInstance(v, RssFeed)
 
-    def test_http(self):
-        v = self.adapter.validate_python(
-            {"type": "http", "url": "https://news.example.com/a"}
-        )
-        self.assertIsInstance(v, HttpUrl)
+        self.assertEqual(window.start.tzinfo, timezone.utc)
+        self.assertEqual(window.start.hour, 0)
+        self.assertEqual(window.end.tzinfo, timezone.utc)
 
-    def test_headline(self):
-        v = self.adapter.validate_python(
-            {"type": "headline", "text": "Fed holds rates"}
-        )
-        self.assertIsInstance(v, Headline)
-
-    def test_unknown_rejected(self):
+    def test_rejects_naive_timestamps(self) -> None:
         with self.assertRaises(ValidationError):
-            self.adapter.validate_python({"type": "podcast", "url": "x"})
+            NewsWindow(
+                source="pr-newswire",
+                start=datetime(2026, 7, 13),
+                end=datetime(2026, 7, 14, tzinfo=timezone.utc),
+            )
+
+    def test_rejects_empty_or_reversed_window(self) -> None:
+        timestamp = datetime(2026, 7, 14, tzinfo=timezone.utc)
+
+        with self.assertRaisesRegex(ValidationError, "end to be after start"):
+            NewsWindow(
+                source="pr-newswire",
+                start=timestamp,
+                end=timestamp,
+            )
+
+    def test_rejects_unsupported_source(self) -> None:
+        with self.assertRaises(ValidationError):
+            NewsWindow.model_validate(
+                {
+                    "source": "business-wire",
+                    "start": datetime(2026, 7, 13, tzinfo=timezone.utc),
+                    "end": datetime(2026, 7, 14, tzinfo=timezone.utc),
+                }
+            )
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ import respx
 from quantmind.preprocess.fetch.rss import FeedItem
 from quantmind.preprocess.news import (
     RawNewsDocument,
-    build_news_dedup_key,
-    build_sec_news_dedup_key,
+    build_news_identity,
+    build_sec_news_identity,
     canonicalize_source_url,
     extract_exchange_ticker_hints,
     feed_item_to_news_document,
@@ -84,18 +84,18 @@ class NewsPreprocessTests(unittest.TestCase):
         self.assertEqual(hints[0].exchange, "NASDAQ")
         self.assertEqual(hints[1].exchange, "NYSE")
 
-    def test_build_sec_news_dedup_key(self):
+    def test_build_sec_news_identity(self):
         self.assertEqual(
-            build_sec_news_dedup_key(
+            build_sec_news_identity(
                 accession_number="0001045810-26-000123",
                 section_key="EX99.1",
             ),
             "sec:0001045810-26-000123:ex99.1",
         )
 
-    def test_build_news_dedup_key_requires_identity(self):
+    def test_build_news_identity_requires_source_reference(self):
         with self.assertRaises(ValueError):
-            build_news_dedup_key(source_type="press_release")
+            build_news_identity(source_type="press_release")
 
     def test_preprocess_news_document_builds_candidate_contract(self):
         published = datetime(
@@ -116,7 +116,7 @@ class NewsPreprocessTests(unittest.TestCase):
         candidate = preprocess_news_document(raw)
 
         self.assertEqual(candidate.source_type, "press_release")
-        self.assertTrue(candidate.dedup_key.startswith("wire:"))
+        self.assertTrue(candidate.identity.startswith("wire:"))
         self.assertEqual(
             candidate.source_url, "https://example.com/pr/nvidia-results"
         )
