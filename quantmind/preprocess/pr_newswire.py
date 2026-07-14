@@ -1,4 +1,4 @@
-"""Internal PR Newswire source implementation for ``news_flow``."""
+"""Internal PR Newswire source implementation for ``collect_news``."""
 
 import asyncio
 import hashlib
@@ -13,6 +13,13 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from quantmind.preprocess._news_types import (
+    NewsArtifact,
+    NewsBatch,
+    NewsDocument,
+    NewsFailure,
+    NewsFailureStage,
+)
 from quantmind.preprocess.fetch._types import Fetched
 from quantmind.preprocess.fetch.http import (
     FetchAttemptsExhausted,
@@ -20,11 +27,6 @@ from quantmind.preprocess.fetch.http import (
     HttpFetcher,
 )
 from quantmind.preprocess.news import (
-    NewsArtifact,
-    NewsBatch,
-    NewsDocument,
-    NewsFailure,
-    NewsFailureStage,
     canonicalize_source_url,
     news_document_from_fetched,
     preprocess_news_document,

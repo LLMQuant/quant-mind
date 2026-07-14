@@ -1,7 +1,7 @@
-"""quantmind.configs — flow configuration + input types.
+"""quantmind.configs — public operation configuration + input types.
 
-Each flow has a `<Name>FlowCfg` (extends `BaseFlowCfg`) and a typed input model
-or discriminated union. All cfg / input classes live here so that:
+Public operations use a ``BaseFlowCfg`` subclass and a typed input model or
+discriminated union. All cfg / input classes live here so that:
 
   - YAML / CLI users see a single import surface,
   - JSON schemas can be exported uniformly (for IDE autocomplete),
@@ -10,7 +10,7 @@ or discriminated union. All cfg / input classes live here so that:
 
 from quantmind.configs.base import BaseFlowCfg, BaseInput
 from quantmind.configs.earnings import EarningsFlowCfg, EarningsInput
-from quantmind.configs.news import NewsFlowCfg, NewsWindow
+from quantmind.configs.news import NewsCollectionCfg, NewsWindow
 from quantmind.configs.paper import PaperFlowCfg, PaperInput
 
 __all__ = [
@@ -18,7 +18,7 @@ __all__ = [
     "BaseInput",
     "EarningsFlowCfg",
     "EarningsInput",
-    "NewsFlowCfg",
+    "NewsCollectionCfg",
     "NewsWindow",
     "PaperFlowCfg",
     "PaperInput",

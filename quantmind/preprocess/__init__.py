@@ -1,5 +1,13 @@
 """Preprocess layer for fetching, formatting, and source normalization."""
 
+from quantmind.preprocess._news_types import (
+    NewsArtifact,
+    NewsBatch,
+    NewsDocument,
+    NewsFailure,
+    NewsFailureStage,
+    NewsTickerHint,
+)
 from quantmind.preprocess.clean import (
     collapse_whitespace,
     dedupe_lines,
@@ -29,13 +37,7 @@ from quantmind.preprocess.format import (
 )
 from quantmind.preprocess.news import (
     BodySource,
-    NewsArtifact,
-    NewsBatch,
     NewsCandidate,
-    NewsDocument,
-    NewsFailure,
-    NewsFailureStage,
-    NewsTickerHint,
     RawNewsDocument,
     build_news_identity,
     build_sec_news_identity,

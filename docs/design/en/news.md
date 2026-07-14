@@ -4,8 +4,8 @@
 
 This document defines the OSS contract for collecting public company news in
 QuantMind. The MVP supports PR Newswire only. It is deliberately small: one
-intent-oriented flow, one time-window input, deterministic preprocessing, and
-explicit partial-failure reporting.
+intent-oriented collection operation, one time-window input, deterministic
+preprocessing, and explicit partial-failure reporting.
 
 The primary requirement is that any caller can request a complete, one-shot
 collection of a past time window. A daily poll is therefore not a separate
@@ -22,11 +22,10 @@ operation; it is simply a short window evaluated on a schedule.
 3. **Make partial work inspectable.** Item failures are values in the returned
    batch. Invalid inputs still raise before network work starts.
 4. **Keep source policy internal.** PR Newswire discovery can change from
-   listing pages to another public mechanism without changing the flow
+   listing pages to another public mechanism without changing the collection
    contract.
-5. **Add abstractions only after a second implementation needs them.** The MVP
-   uses direct source dispatch. It does not expose a provider protocol or a
-   provider registry.
+5. **Make the supported set explicit.** The MVP uses exhaustive source
+   dispatch. It does not expose a provider protocol or a provider registry.
 6. **Separate collection from production policy.** Persistence, deduplication,
    rule-based pruning, target schemas, and scheduling belong to the consuming
    data pipeline.
@@ -38,16 +37,16 @@ Agents use one entry point:
 ```python
 from datetime import datetime, timezone
 
-from quantmind.configs import NewsFlowCfg, NewsWindow
-from quantmind.flows import news_flow
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.flows import collect_news
 
-batch = await news_flow(
+batch = await collect_news(
     NewsWindow(
         source="pr-newswire",
         start=datetime(2026, 7, 13, tzinfo=timezone.utc),
         end=datetime(2026, 7, 14, tzinfo=timezone.utc),
     ),
-    cfg=NewsFlowCfg(retain_raw_html=False),
+    cfg=NewsCollectionCfg(retain_raw_html=False),
 )
 ```
 
@@ -56,18 +55,34 @@ batch = await news_flow(
 call. There are no separate `poll_*`, `backfill_*`, or `fetch_wire_*` public
 entry points.
 
-`NewsFlowCfg` retains the repository's shared `BaseFlowCfg` fields so it works
-with the common flow and magic-input tooling. Its only news-specific field is
-`retain_raw_html`, which controls whether fetched article HTML bytes remain in
-the result. It defaults to `False`, which is the agent-safe and
-storage-efficient behavior. The article is still fetched, hashed, parsed, and
-represented by metadata; only its byte payload is discarded. The deterministic
-collector does not otherwise consume the shared model, tracing, or agent-run
-fields.
+`NewsCollectionCfg` retains the repository's shared `BaseFlowCfg` fields so it
+works with the common typed-operation and magic-input tooling. Its only
+collection-specific field is `retain_raw_html`, which controls whether fetched
+article HTML bytes remain in the result. It defaults to `False`, which is the
+agent-safe and storage-efficient behavior. The article is still fetched,
+hashed, parsed, and represented by metadata; only its byte payload is
+discarded. The deterministic collector does not otherwise consume the shared
+model, tracing, or agent-run fields.
+
+### Collection records are not knowledge
+
+QuantMind keeps source evidence and semantic extraction as separate contracts:
+
+| Operation | Result | Canonical layer |
+|-----------|--------|-----------------|
+| `collect_news` | Source-faithful documents, artifacts, failures, and coverage | `quantmind.preprocess` |
+| future `news_flow` | Extracted financial events | `quantmind.knowledge.News` |
+
+`NewsDocument` is therefore not a `KnowledgeItem`. It carries HTTP evidence,
+raw bytes, parsing output, and collection status that remain useful before any
+LLM or business schema is chosen. `knowledge.News` is a compact semantic event
+with entities, sentiment, materiality, provenance, and an embedding view. The
+two may later be composed, but neither substitutes for the other.
 
 ## Returned Data
 
-The flow returns a `NewsBatch` with four concepts:
+`collect_news` returns a `NewsBatch` with four concepts. The collection
+contracts are publicly imported from `quantmind.preprocess`:
 
 - `documents`: successfully collected `NewsDocument` observations;
 - `failures`: lightweight `NewsFailure` records for work that could not be
@@ -123,6 +138,10 @@ detail and a bounded feed snapshot cannot prove complete time-window coverage.
 The HTTP layer owns bounded retries, backoff, `Retry-After` handling, and
 per-host rate limits. PR Newswire-specific URL construction and listing HTML
 parsing stay in the PR Newswire source module.
+
+Supported source names form a closed set in `NewsWindow.source`.
+`collect_news` dispatches them exhaustively, so widening the input schema
+without implementing the corresponding collector fails static verification.
 
 ## Failure and Completeness Semantics
 
@@ -205,5 +224,25 @@ generic batch-operation base class.
 
 When a second source is implemented, compare its real behavior with PR
 Newswire first. Extract a shared provider interface only for behavior the two
-implementations genuinely share. The agent-facing `news_flow(NewsWindow, *,
-cfg)` contract should remain unchanged.
+implementations genuinely share. The agent-facing
+`collect_news(NewsWindow, *, cfg)` contract should remain unchanged.
+
+## Adding a Public News Source
+
+A coding agent adding a second source follows this closed checklist:
+
+1. Add the source name to `NewsWindow.source`.
+2. Add one private `quantmind/preprocess/<source>.py` collector.
+3. Add one explicit branch to `collect_news`; the exhaustive type check must
+   remain green.
+4. Add fixture-based success, boundary, duplicate-observation,
+   partial-failure, and completeness tests for the source.
+5. Add a routing test proving only the selected collector is called.
+6. Update the supported-source table in `docs/README.md`, this design, and the
+   focused example if its common path changes.
+7. Add or extend a bounded live component verifier and GitHub workflow when
+   the integration depends on a public network endpoint.
+
+Only after two real collectors expose shared behavior should a common
+`Protocol` be considered. A new source must never be added only to the input
+Literal: static verification is expected to reject that incomplete change.

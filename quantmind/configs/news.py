@@ -1,4 +1,4 @@
-"""Intent-oriented input and configuration for news collection."""
+"""Typed input and configuration for deterministic news collection."""
 
 from datetime import timezone
 from typing import Literal
@@ -31,7 +31,7 @@ class NewsWindow(BaseInput):
         return self
 
 
-class NewsFlowCfg(BaseFlowCfg):
-    """News behavior that changes the returned collection data."""
+class NewsCollectionCfg(BaseFlowCfg):
+    """Collection behavior that changes the returned evidence."""
 
     retain_raw_html: bool = False

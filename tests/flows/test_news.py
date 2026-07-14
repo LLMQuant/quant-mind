@@ -1,17 +1,17 @@
-"""Tests for the agent-facing news flow."""
+"""Tests for the agent-facing news collection operation."""
 
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-from quantmind.configs import NewsFlowCfg, NewsWindow
-from quantmind.flows import news_flow
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.flows import collect_news
 from quantmind.magic import _introspect_flow_signature
-from quantmind.preprocess.news import NewsBatch
+from quantmind.preprocess import NewsBatch
 
 
-class NewsFlowTests(unittest.IsolatedAsyncioTestCase):
-    async def test_forwards_window_and_retention_to_source_collector(
+class CollectNewsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_dispatches_pr_newswire_window(
         self,
     ) -> None:
         window = NewsWindow(
@@ -25,9 +25,9 @@ class NewsFlowTests(unittest.IsolatedAsyncioTestCase):
             "quantmind.flows.news._collect_pr_newswire",
             new=AsyncMock(return_value=expected),
         ) as collect:
-            result = await news_flow(
+            result = await collect_news(
                 window,
-                cfg=NewsFlowCfg(retain_raw_html=True),
+                cfg=NewsCollectionCfg(retain_raw_html=True),
             )
 
         self.assertIs(result, expected)
@@ -48,15 +48,15 @@ class NewsFlowTests(unittest.IsolatedAsyncioTestCase):
             "quantmind.flows.news._collect_pr_newswire",
             new=AsyncMock(return_value=NewsBatch(complete=True)),
         ) as collect:
-            await news_flow(window)
+            await collect_news(window)
 
         self.assertFalse(collect.await_args.kwargs["retain_raw_html"])
 
     def test_signature_is_magic_input_compatible(self) -> None:
-        input_type, cfg_type = _introspect_flow_signature(news_flow)
+        input_type, cfg_type = _introspect_flow_signature(collect_news)
 
         self.assertIs(input_type, NewsWindow)
-        self.assertIs(cfg_type, NewsFlowCfg)
+        self.assertIs(cfg_type, NewsCollectionCfg)
 
 
 if __name__ == "__main__":

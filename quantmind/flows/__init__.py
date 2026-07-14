@@ -1,8 +1,8 @@
 """Apex layer — composes configs / knowledge / preprocess on the SDK.
 
-Each flow function (``paper_flow``, ``news_flow``, future ``earnings_flow``)
-takes a typed input and a ``<Name>FlowCfg`` and returns its domain result.
-Cross-flow utilities live alongside:
+Semantic flows such as ``paper_flow`` return ``quantmind.knowledge`` values.
+Deterministic operations such as ``collect_news`` return source-faithful
+``quantmind.preprocess`` values. Cross-flow utilities live alongside:
 
 - ``batch_run`` runs any flow over a list of inputs with bounded
   concurrency and aggregated results.
@@ -12,23 +12,13 @@ Cross-flow utilities live alongside:
 """
 
 from quantmind.flows.batch import BatchResult, batch_run
-from quantmind.flows.news import (
-    NewsArtifact,
-    NewsBatch,
-    NewsDocument,
-    NewsFailure,
-    news_flow,
-)
+from quantmind.flows.news import collect_news
 from quantmind.flows.paper import UnsupportedContentTypeError, paper_flow
 
 __all__ = [
     "BatchResult",
-    "NewsArtifact",
-    "NewsBatch",
-    "NewsDocument",
-    "NewsFailure",
     "UnsupportedContentTypeError",
     "batch_run",
-    "news_flow",
+    "collect_news",
     "paper_flow",
 ]

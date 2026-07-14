@@ -5,12 +5,12 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import ValidationError
 
-from quantmind.configs import NewsFlowCfg, NewsWindow
+from quantmind.configs import NewsCollectionCfg, NewsWindow
 
 
-class NewsFlowCfgTests(unittest.TestCase):
+class NewsCollectionCfgTests(unittest.TestCase):
     def test_raw_html_is_not_retained_by_default(self) -> None:
-        self.assertFalse(NewsFlowCfg().retain_raw_html)
+        self.assertFalse(NewsCollectionCfg().retain_raw_html)
 
 
 class NewsWindowTests(unittest.TestCase):

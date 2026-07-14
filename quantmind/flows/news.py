@@ -1,32 +1,37 @@
-"""Intent-oriented collection flow for public company news."""
+"""Intent-oriented collection operation for public company news."""
 
-from quantmind.configs import NewsFlowCfg, NewsWindow
-from quantmind.preprocess.news import (
-    NewsArtifact,
-    NewsBatch,
-    NewsDocument,
-    NewsFailure,
-)
+from typing_extensions import assert_never
+
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.preprocess import NewsBatch
 from quantmind.preprocess.pr_newswire import _collect_pr_newswire
 
-__all__ = [
-    "NewsArtifact",
-    "NewsBatch",
-    "NewsDocument",
-    "NewsFailure",
-    "news_flow",
-]
+__all__ = ["collect_news"]
 
 
-async def news_flow(
+async def collect_news(
     input: NewsWindow,
     *,
-    cfg: NewsFlowCfg | None = None,
+    cfg: NewsCollectionCfg | None = None,
 ) -> NewsBatch:
-    """Collect one replayable news window without exposing source mechanics."""
-    cfg = cfg or NewsFlowCfg()
-    return await _collect_pr_newswire(
-        start=input.start,
-        end=input.end,
-        retain_raw_html=cfg.retain_raw_html,
-    )
+    """Collect one replayable window without exposing source mechanics.
+
+    Args:
+        input: Source and half-open time window to collect.
+        cfg: Options that change the returned collection evidence.
+
+    Returns:
+        Successfully collected documents, recoverable failures, and whether
+        source discovery proved complete coverage of the requested window.
+        Article failures do not make discovery incomplete.
+    """
+    cfg = cfg or NewsCollectionCfg()
+    source = input.source
+    if source == "pr-newswire":
+        return await _collect_pr_newswire(
+            start=input.start,
+            end=input.end,
+            retain_raw_html=cfg.retain_raw_html,
+        )
+
+    assert_never(source)

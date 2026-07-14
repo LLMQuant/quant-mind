@@ -3,24 +3,24 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from quantmind.configs import NewsFlowCfg, NewsWindow
-from quantmind.flows import news_flow
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.flows import collect_news
 
 
 async def main() -> None:
     """Collect and summarize the preceding 24-hour window."""
     end = datetime.now(timezone.utc)
-    batch = await news_flow(
+    batch = await collect_news(
         NewsWindow(
             source="pr-newswire",
             start=end - timedelta(days=1),
             end=end,
         ),
-        cfg=NewsFlowCfg(retain_raw_html=False),
+        cfg=NewsCollectionCfg(retain_raw_html=False),
     )
     print(
-        f"documents={batch.success_count} failures={batch.failure_count} "
-        f"complete={batch.complete}"
+        f"observed={batch.observed_count} documents={batch.success_count} "
+        f"failures={batch.failure_count} complete={batch.complete}"
     )
 
 

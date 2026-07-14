@@ -1,4 +1,4 @@
-"""News knowledge schema (output of news_flow)."""
+"""Semantic news-event schema for agent and LLM extraction."""
 
 from datetime import datetime
 from typing import Literal
@@ -9,7 +9,7 @@ from quantmind.knowledge._flatten import FlattenKnowledge
 
 
 class News(FlattenKnowledge):
-    """A single news event extraction."""
+    """A single extracted news event, distinct from collection evidence."""
 
     item_type: Literal["news"] = "news"
 
