@@ -17,7 +17,15 @@ import inspect
 import json
 import types
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, TypeVar, Union, get_args, get_origin
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from agents import Agent, Runner
 from pydantic import BaseModel
@@ -120,10 +128,10 @@ def _introspect_flow_signature(
 ) -> tuple[Any, type[BaseFlowCfg]]:
     """Return ``(input_annotation, cfg_type)`` for a flow function.
 
-    ``input_annotation`` is returned as-is — it may be a discriminated-
-    union alias such as ``Annotated[Union[...], Field(discriminator=...)]``.
-    Pydantic accepts both plain ``BaseModel`` subclasses and discriminated
-    aliases as generic parameters.
+    Annotations are resolved before inspection, including postponed string
+    annotations. ``input_annotation`` may be a discriminated-union alias such
+    as ``Annotated[Union[...], Field(discriminator=...)]``; its extra metadata
+    is preserved for Pydantic.
 
     ``cfg_type`` strips an outer ``T | None`` so the resolver instantiates
     the concrete cfg subclass. The result must be a ``BaseFlowCfg``
@@ -138,8 +146,9 @@ def _introspect_flow_signature(
         raise TypeError(
             f"Flow {flow_fn.__name__!r} must accept a `cfg` keyword parameter"
         )
-    input_anno = sig.parameters["input"].annotation
-    cfg_anno = sig.parameters["cfg"].annotation
+    annotations = get_type_hints(flow_fn, include_extras=True)
+    input_anno = annotations.get("input", sig.parameters["input"].annotation)
+    cfg_anno = annotations.get("cfg", sig.parameters["cfg"].annotation)
     cfg_type = _strip_optional(cfg_anno)
     if not (isinstance(cfg_type, type) and issubclass(cfg_type, BaseFlowCfg)):
         raise TypeError(
