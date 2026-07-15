@@ -6,6 +6,8 @@ labels: ['type: bug']
 assignees: ''
 ---
 
+<!-- github-prose-style: Keep each logical paragraph/list item on one physical line; do not hard-wrap at 80 columns. -->
+
 ## 🐛 Bug Description
 
 <!-- A clear and concise description of what the bug is. -->

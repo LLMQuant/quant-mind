@@ -17,7 +17,10 @@ Development workflow for contributing to the QuantMind codebase.
    operation or public-network source.
 4. When creating, updating, or triaging an issue or pull request, use the
    canonical [repository label guidance](../../../contexts/dev/labels.md).
-5. Pick exactly one workflow reference below; do not load the others.
+5. Before writing or editing any GitHub body, follow the canonical
+   [GitHub writing style](../../../contexts/dev/github-writing.md), including
+   its no-hard-wrap rule.
+6. Pick exactly one workflow reference below; do not load the others.
 
 ## Select Workflow
 

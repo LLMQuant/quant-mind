@@ -34,7 +34,10 @@ batch input`, `docs(readme): update quick start`.
 
 Written in English (external audiences read it: contributors, search
 indexers, future maintainers). Follow `.github/PULL_REQUEST_TEMPLATE.md`
-and make sure the body covers:
+and the canonical
+[GitHub writing style](../../../../contexts/dev/github-writing.md). Do not
+hard-wrap body prose at 80 columns or another fixed width. Make sure the body
+covers:
 
 1. **What changed and why** — a short summary; link the design discussion
    if one exists.
