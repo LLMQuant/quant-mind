@@ -3,6 +3,7 @@
 import hashlib
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 import respx
@@ -22,6 +23,8 @@ from quantmind.preprocess.news import (
     preprocess_news_document,
 )
 from quantmind.preprocess.time import parse_news_datetime
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "pr_newswire"
 
 
 class NewsTimeTests(unittest.TestCase):
@@ -84,6 +87,36 @@ class NewsPreprocessTests(unittest.TestCase):
         self.assertEqual(hints[0].exchange, "NASDAQ")
         self.assertEqual(hints[1].exchange, "NYSE")
 
+    def test_exchange_ticker_hints_ignore_markdown_decoration(self):
+        cases = (
+            (
+                "link",
+                "Carnival Corporation & plc "
+                "(NYSE: [CCL](#financial-modal)) today announced...",
+                ("CCL", "NYSE", "(NYSE: CCL)"),
+            ),
+            (
+                "bold emphasis",
+                "Example Corporation (NASDAQ: **ABC**) today announced...",
+                ("ABC", "NASDAQ", "(NASDAQ: ABC)"),
+            ),
+            (
+                "italic emphasis",
+                "Example Corporation (NASDAQ: *ABC*) today announced...",
+                ("ABC", "NASDAQ", "(NASDAQ: ABC)"),
+            ),
+        )
+
+        for name, text, expected in cases:
+            with self.subTest(name=name):
+                hints = extract_exchange_ticker_hints(text)
+
+                self.assertEqual(len(hints), 1)
+                self.assertEqual(
+                    (hints[0].symbol, hints[0].exchange, hints[0].raw),
+                    expected,
+                )
+
     def test_build_sec_news_identity(self):
         self.assertEqual(
             build_sec_news_identity(
@@ -136,6 +169,28 @@ class NewsPreprocessTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             preprocess_news_document(raw)
+
+    def test_wire_markup_fixture_meets_ticker_recall_control(self):
+        body_text = (_FIXTURES / "ticker_markup.md").read_text(encoding="utf-8")
+        raw = RawNewsDocument(
+            body_text=body_text,
+            source_url="https://www.prnewswire.com/news-releases/example.html",
+        )
+
+        candidate = preprocess_news_document(raw)
+
+        expected_hints = {("ABC", "NASDAQ"), ("CCL", "NYSE")}
+        actual_hints = {
+            (hint.symbol, hint.exchange) for hint in candidate.ticker_hints
+        }
+        recall = len(expected_hints & actual_hints) / len(expected_hints)
+        self.assertEqual(recall, 1.0)
+        self.assertIn("[CCL](#financial-modal)", candidate.body_text)
+        self.assertIn("**ABC**", candidate.body_text)
+        self.assertEqual(
+            candidate.content_hash,
+            news_content_hash(candidate.body_text),
+        )
 
 
 class NewsFeedItemTests(unittest.IsolatedAsyncioTestCase):

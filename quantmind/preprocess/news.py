@@ -51,6 +51,11 @@ _EXCHANGE_TICKER_RE = re.compile(
     r"(?:\)|\b)",
     re.IGNORECASE,
 )
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]\n]+)\]\([^\)\n]*\)")
+_MARKDOWN_EMPHASIS_RE = re.compile(
+    r"(?<!\*)\*{1,2}([A-Z][A-Z0-9.-]{0,9})\*{1,2}(?!\*)",
+    re.IGNORECASE,
+)
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
 )
@@ -398,10 +403,14 @@ def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
 
     Examples matched include ``(NASDAQ: NVDA)`` and ``NYSE: IBM``. The result is
     only a hint; downstream instrument resolution should still validate it.
+    Markdown link and emphasis decoration is removed from a scan-only copy so
+    stored news text and its content hash retain their original representation.
     """
+    scan_text = _MARKDOWN_LINK_RE.sub(r"\1", text)
+    scan_text = _MARKDOWN_EMPHASIS_RE.sub(r"\1", scan_text)
     hints: list[NewsTickerHint] = []
     seen: set[tuple[str, str | None]] = set()
-    for match in _EXCHANGE_TICKER_RE.finditer(text):
+    for match in _EXCHANGE_TICKER_RE.finditer(scan_text):
         raw_exchange = " ".join(match.group(1).upper().split())
         exchange = _EXCHANGE_NAMES.get(raw_exchange, raw_exchange)
         symbol = match.group(2).upper()

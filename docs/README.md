@@ -28,9 +28,10 @@ layer shown in the catalog.
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
 
-The PR Newswire gate checks the public RSS feed and a complete preceding
-24-hour listing window without fetching article pages. Its GitHub workflow
-runs on pull requests, daily, and on manual dispatch.
+The PR Newswire gate checks the public RSS feed, a complete preceding 24-hour
+listing window, and ticker-hint recall on a bounded sample of up to 25 article
+pages. Its GitHub workflow runs on pull requests, daily, and on manual
+dispatch.
 
 ## Verification
 

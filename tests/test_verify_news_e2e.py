@@ -5,6 +5,11 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from quantmind.preprocess import (
+    NewsArtifact,
+    NewsDocument,
+    NewsTickerHint,
+)
 from scripts import verify_news_e2e
 
 _PUBLISHED_AT = datetime(2026, 7, 14, tzinfo=timezone.utc)
@@ -35,8 +40,31 @@ def _discovery_result(
     )
 
 
+def _document(
+    markdown: str,
+    *symbols: str,
+) -> NewsDocument:
+    artifact = NewsArtifact(
+        bytes=None,
+        content_hash="hash",
+        content_type="text/html",
+        source_url="https://example.test/release",
+        resolved_url="https://example.test/release",
+        status_code=200,
+    )
+    return NewsDocument(
+        source="pr-newswire",
+        identity="news:pr-newswire:test",
+        cleaned_markdown=markdown,
+        content_hash="hash",
+        discovery_artifact=artifact,
+        article_artifact=artifact,
+        ticker_hints=tuple(NewsTickerHint(symbol=symbol) for symbol in symbols),
+    )
+
+
 class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
-    async def test_main_reports_duplicates_and_passes_both_components(self):
+    async def test_main_reports_duplicates_and_passes_all_components(self):
         now = datetime(2026, 7, 14, 12, 30, tzinfo=timezone.utc)
         feed = SimpleNamespace(items=(_feed_item(), _feed_item(url=None)))
         discovery = _discovery_result(
@@ -58,6 +86,11 @@ class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
                 "_discover_pr_newswire",
                 new=AsyncMock(return_value=discovery),
             ) as discover,
+            patch.object(
+                verify_news_e2e,
+                "_check_ticker_hints",
+                new=AsyncMock(return_value=True),
+            ) as ticker_check,
             redirect_stdout(io.StringIO()) as output,
         ):
             exit_code = await verify_news_e2e.main(now=now)
@@ -69,6 +102,7 @@ class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
             start=now - timedelta(days=1),
             end=now,
         )
+        ticker_check.assert_awaited_once_with(discovery)
 
     async def test_rss_failure_does_not_skip_discovery(self):
         discovery = _discovery_result()
@@ -83,6 +117,11 @@ class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
                 "_discover_pr_newswire",
                 new=AsyncMock(return_value=discovery),
             ) as discover,
+            patch.object(
+                verify_news_e2e,
+                "_check_ticker_hints",
+                new=AsyncMock(return_value=True),
+            ),
             redirect_stdout(io.StringIO()) as output,
         ):
             exit_code = await verify_news_e2e.main()
@@ -134,8 +173,52 @@ class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
                     ),
                     redirect_stdout(io.StringIO()),
                 ):
-                    passed = await verify_news_e2e._check_discovery(start, end)
+                    passed, returned = await verify_news_e2e._check_discovery(
+                        start, end
+                    )
                 self.assertFalse(passed)
+                self.assertIsNone(returned)
+
+    def test_ticker_hint_control_counts_markup_independently(self):
+        documents = (
+            _document(
+                "Carnival (NYSE: [CCL](#financial-modal)) and "
+                "NVIDIA (NASDAQ: NVDA).",
+                "CCL",
+                "NVDA",
+            ),
+            _document("Example (NASDAQ: **ABC**)."),
+        )
+
+        expected, recovered = verify_news_e2e._ticker_hint_control_counts(
+            documents
+        )
+
+        self.assertEqual(expected, 3)
+        self.assertEqual(recovered, 2)
+
+    async def test_ticker_hint_check_enforces_full_sample_recall(self):
+        discovery = _discovery_result()
+        recovered = _document(
+            "Carnival (NYSE: [CCL](#financial-modal)).",
+            "CCL",
+        )
+        missed = _document("Example (NASDAQ: **ABC**).")
+
+        for document, expected in ((recovered, True), (missed, False)):
+            with self.subTest(expected=expected):
+                with (
+                    patch.object(
+                        verify_news_e2e,
+                        "_collect_observation",
+                        new=AsyncMock(return_value=document),
+                    ),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    passed = await verify_news_e2e._check_ticker_hints(
+                        discovery
+                    )
+                self.assertIs(passed, expected)
 
 
 if __name__ == "__main__":
