@@ -194,7 +194,7 @@ to this OSS library.
 
 Verification has two intentionally separate layers.
 
-### Offline verification
+### Deterministic verification
 
 `bash scripts/verify.sh` runs deterministic unit tests, linting, typing, and
 coverage. News tests use saved HTML/RSS fixtures and mocked HTTP responses.
@@ -203,8 +203,8 @@ observations, raw-byte retention, retries, partial failures, and completeness.
 
 ### Live news E2E
 
-`python scripts/verify_news_e2e.py` is the canonical public-network component
-check. It performs three bounded checks:
+`python scripts/verify_news_e2e.py` is the component-specific live-network news
+smoke test. It performs three bounded checks:
 
 1. fetch and parse the official PR Newswire RSS feed;
 2. discover PR Newswire listing observations for the preceding 24 hours and
@@ -221,9 +221,10 @@ non-zero if RSS or discovery is invalid, no sampled article parses, or a sample
 with supported exchange-coded symbols falls below 100% recall. A parsed sample
 with zero supported symbols reports `SKIP` and passes neutrally.
 
-GitHub Actions runs this check on every pull request, once daily, and on manual
-dispatch. The ordinary offline verification workflow remains network-free so
-local development and unit tests stay deterministic.
+The `news` job in `.github/workflows/e2e.yml` runs this check once daily, on
+manual dispatch, and on pull requests that change its precise dependency paths.
+The required `.github/workflows/ci.yml` workflow remains network-free so local
+development and unit tests stay deterministic.
 
 ## Non-Goals and Extension Rule
 
@@ -249,8 +250,10 @@ A coding agent adding a second source follows this closed checklist:
 5. Add a routing test proving only the selected collector is called.
 6. Update the supported-source table in `docs/README.md`, this design, and the
    focused example if its common path changes.
-7. Add or extend a bounded live component verifier and GitHub workflow when
-   the integration depends on a public network endpoint.
+7. Add or extend a component-specific live verifier and its named job in the
+   existing `.github/workflows/e2e.yml` when the integration depends on a
+   public network endpoint. Add its command to `docs/README.md`; do not add the
+   command to root agent guidance.
 
 Only after two real collectors expose shared behavior should a common
 `Protocol` be considered. A new source must never be added only to the input

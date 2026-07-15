@@ -45,7 +45,8 @@ Do not mix mechanical reformatting with behavior changes.
 
 2. Run verification appropriate to the change:
    - during development: targeted tests, e.g. `pytest tests/<module>/`
-   - before push / handoff: `bash scripts/verify.sh` (canonical gate)
+   - before push / handoff: `bash scripts/verify.sh` (deterministic required
+     verification)
 
 3. Commit. Pre-commit hooks run ruff format/check and file hygiene checks;
    the pre-push hook runs the full `scripts/verify.sh`.

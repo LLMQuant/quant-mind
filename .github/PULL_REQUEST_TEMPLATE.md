@@ -8,13 +8,13 @@
 
 ## Verification
 
-<!-- List the exact offline and applicable live commands you ran. -->
+<!-- List the exact deterministic and applicable live-network commands. -->
 
 ## Checklist
 
 - [ ] The title uses English Conventional Commit format: `type(scope): summary`.
 - [ ] The related issue or design discussion is linked when applicable.
 - [ ] `bash scripts/verify.sh` passes.
-- [ ] Every applicable live component gate passes, or this PR states why none applies.
+- [ ] Every applicable live-network component smoke test passes, or this PR states why none applies.
 - [ ] Public behavior has focused tests, an example, and documentation where applicable.
 - [ ] The PR is complete, small, and contains no unrelated changes.

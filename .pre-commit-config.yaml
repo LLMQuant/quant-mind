@@ -19,7 +19,7 @@ repos:
 -   repo: local
     hooks:
     -   id: verify
-        name: Run scripts/verify.sh (full golden harness)
+        name: Run scripts/verify.sh (deterministic verification harness)
         entry: bash scripts/verify.sh
         language: system
         pass_filenames: false
