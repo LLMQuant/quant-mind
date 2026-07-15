@@ -8,6 +8,7 @@ canonical source instead of treating this page as a replacement for it.
 | Architecture constraints and module ownership | [`AGENTS.md`](../../AGENTS.md) or [`CLAUDE.md`](../../CLAUDE.md) |
 | Component-development workflow | [`quantmind-dev` component workflow](../../.agents/skills/quantmind-dev/references/develop-components.md) |
 | Issue and pull-request labels | [Repository label guidance](labels.md) |
+| Issue and pull-request body formatting | [GitHub writing style](github-writing.md) |
 | Public operation and source catalog | [`docs/README.md`](../../docs/README.md) |
 | Public operation naming | [Operation naming contract](../../docs/design/en/operations.md) |
 | Component designs | [`docs/design/`](../../docs/design/) |

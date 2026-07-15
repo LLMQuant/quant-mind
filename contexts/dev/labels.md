@@ -69,6 +69,9 @@ type, area, and impact dimensions.
 
 ## Issues and Pull Requests
 
+Body source formatting follows the [GitHub writing style](github-writing.md),
+including its no-hard-wrap rule.
+
 - Label an issue from the intended problem and accepted scope.
 - Label a pull request from its actual diff.
 - A pull request that closes an issue should normally align with the issue's

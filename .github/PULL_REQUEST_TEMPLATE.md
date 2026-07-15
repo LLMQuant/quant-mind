@@ -1,3 +1,5 @@
+<!-- github-prose-style: Keep each logical paragraph/list item on one physical line; do not hard-wrap at 80 columns. -->
+
 ## Summary
 
 <!-- What changed and why? Keep this concise and link the design when useful. -->

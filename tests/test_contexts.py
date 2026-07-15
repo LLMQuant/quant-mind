@@ -9,6 +9,7 @@ class TestContextEntryPoints(unittest.TestCase):
         context_indexes = (
             "contexts/README.md",
             "contexts/dev/README.md",
+            "contexts/dev/github-writing.md",
             "contexts/dev/labels.md",
             "contexts/usage/README.md",
         )
@@ -118,9 +119,72 @@ class TestContextEntryPoints(unittest.TestCase):
             with self.subTest(dimension=dimension):
                 self.assertEqual(found, expected)
 
+    def test_github_writing_guide_has_required_routes(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        required_links = {
+            "contexts/dev/README.md": "github-writing.md",
+            "contexts/dev/labels.md": "github-writing.md",
+            "AGENTS.md": "contexts/dev/github-writing.md",
+            "CLAUDE.md": "contexts/dev/github-writing.md",
+            ".agents/skills/quantmind-dev/SKILL.md": (
+                "../../../contexts/dev/github-writing.md"
+            ),
+            ".claude/skills/quantmind-dev/SKILL.md": (
+                "../../../contexts/dev/github-writing.md"
+            ),
+            ".agents/skills/quantmind-dev/references/pull-request.md": (
+                "../../../../contexts/dev/github-writing.md"
+            ),
+            ".claude/skills/quantmind-dev/references/pull-request.md": (
+                "../../../../contexts/dev/github-writing.md"
+            ),
+        }
+
+        for source_path, target in required_links.items():
+            source = repo_root / source_path
+            with self.subTest(source=source_path):
+                self.assertIn(
+                    f"]({target})",
+                    source.read_text(encoding="utf-8"),
+                    f"{source_path} must route to the GitHub writing guide",
+                )
+                self.assertTrue(
+                    (source.parent / target).resolve().is_file(),
+                    f"broken GitHub writing guide link: {target}",
+                )
+
+        marker = "<!-- github-prose-style:"
+        templates = (
+            ".github/ISSUE_TEMPLATE/bug_report.md",
+            ".github/ISSUE_TEMPLATE/feature_request.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+        )
+        for template_path in templates:
+            with self.subTest(template=template_path):
+                template = repo_root / template_path
+                self.assertIn(
+                    marker,
+                    template.read_text(encoding="utf-8"),
+                    f"{template_path} must remind authors not to hard-wrap",
+                )
+
     def test_quantmind_dev_skill_mirrors_match(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        agents_skill = repo_root / ".agents/skills/quantmind-dev/SKILL.md"
-        claude_skill = repo_root / ".claude/skills/quantmind-dev/SKILL.md"
+        mirror_paths = (
+            "SKILL.md",
+            "references/commit.md",
+            "references/develop-components.md",
+            "references/pull-request.md",
+        )
 
-        self.assertEqual(agents_skill.read_bytes(), claude_skill.read_bytes())
+        for relative_path in mirror_paths:
+            agents_skill = (
+                repo_root / ".agents/skills/quantmind-dev" / relative_path
+            )
+            claude_skill = (
+                repo_root / ".claude/skills/quantmind-dev" / relative_path
+            )
+            with self.subTest(path=relative_path):
+                self.assertEqual(
+                    agents_skill.read_bytes(), claude_skill.read_bytes()
+                )

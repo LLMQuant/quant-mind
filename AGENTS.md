@@ -89,6 +89,9 @@ A new feature ships with a unit test **and** a focused example:
 
 - Commit messages: English, Conventional Commits.
 - PR titles, PR bodies, and issue bodies: English.
+- GitHub Issue, Pull Request, Discussion, and comment body formatting follows
+  the [GitHub writing style](contexts/dev/github-writing.md); never hard-wrap
+  remote prose at 80 columns or another fixed width.
 - Code comments and docstrings: English, Google style.
 
 ## Development Workflows
