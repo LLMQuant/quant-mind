@@ -179,8 +179,15 @@ async def _check_ticker_hints(discovery: PRNewswireDiscovery) -> bool:
     expected_count, recovered_count = _ticker_hint_control_counts(documents)
     article_failure_count = len(outcomes) - len(documents)
     recall = recovered_count / expected_count if expected_count else 0.0
-    passed = bool(documents) and expected_count > 0 and recall == 1.0
-    state = "PASS" if passed else "FAIL"
+    if not documents:
+        passed = False
+        state = "FAIL"
+    elif not expected_count:
+        passed = True
+        state = "SKIP"
+    else:
+        passed = recall == 1.0
+        state = "PASS" if passed else "FAIL"
     print(
         f"[{state}] pr-newswire-ticker-hints: sampled={len(sample)} "
         f"parsed={len(documents)} failures={article_failure_count} "

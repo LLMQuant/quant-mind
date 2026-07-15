@@ -179,13 +179,21 @@ class NewsPreprocessTests(unittest.TestCase):
 
         candidate = preprocess_news_document(raw)
 
-        expected_hints = {("ABC", "NASDAQ"), ("CCL", "NYSE")}
+        expected_hints = {
+            ("ABC", "NASDAQ"),
+            ("CCL", "NYSE"),
+            ("PODD", "NASDAQ"),
+        }
         actual_hints = {
             (hint.symbol, hint.exchange) for hint in candidate.ticker_hints
         }
         recall = len(expected_hints & actual_hints) / len(expected_hints)
         self.assertEqual(recall, 1.0)
         self.assertIn("[CCL](#financial-modal)", candidate.body_text)
+        self.assertIn(
+            "(NASDAQ:\n\n[PODD](#financial-modal))",
+            candidate.body_text,
+        )
         self.assertIn("**ABC**", candidate.body_text)
         self.assertEqual(
             candidate.content_hash,

@@ -204,21 +204,28 @@ class VerifyNewsE2ETests(unittest.IsolatedAsyncioTestCase):
             "CCL",
         )
         missed = _document("Example (NASDAQ: **ABC**).")
+        no_ticker = _document("Example release with no ticker mention.")
 
-        for document, expected in ((recovered, True), (missed, False)):
-            with self.subTest(expected=expected):
+        cases = (
+            (recovered, True, "[PASS]"),
+            (missed, False, "[FAIL]"),
+            (no_ticker, True, "[SKIP]"),
+        )
+        for document, expected, state in cases:
+            with self.subTest(expected=expected, state=state):
                 with (
                     patch.object(
                         verify_news_e2e,
                         "_collect_observation",
                         new=AsyncMock(return_value=document),
                     ),
-                    redirect_stdout(io.StringIO()),
+                    redirect_stdout(io.StringIO()) as output,
                 ):
                     passed = await verify_news_e2e._check_ticker_hints(
                         discovery
                     )
                 self.assertIs(passed, expected)
+                self.assertIn(state, output.getvalue())
 
 
 if __name__ == "__main__":

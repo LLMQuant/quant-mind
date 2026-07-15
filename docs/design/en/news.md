@@ -217,8 +217,9 @@ extractor and accepts plain, Markdown-link, and emphasis-wrapped symbols. It
 intentionally ignores later members of multi-symbol lists and exchanges outside
 the production whitelist. The gate prints component-level PASS/FAIL records and
 compact discovery, article-sample, failure, and recall summaries. It exits
-non-zero if RSS or discovery is invalid, no sampled article yields a supported
-exchange-coded symbol, or sampled recall falls below 100%.
+non-zero if RSS or discovery is invalid, no sampled article parses, or a sample
+with supported exchange-coded symbols falls below 100% recall. A parsed sample
+with zero supported symbols reports `SKIP` and passes neutrally.
 
 GitHub Actions runs this check on every pull request, once daily, and on manual
 dispatch. The ordinary offline verification workflow remains network-free so
