@@ -28,9 +28,9 @@ layer shown in the catalog.
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
 
-The PR Newswire smoke test checks the public RSS feed and a complete preceding
-24-hour listing window without fetching article pages. It depends on the real
-public network. The `news` job in `.github/workflows/e2e.yml` runs daily, on
+The PR Newswire smoke test checks the public RSS feed, a complete preceding
+24-hour listing window, and ticker-hint recall on a bounded sample of up to 25
+article pages. The `news` job in `.github/workflows/e2e.yml` runs daily, on
 manual dispatch, and only on pull requests that change its dependency paths.
 It is not a required merge check, so external PR Newswire availability cannot
 block unrelated changes.
