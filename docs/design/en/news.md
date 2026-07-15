@@ -204,17 +204,22 @@ observations, raw-byte retention, retries, partial failures, and completeness.
 ### Live news E2E
 
 `python scripts/verify_news_e2e.py` is the canonical public-network component
-check. It performs two bounded checks:
+check. It performs three bounded checks:
 
 1. fetch and parse the official PR Newswire RSS feed;
 2. discover PR Newswire listing observations for the preceding 24 hours and
-   prove that discovery crossed the window start.
+   prove that discovery crossed the window start;
+3. fetch up to 25 unique article observations and require 100% ticker-hint
+   recall for the first supported exchange-coded symbol in each group.
 
-The E2E check never fetches article pages. It prints component-level PASS/FAIL
-records and a compact observation/page/failure summary, then exits non-zero if
-RSS is empty or invalid, listing discovery is empty or incomplete, or a
-component raises. This keeps the check lightweight while detecting public
-source or parser drift.
+The ticker control uses an oracle regex that is independent from the production
+extractor and accepts plain, Markdown-link, and emphasis-wrapped symbols. It
+intentionally ignores later members of multi-symbol lists and exchanges outside
+the production whitelist. The gate prints component-level PASS/FAIL records and
+compact discovery, article-sample, failure, and recall summaries. It exits
+non-zero if RSS or discovery is invalid, no sampled article parses, or a sample
+with supported exchange-coded symbols falls below 100% recall. A parsed sample
+with zero supported symbols reports `SKIP` and passes neutrally.
 
 GitHub Actions runs this check on every pull request, once daily, and on manual
 dispatch. The ordinary offline verification workflow remains network-free so
