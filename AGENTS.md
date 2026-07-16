@@ -18,6 +18,7 @@ handoff all come from `openai-agents`.
 | Module | Role |
 |--------|------|
 | `quantmind/knowledge/` | Pydantic data standard (`FlattenKnowledge` / `TreeKnowledge` / `GraphKnowledge`) — dependency leaf |
+| `quantmind/library/` | Local persistence and semantic retrieval for canonical knowledge — depends only on `knowledge` |
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
 | `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
 | `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
