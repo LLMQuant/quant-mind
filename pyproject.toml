@@ -119,10 +119,9 @@ reportIncompatibleVariableOverride = "none"
 # import-linter: architectural boundary contracts
 # ----------------------------------------------------------------------------
 # Encodes the target architecture: utils, knowledge, and preprocess are
-# leaves; configs depends only on knowledge; flows + magic is the apex
-# layer (PR5). The transitional packages (config/, flow/, llm/, models/)
-# were deleted in PR5; they remain in the forbidden lists as a tripwire
-# against accidental re-introduction during future refactors.
+# leaves; configs depends only on knowledge; library depends only on
+# knowledge; flows + magic is the apex layer. The transitional packages
+# (config/, flow/, llm/, models/) remain forbidden as a tripwire.
 
 [tool.importlinter]
 root_packages = ["quantmind"]
@@ -135,6 +134,7 @@ forbidden_modules = [
     "quantmind.configs",
     "quantmind.flows",
     "quantmind.knowledge",
+    "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
 ]
@@ -146,6 +146,7 @@ source_modules = ["quantmind.knowledge"]
 forbidden_modules = [
     "quantmind.configs",
     "quantmind.flows",
+    "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
     "quantmind.utils",
@@ -157,6 +158,7 @@ type = "forbidden"
 source_modules = ["quantmind.configs"]
 forbidden_modules = [
     "quantmind.flows",
+    "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
 ]
@@ -169,7 +171,25 @@ forbidden_modules = [
     "quantmind.configs",
     "quantmind.flows",
     "quantmind.knowledge",
+    "quantmind.library",
     "quantmind.magic",
+]
+
+[[tool.importlinter.contracts]]
+name = "library only depends on knowledge"
+type = "forbidden"
+source_modules = ["quantmind.library"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.flows",
+    "quantmind.llm",
+    "quantmind.magic",
+    "quantmind.mind",
+    "quantmind.models",
+    "quantmind.preprocess",
+    "quantmind.utils",
 ]
 
 [[tool.importlinter.contracts]]

@@ -17,6 +17,7 @@ harness.
 | Paper extraction | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `Paper` | [README usage](../README.md#-usage-examples) | [Papers](papers.md) |
 | News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](design/en/news.md) |
 | Bounded fan-out | `quantmind.flows.batch_run` | Operation inputs and shared config | `BatchResult` | [README usage](../README.md#-usage-examples) | API docstrings |
+| Local semantic search | `quantmind.library.LocalKnowledgeLibrary` | `BaseKnowledge`, `SemanticQuery` | `list[SemanticHit]` | [Semantic search](../examples/library/semantic_search.py) | [Library guide](library.md) |
 
 Import public inputs and configs from `quantmind.configs` and current public
 operations from `quantmind.flows`. Import result contracts from the canonical
