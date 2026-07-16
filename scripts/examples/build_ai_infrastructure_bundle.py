@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from quantmind.knowledge import BaseKnowledge, Earnings, News, Paper
 from quantmind.library import LocalKnowledgeLibrary
 
-_ROOT = Path(__file__).parents[1]
+_ROOT = Path(__file__).parents[2]
 _SOURCE_PATH = (
     _ROOT / "examples" / "library" / "data" / "ai_infrastructure.json"
 )

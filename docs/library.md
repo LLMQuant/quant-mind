@@ -93,7 +93,7 @@ Maintainers can regenerate the model-specific database from the auditable JSON
 after changing the source data or storage schema:
 
 ```bash
-python scripts/build_library_example_bundle.py
+python scripts/examples/build_ai_infrastructure_bundle.py
 ```
 
 The bundle's facts and short citations come directly from the

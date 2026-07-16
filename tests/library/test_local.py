@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from quantmind.knowledge import Citation, News, Paper, SourceRef, TreeNode
+from quantmind.knowledge import (
+    Citation,
+    FlattenKnowledge,
+    News,
+    Paper,
+    SourceRef,
+    TreeNode,
+)
 from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
 
 
@@ -51,6 +58,13 @@ class _FakeEmbeddingProvider:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class _UnsupportedKnowledge(FlattenKnowledge):
+    item_type: str = "unsupported"
+
+    def embedding_text(self) -> str:
+        return "unsupported canonical knowledge"
 
 
 def _time(day: int, hour: int = 0) -> datetime:
@@ -169,6 +183,27 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(hits[0].citations, alpha.citations)
             self.assertEqual(hits[0].available_at, alpha.available_at)
             self.assertEqual(await library.get(alpha.id), alpha)
+        finally:
+            await library.close()
+
+    async def test_unsupported_knowledge_fails_before_embedding(self):
+        provider = _FakeEmbeddingProvider()
+        library = await LocalKnowledgeLibrary.open(
+            self.db_path,
+            embedding_model="fake-2d",
+            embedding_dimensions=2,
+            _embedding_provider=provider,
+        )
+        item = _UnsupportedKnowledge(
+            as_of=_time(1),
+            source=SourceRef(kind="manual"),
+        )
+        try:
+            with self.assertRaisesRegex(
+                TypeError, "Unsupported knowledge type"
+            ):
+                await library.put(item)
+            self.assertEqual(provider.calls, [])
         finally:
             await library.close()
 

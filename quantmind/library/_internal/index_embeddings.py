@@ -1,13 +1,31 @@
-"""Private OpenAI embedding implementation."""
+"""Private embedding client used to build and query the local index."""
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol
 
 from openai import AsyncOpenAI
 
 
+class _EmbeddingProvider(Protocol):
+    """Embedding seam used by production code and deterministic tests."""
+
+    async def embed(
+        self,
+        texts: Sequence[str],
+        *,
+        model: str,
+        dimensions: int | None,
+    ) -> Sequence[Sequence[float]]:
+        """Embed texts in input order."""
+        ...
+
+    async def close(self) -> None:
+        """Release provider-owned resources."""
+        ...
+
+
 class _OpenAIEmbeddingProvider:
-    """Generate embeddings without exposing provider response types."""
+    """Generate index embeddings without exposing provider response types."""
 
     def __init__(self) -> None:
         self._client: AsyncOpenAI | None = None
