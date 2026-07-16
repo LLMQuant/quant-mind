@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -195,6 +196,25 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
         try:
             await library.put(unrelated)
             await library.put(paper)
+            with sqlite3.connect(self.db_path) as db:
+                root_row = db.execute(
+                    """
+                    SELECT item_shape, payload_json, node_count
+                    FROM knowledge_items WHERE item_id = ?
+                    """,
+                    (str(paper.id),),
+                ).fetchone()
+                assert root_row is not None
+                self.assertEqual(root_row[0], "tree")
+                self.assertNotIn("nodes", json.loads(root_row[1]))
+                self.assertEqual(root_row[2], 3)
+                self.assertEqual(
+                    db.execute(
+                        "SELECT COUNT(*) FROM knowledge_nodes WHERE item_id = ?",
+                        (str(paper.id),),
+                    ).fetchone()[0],
+                    3,
+                )
             hits = await library.search(
                 SemanticQuery(
                     text=query_text,
@@ -478,6 +498,12 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 ],
                 0,
             )
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[
+                    0
+                ],
+                0,
+            )
 
     async def test_stale_canonical_get_fails_but_delete_can_recover(self):
         item = _news("Stale canonical")
@@ -492,7 +518,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             await library.put(item)
             with sqlite3.connect(self.db_path) as db:
                 db.execute(
-                    "UPDATE knowledge_items SET canonical_json = '{}' "
+                    "UPDATE knowledge_items SET payload_json = '{}' "
                     "WHERE item_id = ?",
                     (str(item.id),),
                 )
@@ -531,12 +557,37 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             _embedding_provider=reopened_provider,
         )
         try:
-            with self.assertRaisesRegex(RuntimeError, "Stale index data"):
+            with self.assertRaisesRegex(RuntimeError, "Stale data"):
                 await library.get(item.id)
-            with self.assertRaisesRegex(RuntimeError, "Stale index data"):
+            with self.assertRaisesRegex(RuntimeError, "Stale data"):
                 await library.delete(item.id)
             with self.assertRaisesRegex(RuntimeError, "Stale index data"):
                 await library.search(SemanticQuery(text="query"))
+        finally:
+            await library.close()
+
+    async def test_corrupt_canonical_tree_node_fails_rehydration(self):
+        paper, methods_id, _ = _paper()
+        library = await LocalKnowledgeLibrary.open(
+            self.db_path,
+            embedding_model="fake-2d",
+            embedding_dimensions=2,
+            _embedding_provider=_FakeEmbeddingProvider(),
+        )
+        try:
+            await library.put(paper)
+            with sqlite3.connect(self.db_path) as db:
+                db.execute(
+                    """
+                    UPDATE knowledge_nodes SET payload_json = '{}'
+                    WHERE item_id = ? AND node_id = ?
+                    """,
+                    (str(paper.id), str(methods_id)),
+                )
+            with self.assertRaisesRegex(
+                RuntimeError, "node.*content hash mismatch"
+            ):
+                await library.get(paper.id)
         finally:
             await library.close()
 

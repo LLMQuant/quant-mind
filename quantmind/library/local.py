@@ -18,6 +18,7 @@ from quantmind.library._embed import _OpenAIEmbeddingProvider
 from quantmind.library._ports import _EmbeddingProvider
 from quantmind.library._projection import (
     _PROJECTION_SCHEMA_VERSION,
+    _assemble_canonical_payload,
     _canonical_payload,
     _load_canonical,
     _project_knowledge,
@@ -25,7 +26,7 @@ from quantmind.library._projection import (
 )
 from quantmind.library._types import SemanticHit, SemanticQuery
 
-_DATABASE_SCHEMA_VERSION = 1
+_DATABASE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ def _decode_stored_vector(
 
 
 def _initialize_schema(db: sqlite3.Connection) -> None:
-    """Create the V1 schema or reject an incompatible local database."""
+    """Create the current schema or reject an incompatible local database."""
     version_row = db.execute("PRAGMA user_version").fetchone()
     version = int(version_row[0])
     if version not in (0, _DATABASE_SCHEMA_VERSION):
@@ -122,10 +123,24 @@ def _initialize_schema(db: sqlite3.Connection) -> None:
             item_id TEXT PRIMARY KEY,
             knowledge_class TEXT NOT NULL,
             item_type TEXT NOT NULL,
+            item_shape TEXT NOT NULL CHECK (item_shape IN ('flat', 'tree')),
             schema_version TEXT NOT NULL,
-            canonical_json TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
             canonical_hash TEXT NOT NULL,
+            node_count INTEGER NOT NULL CHECK (node_count >= 0),
             target_count INTEGER NOT NULL CHECK (target_count > 0)
+        );
+
+        CREATE TABLE knowledge_nodes (
+            item_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            parent_id TEXT,
+            position INTEGER NOT NULL,
+            payload_json TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            PRIMARY KEY (item_id, node_id),
+            FOREIGN KEY (item_id) REFERENCES knowledge_items(item_id)
+                ON DELETE CASCADE
         );
 
         CREATE TABLE semantic_records (
@@ -156,9 +171,55 @@ def _initialize_schema(db: sqlite3.Connection) -> None:
             ON semantic_records(item_id);
         CREATE INDEX semantic_records_filters
             ON semantic_records(item_type, source_kind, confidence, tree_id);
+        CREATE INDEX knowledge_nodes_parent
+            ON knowledge_nodes(item_id, parent_id, position);
 
         PRAGMA user_version = {_DATABASE_SCHEMA_VERSION};
         """
+    )
+
+
+def _load_stored_canonical(
+    db: sqlite3.Connection, row: sqlite3.Row
+) -> BaseKnowledge:
+    """Rehydrate and validate one canonical aggregate from normalized rows."""
+    item_id = str(row["item_id"])
+    node_rows = db.execute(
+        """
+        SELECT node_id, parent_id, position, payload_json, content_hash
+        FROM knowledge_nodes
+        WHERE item_id = ?
+        ORDER BY node_id
+        """,
+        (item_id,),
+    ).fetchall()
+    payload = _assemble_canonical_payload(
+        item_id=item_id,
+        item_shape=str(row["item_shape"]),
+        item_payload=str(row["payload_json"]),
+        expected_node_count=int(row["node_count"]),
+        node_records=[
+            (
+                str(node_row["node_id"]),
+                (
+                    str(node_row["parent_id"])
+                    if node_row["parent_id"] is not None
+                    else None
+                ),
+                int(node_row["position"]),
+                str(node_row["payload_json"]),
+                str(node_row["content_hash"]),
+            )
+            for node_row in node_rows
+        ],
+    )
+    return _load_canonical(
+        item_id=item_id,
+        knowledge_class=str(row["knowledge_class"]),
+        item_type=str(row["item_type"]),
+        schema_version=str(row["schema_version"]),
+        payload=payload,
+        canonical_hash=str(row["canonical_hash"]),
     )
 
 
@@ -245,7 +306,7 @@ class LocalKnowledgeLibrary:
         async with self._lock:
             if self._db is None:
                 raise RuntimeError("LocalKnowledgeLibrary is closed")
-            knowledge_class, payload, canonical_hash = _canonical_payload(item)
+            canonical = _canonical_payload(item)
             projections = _project_knowledge(item)
             as_of = _timestamp(item.as_of, "BaseKnowledge.as_of")
             available_at = (
@@ -324,24 +385,29 @@ class LocalKnowledgeLibrary:
                 self._db.execute(
                     """
                     INSERT INTO knowledge_items (
-                        item_id, knowledge_class, item_type, schema_version,
-                        canonical_json, canonical_hash, target_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        item_id, knowledge_class, item_type, item_shape,
+                        schema_version, payload_json, canonical_hash,
+                        node_count, target_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(item_id) DO UPDATE SET
                         knowledge_class = excluded.knowledge_class,
                         item_type = excluded.item_type,
+                        item_shape = excluded.item_shape,
                         schema_version = excluded.schema_version,
-                        canonical_json = excluded.canonical_json,
+                        payload_json = excluded.payload_json,
                         canonical_hash = excluded.canonical_hash,
+                        node_count = excluded.node_count,
                         target_count = excluded.target_count
                     """,
                     (
                         str(item.id),
-                        knowledge_class,
+                        canonical.knowledge_class,
                         item.item_type,
+                        canonical.item_shape,
                         item.schema_version,
-                        payload,
-                        canonical_hash,
+                        canonical.payload,
+                        canonical.canonical_hash,
+                        len(canonical.nodes),
                         len(projections),
                     ),
                 )
@@ -349,6 +415,27 @@ class LocalKnowledgeLibrary:
                     "DELETE FROM semantic_records WHERE item_id = ?",
                     (str(item.id),),
                 )
+                self._db.execute(
+                    "DELETE FROM knowledge_nodes WHERE item_id = ?",
+                    (str(item.id),),
+                )
+                for node in canonical.nodes:
+                    self._db.execute(
+                        """
+                        INSERT INTO knowledge_nodes (
+                            item_id, node_id, parent_id, position,
+                            payload_json, content_hash
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            str(item.id),
+                            str(node.node_id),
+                            str(node.parent_id) if node.parent_id else None,
+                            node.position,
+                            node.payload,
+                            node.content_hash,
+                        ),
+                    )
                 for projection in projections:
                     stored_vector = generated.get(projection.target_id)
                     if stored_vector is None:
@@ -395,7 +482,7 @@ class LocalKnowledgeLibrary:
                             source_content_hash,
                             item.schema_version,
                             _PROJECTION_SCHEMA_VERSION,
-                            canonical_hash,
+                            canonical.canonical_hash,
                             blob,
                         ),
                     )
@@ -419,24 +506,24 @@ class LocalKnowledgeLibrary:
             if row is None:
                 derived_count = int(
                     self._db.execute(
-                        "SELECT COUNT(*) FROM semantic_records WHERE item_id = ?",
-                        (str(item_id),),
+                        """
+                        SELECT
+                            (SELECT COUNT(*) FROM semantic_records
+                             WHERE item_id = ?)
+                            +
+                            (SELECT COUNT(*) FROM knowledge_nodes
+                             WHERE item_id = ?)
+                        """,
+                        (str(item_id), str(item_id)),
                     ).fetchone()[0]
                 )
                 if derived_count:
                     raise RuntimeError(
-                        f"Stale index data for item '{item_id}': "
-                        "derived records exist without canonical knowledge"
+                        f"Stale data for item '{item_id}': child records exist "
+                        "without canonical knowledge"
                     )
                 raise KeyError(f"Knowledge item '{item_id}' not found")
-            return _load_canonical(
-                item_id=str(row["item_id"]),
-                knowledge_class=str(row["knowledge_class"]),
-                item_type=str(row["item_type"]),
-                schema_version=str(row["schema_version"]),
-                payload=str(row["canonical_json"]),
-                canonical_hash=str(row["canonical_hash"]),
-            )
+            return _load_stored_canonical(self._db, row)
 
     async def search(self, query: SemanticQuery) -> list[SemanticHit]:
         """Rank filtered projections with deterministic exact cosine similarity."""
@@ -547,14 +634,7 @@ class LocalKnowledgeLibrary:
                             f"Stale index data for item '{record.item_id}': "
                             "canonical knowledge is missing"
                         )
-                    item = _load_canonical(
-                        item_id=str(row["item_id"]),
-                        knowledge_class=str(row["knowledge_class"]),
-                        item_type=str(row["item_type"]),
-                        schema_version=str(row["schema_version"]),
-                        payload=str(row["canonical_json"]),
-                        canonical_hash=str(row["canonical_hash"]),
-                    )
+                    item = _load_stored_canonical(self._db, row)
                     canonical[record.item_id] = item
                 if isinstance(item, TreeKnowledge):
                     if record.node_id is None:
@@ -601,20 +681,31 @@ class LocalKnowledgeLibrary:
             if exists is None:
                 derived_count = int(
                     self._db.execute(
-                        "SELECT COUNT(*) FROM semantic_records WHERE item_id = ?",
-                        (str(item_id),),
+                        """
+                        SELECT
+                            (SELECT COUNT(*) FROM semantic_records
+                             WHERE item_id = ?)
+                            +
+                            (SELECT COUNT(*) FROM knowledge_nodes
+                             WHERE item_id = ?)
+                        """,
+                        (str(item_id), str(item_id)),
                     ).fetchone()[0]
                 )
                 if derived_count:
                     raise RuntimeError(
-                        f"Stale index data for item '{item_id}': "
-                        "cannot delete derived records without canonical knowledge"
+                        f"Stale data for item '{item_id}': cannot delete child "
+                        "records without canonical knowledge"
                     )
                 raise KeyError(f"Knowledge item '{item_id}' not found")
             try:
                 self._db.execute("BEGIN IMMEDIATE")
                 self._db.execute(
                     "DELETE FROM semantic_records WHERE item_id = ?",
+                    (str(item_id),),
+                )
+                self._db.execute(
+                    "DELETE FROM knowledge_nodes WHERE item_id = ?",
                     (str(item_id),),
                 )
                 self._db.execute(
@@ -659,6 +750,40 @@ class LocalKnowledgeLibrary:
             raise RuntimeError(
                 f"Stale index data for item '{orphan['item_id']}': "
                 "derived records exist without canonical knowledge"
+            )
+        orphan_node = self._db.execute(
+            """
+            SELECT n.item_id
+            FROM knowledge_nodes AS n
+            LEFT JOIN knowledge_items AS i ON i.item_id = n.item_id
+            WHERE i.item_id IS NULL
+            LIMIT 1
+            """
+        ).fetchone()
+        if orphan_node is not None:
+            raise RuntimeError(
+                f"Stale canonical knowledge for item '{orphan_node['item_id']}': "
+                "tree nodes exist without an aggregate root"
+            )
+        incomplete_tree = self._db.execute(
+            """
+            SELECT i.item_id, i.item_shape, i.node_count,
+                   COUNT(n.node_id) AS actual_count
+            FROM knowledge_items AS i
+            LEFT JOIN knowledge_nodes AS n ON n.item_id = i.item_id
+            GROUP BY i.item_id, i.item_shape, i.node_count
+            HAVING COUNT(n.node_id) != i.node_count
+                OR (i.item_shape = 'flat' AND i.node_count != 0)
+                OR (i.item_shape = 'tree' AND i.node_count = 0)
+            LIMIT 1
+            """
+        ).fetchone()
+        if incomplete_tree is not None:
+            raise RuntimeError(
+                f"Stale canonical knowledge for item "
+                f"'{incomplete_tree['item_id']}': expected "
+                f"{incomplete_tree['node_count']} tree nodes, found "
+                f"{incomplete_tree['actual_count']}"
             )
         incomplete = self._db.execute(
             """

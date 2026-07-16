@@ -12,8 +12,36 @@ answer.
   `embedding_text()` projection.
 - Each `TreeKnowledge` produces one item target for the root with
   `node_id=None`, plus one target for every non-root `TreeNode`.
-- Canonical JSON is the source of truth. Embeddings and filter columns are
-  derived data and can be replaced by re-putting the canonical item.
+- Canonical typed records are the source of truth. Embeddings and filter
+  columns are derived data and can be replaced by re-putting the item.
+
+## Local storage model
+
+The default local database is SQLite, with separate canonical and derived
+concerns:
+
+- `knowledge_items` stores one aggregate root per `BaseKnowledge`. The type
+  discriminator and schema version select the concrete Pydantic model.
+- `knowledge_nodes` stores every canonical `TreeNode` separately with its item,
+  parent, position, payload, and content hash. A large tree is not hidden in the
+  aggregate-root JSON row.
+- `semantic_records` stores rebuildable item/root/node projections and vectors.
+
+Concrete types do not get tables such as `news`, `earnings`, or `papers`.
+Creating one table per Pydantic subtype would duplicate common metadata and
+require a database migration whenever the knowledge standard adds a type. The
+aggregate-root plus normalized-node model preserves typed validation while
+giving future tree navigation a stable node-level storage boundary.
+
+SQLite is the default because canonical knowledge needs transactions, foreign
+keys, typed reconstruction, and explicit corrupt/stale/not-found behavior. A
+vector database such as Chroma optimizes the derived similarity-search layer;
+it does not replace those canonical-storage responsibilities. The current local
+scale therefore uses a rebuildable NumPy exact-cosine index backed by
+`semantic_records`, without adding another service or dependency. If corpus
+size later requires an approximate or remote vector index, that derived layer
+can change privately without changing `LocalKnowledgeLibrary`, the canonical
+tables, or user code.
 
 The durable vector metadata records the embedding model and dimension, exact
 projection hash, source content hash, knowledge schema version, and projection
@@ -42,25 +70,45 @@ filters before ranking.
 
 ## Usage
 
-```python
-from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
+The bundled AI-infrastructure scenario contains primary-source-backed `News`,
+`Earnings`, and a real research `Paper` tree. Set an OpenAI key and run the
+complete example:
 
-library = await LocalKnowledgeLibrary.open(
-    ".quantmind/library.db",
-    embedding_model="text-embedding-3-small",
-)
-try:
-    await library.put(paper)
-    hits = await library.search(
-        SemanticQuery(
-            text="management expects capital expenditure to increase",
-            available_at_before=research_cutoff,
-            top_k=10,
-        )
-    )
-    evidence = await library.get(hits[0].item_id)
-finally:
-    await library.close()
+```bash
+export OPENAI_API_KEY=...
+python examples/library/semantic_search.py
+```
+
+The example:
+
+1. Validates the bundled JSON as canonical QuantMind models.
+2. Persists flat knowledge and normalized tree nodes to SQLite.
+3. Closes and reopens the library to demonstrate durable data.
+4. Searches a concrete AI-infrastructure question with a no-look-ahead
+   availability cutoff.
+5. Resolves every hit with `get()` and prints source, citation, financial time,
+   and the root-to-node path and content for tree evidence.
+
+The bundle's facts and short citations come directly from the
+[Compute Trends Across Three Eras of Machine Learning paper](https://arxiv.org/abs/2202.05924),
+[Microsoft's FY2025 AI-datacenter investment announcement](https://blogs.microsoft.com/on-the-issues/2025/01/03/the-golden-opportunity-for-american-ai/),
+and [NVIDIA's FY2026 Q1 results](https://investor.nvidia.com/news/press-release-details/2025/NVIDIA-Announces-Financial-Results-for-First-Quarter-Fiscal-2026/default.aspx).
+
+Representative output has this shape; scores depend on the selected embedding
+model:
+
+```text
+Scenario: An investor tests whether long-run compute growth...
+Persisted 3 knowledge items / 6 targets
+Database: .quantmind/ai-infrastructure.db
+
+Query: What evidence shows demand for AI infrastructure is expanding?
+
+1. score=0.812 type=paper
+   path: ... > ...
+   matched: ...
+   source: https://...
+   citation: ...
 ```
 
 `SemanticHit.matched_text` is the exact projection used in ranking. Use
