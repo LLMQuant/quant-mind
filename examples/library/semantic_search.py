@@ -1,83 +1,30 @@
-"""Run a persisted semantic search over bundled financial knowledge."""
+"""Search a ready-to-use local bundle of financial knowledge."""
 
 import asyncio
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from quantmind.knowledge import (
-    BaseKnowledge,
-    Earnings,
-    News,
-    Paper,
-    TreeKnowledge,
-)
+from dotenv import load_dotenv
+
+from quantmind.knowledge import TreeKnowledge
 from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
 
-_BUNDLE_PATH = Path(__file__).parent / "data" / "ai_infrastructure.json"
-_DEFAULT_LIBRARY_PATH = Path(".quantmind/ai-infrastructure.db")
-_KNOWLEDGE_TYPES: dict[str, type[BaseKnowledge]] = {
-    "earnings": Earnings,
-    "news": News,
-    "paper": Paper,
-}
-
-
-def _load_bundle() -> tuple[str, list[BaseKnowledge]]:
-    """Validate bundled JSON as canonical QuantMind knowledge."""
-    bundle = json.loads(_BUNDLE_PATH.read_text(encoding="utf-8"))
-    scenario = str(bundle["scenario"])
-    items: list[BaseKnowledge] = []
-    for payload in bundle["items"]:
-        item_type = str(payload["item_type"])
-        knowledge_type = _KNOWLEDGE_TYPES.get(item_type)
-        if knowledge_type is None:
-            raise ValueError(f"Unsupported bundled item_type: {item_type}")
-        items.append(knowledge_type.model_validate(payload))
-    return scenario, items
-
-
-def _target_count(items: list[BaseKnowledge]) -> int:
-    """Count the exact item/root/node projections created by the library."""
-    return sum(
-        len(item.nodes) if isinstance(item, TreeKnowledge) else 1
-        for item in items
-    )
+_BUNDLE_PATH = Path(__file__).parent / "data" / "ai_infrastructure.db"
+_EMBEDDING_MODEL = "text-embedding-3-small"
+_EMBEDDING_DIMENSIONS = 1536
 
 
 async def main() -> None:
-    """Seed, reopen, search, and resolve bundled tree evidence."""
+    """Search and resolve evidence from the prebuilt local bundle."""
+    load_dotenv()
     if not os.getenv("OPENAI_API_KEY"):
         raise SystemExit("Set OPENAI_API_KEY before running this example.")
 
-    scenario, items = _load_bundle()
-    database_path = Path(
-        os.getenv("QUANTMIND_LIBRARY_PATH", str(_DEFAULT_LIBRARY_PATH))
-    )
-    embedding_model = os.getenv(
-        "QUANTMIND_EMBEDDING_MODEL", "text-embedding-3-small"
-    )
-
     library = await LocalKnowledgeLibrary.open(
-        database_path,
-        embedding_model=embedding_model,
-    )
-    try:
-        for item in items:
-            await library.put(item)
-    finally:
-        await library.close()
-
-    print(f"Scenario: {scenario}")
-    print(
-        f"Persisted {len(items)} knowledge items / {_target_count(items)} targets"
-    )
-    print(f"Database: {database_path}\n")
-
-    library = await LocalKnowledgeLibrary.open(
-        database_path,
-        embedding_model=embedding_model,
+        _BUNDLE_PATH,
+        embedding_model=_EMBEDDING_MODEL,
+        embedding_dimensions=_EMBEDDING_DIMENSIONS,
     )
     try:
         query = SemanticQuery(
@@ -85,9 +32,10 @@ async def main() -> None:
             source_kinds=["http", "arxiv"],
             tags=["ai-infrastructure"],
             available_at_before=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            top_k=5,
+            top_k=6,
         )
         hits = await library.search(query)
+        print(f"Bundle: {_BUNDLE_PATH}")
         print(f"Query: {query.text}\n")
         for rank, hit in enumerate(hits, start=1):
             item = await library.get(hit.item_id)

@@ -71,23 +71,30 @@ filters before ranking.
 ## Usage
 
 The bundled AI-infrastructure scenario contains primary-source-backed `News`,
-`Earnings`, and a real research `Paper` tree. Set an OpenAI key and run the
-complete example:
+`Earnings`, and a real research `Paper` tree. Its canonical source JSON is
+precompiled into a SQLite database with six `text-embedding-3-small` targets,
+so the user-facing example does not perform ingestion or document embedding.
+Put `OPENAI_API_KEY` in `.env` and run:
 
 ```bash
-export OPENAI_API_KEY=...
 python examples/library/semantic_search.py
 ```
 
 The example:
 
-1. Validates the bundled JSON as canonical QuantMind models.
-2. Persists flat knowledge and normalized tree nodes to SQLite.
-3. Closes and reopens the library to demonstrate durable data.
-4. Searches a concrete AI-infrastructure question with a no-look-ahead
+1. Opens the ready-to-search SQLite bundle through `LocalKnowledgeLibrary`.
+2. Embeds only the user's query with `text-embedding-3-small`.
+3. Searches a concrete AI-infrastructure question with a no-look-ahead
    availability cutoff.
-5. Resolves every hit with `get()` and prints source, citation, financial time,
+4. Resolves every hit with `get()` and prints source, citation, financial time,
    and the root-to-node path and content for tree evidence.
+
+Maintainers can regenerate the model-specific database from the auditable JSON
+after changing the source data or storage schema:
+
+```bash
+python scripts/build_library_example_bundle.py
+```
 
 The bundle's facts and short citations come directly from the
 [Compute Trends Across Three Eras of Machine Learning paper](https://arxiv.org/abs/2202.05924),
@@ -98,10 +105,7 @@ Representative output has this shape; scores depend on the selected embedding
 model:
 
 ```text
-Scenario: An investor tests whether long-run compute growth...
-Persisted 3 knowledge items / 6 targets
-Database: .quantmind/ai-infrastructure.db
-
+Bundle: .../examples/library/data/ai_infrastructure.db
 Query: What evidence shows demand for AI infrastructure is expanding?
 
 1. score=0.812 type=paper

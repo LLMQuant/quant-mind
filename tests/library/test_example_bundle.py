@@ -1,5 +1,5 @@
 import json
-import tempfile
+import sqlite3
 import unittest
 from collections.abc import Sequence
 from datetime import datetime, timezone
@@ -22,6 +22,7 @@ _BUNDLE_PATH = (
     / "data"
     / "ai_infrastructure.json"
 )
+_DATABASE_PATH = _BUNDLE_PATH.with_suffix(".db")
 _KNOWLEDGE_TYPES: dict[str, type[BaseKnowledge]] = {
     "earnings": Earnings,
     "news": News,
@@ -29,8 +30,11 @@ _KNOWLEDGE_TYPES: dict[str, type[BaseKnowledge]] = {
 }
 
 
-class _DeterministicEmbeddingProvider:
-    """Provide stable local vectors so the example scenario stays offline."""
+class _QueryEmbeddingProvider:
+    """Provide one local query vector for the prebuilt OpenAI index."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int | None, tuple[str, ...]]] = []
 
     async def embed(
         self,
@@ -39,10 +43,10 @@ class _DeterministicEmbeddingProvider:
         model: str,
         dimensions: int | None,
     ) -> list[list[float]]:
-        del model
-        if dimensions != 2:
-            raise ValueError("This test provider requires two dimensions")
-        return [[1.0, float(1 + sum(map(ord, text)) % 97)] for text in texts]
+        self.calls.append((model, dimensions, tuple(texts)))
+        if model != "text-embedding-3-small" or dimensions != 1536:
+            raise ValueError("Unexpected prebuilt embedding metadata")
+        return [[1.0, *([0.0] * 1535)] for _ in texts]
 
     async def close(self) -> None:
         """Release no resources."""
@@ -108,28 +112,44 @@ class ExampleBundleSearchTests(unittest.IsolatedAsyncioTestCase):
             _KNOWLEDGE_TYPES[str(payload["item_type"])].model_validate(payload)
             for payload in bundle["items"]
         ]
-        self._temporary_directory = tempfile.TemporaryDirectory()
-        self.db_path = Path(self._temporary_directory.name) / "library.db"
 
-    def tearDown(self) -> None:
-        self._temporary_directory.cleanup()
+    async def test_prebuilt_bundle_searches_and_matches_source_json(self):
+        self.assertTrue(_DATABASE_PATH.is_file())
+        with sqlite3.connect(_DATABASE_PATH) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM knowledge_items").fetchone()[
+                    0
+                ],
+                3,
+            )
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[
+                    0
+                ],
+                4,
+            )
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM semantic_records").fetchone()[
+                    0
+                ],
+                6,
+            )
+            self.assertEqual(
+                set(
+                    db.execute(
+                        "SELECT DISTINCT embedding_model, dimension "
+                        "FROM semantic_records"
+                    ).fetchall()
+                ),
+                {("text-embedding-3-small", 1536)},
+            )
 
-    async def test_bundle_put_reopen_search_and_get(self):
+        provider = _QueryEmbeddingProvider()
         library = await LocalKnowledgeLibrary.open(
-            self.db_path,
-            embedding_model="deterministic-2d",
-            embedding_dimensions=2,
-            _embedding_provider=_DeterministicEmbeddingProvider(),
-        )
-        for item in self.items:
-            await library.put(item)
-        await library.close()
-
-        library = await LocalKnowledgeLibrary.open(
-            self.db_path,
-            embedding_model="deterministic-2d",
-            embedding_dimensions=2,
-            _embedding_provider=_DeterministicEmbeddingProvider(),
+            _DATABASE_PATH,
+            embedding_model="text-embedding-3-small",
+            embedding_dimensions=1536,
+            _embedding_provider=provider,
         )
         try:
             hits = await library.search(
@@ -154,6 +174,7 @@ class ExampleBundleSearchTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(hit.node_id is not None for hit in hits), 3)
             for item in self.items:
                 self.assertEqual(await library.get(item.id), item)
+            self.assertEqual(len(provider.calls), 1)
         finally:
             await library.close()
 
