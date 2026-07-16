@@ -10,8 +10,8 @@ canonical source instead of treating this page as a replacement for it.
 | Issue and pull-request labels | [Repository label guidance](labels.md) |
 | Issue and pull-request body formatting | [GitHub writing style](github-writing.md) |
 | Public operation and source catalog | [`docs/README.md`](../../docs/README.md) |
-| Public operation naming | [Operation naming contract](../../docs/design/en/operations.md) |
-| Component designs | [`docs/design/`](../../docs/design/) |
+| Public operation naming | [Operation naming contract](../design/operations/naming.md) |
+| Component designs | [Canonical design index](../design/README.md) |
 | Test patterns and coverage | [`tests/`](../../tests/) |
 | Focused runnable examples | [`examples/`](../../examples/) |
 | Deterministic verification | [`scripts/verify.sh`](../../scripts/verify.sh) |

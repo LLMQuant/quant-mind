@@ -8,7 +8,7 @@ intent-oriented collection operation, one time-window input, deterministic
 preprocessing, and explicit partial-failure reporting.
 
 Its public name follows the
-[operation naming contract](operations.md): collection returns source-faithful
+[operation naming contract](../operations/naming.md): collection returns source-faithful
 evidence and remains separate from semantic knowledge extraction.
 
 The primary requirement is that any caller can request a complete, one-shot

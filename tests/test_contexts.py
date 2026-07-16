@@ -11,6 +11,11 @@ class TestContextEntryPoints(unittest.TestCase):
             "contexts/dev/README.md",
             "contexts/dev/github-writing.md",
             "contexts/dev/labels.md",
+            "contexts/design/README.md",
+            "contexts/design/flow/news.md",
+            "contexts/design/flow/paper.md",
+            "contexts/design/library/local.md",
+            "contexts/design/operations/naming.md",
             "contexts/usage/README.md",
         )
         markdown_link = re.compile(r"\[[^]]+]\(([^)]+)\)")

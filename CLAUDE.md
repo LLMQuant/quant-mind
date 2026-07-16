@@ -74,8 +74,8 @@ the user explicitly authorizes it — fix the underlying issue instead.
 6. **No meaningless wrappers** — a method must add logic, abstraction, or a
    side effect beyond the call it wraps; otherwise inline it.
 7. **Name public operations by intent** — follow
-   `docs/design/en/operations.md`; use stage verbs, and reserve `pipeline` for
-   deliberate multi-stage composition.
+   `contexts/design/operations/naming.md`; use stage verbs, and reserve
+   `pipeline` for deliberate multi-stage composition.
 
 ## Tests and Examples
 
