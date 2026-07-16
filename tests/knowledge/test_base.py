@@ -102,6 +102,19 @@ class BaseKnowledgeTests(unittest.TestCase):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
         self.assertEqual(item.confidence, "medium")
 
+    def test_available_at_is_optional_and_round_trips(self):
+        item = _ConcreteKnowledge(
+            as_of=_now(),
+            available_at=_now() + timedelta(hours=2),
+            source=_src(),
+        )
+        revived = _ConcreteKnowledge.model_validate_json(item.model_dump_json())
+        self.assertEqual(revived.available_at, _now() + timedelta(hours=2))
+
+    def test_available_at_defaults_to_unknown(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        self.assertIsNone(item.available_at)
+
     def test_default_schema_version(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
         self.assertEqual(item.schema_version, "1.0")

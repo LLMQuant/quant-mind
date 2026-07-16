@@ -1,0 +1,222 @@
+{
+  "scenario": "An investor tests whether the long-run growth of machine-learning compute is translating into hyperscaler AI-datacenter investment and accelerator-vendor revenue, while respecting when each source became available.",
+  "items": [
+    {
+      "id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+      "item_type": "paper",
+      "schema_version": "1.0",
+      "as_of": "2022-03-09T00:00:00+00:00",
+      "available_at": "2022-03-09T00:00:00+00:00",
+      "created_at": "2026-07-16T15:59:16+08:00",
+      "source": {
+        "kind": "arxiv",
+        "uri": "https://arxiv.org/abs/2202.05924",
+        "fetched_at": "2026-07-16T15:59:16+08:00"
+      },
+      "confidence": "high",
+      "citations": [
+        {
+          "source_id": "arxiv:2202.05924v2",
+          "page": 1,
+          "quote": "fast-growing compute requirements",
+          "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+          "node_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3"
+        }
+      ],
+      "tags": [
+        "ai-infrastructure",
+        "training-compute",
+        "scaling"
+      ],
+      "disclaimers": [
+        "The paper measures historical training-compute trends; it does not forecast public-company revenue or investment returns."
+      ],
+      "root_node_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3",
+      "nodes": {
+        "4d1ab280-b5a1-46ae-8139-d805038cafe3": {
+          "node_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3",
+          "parent_id": null,
+          "position": 0,
+          "title": "Compute Trends Across Three Eras of Machine Learning",
+          "summary": "Sevilla and co-authors study the training compute of milestone machine-learning systems and identify pre-deep-learning, deep-learning, and large-scale eras, documenting a sharp acceleration in compute demand after 2010.",
+          "content": null,
+          "citations": [
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 1,
+              "quote": "three distinct eras",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3"
+            }
+          ],
+          "children_ids": [
+            "3e9bc0d2-d270-4f52-8c15-d6b514d6d1ef",
+            "7a221d20-2a81-4790-9635-4c21a139f727",
+            "f99e3258-12ab-455c-b717-d89d2ba7cb71"
+          ]
+        },
+        "3e9bc0d2-d270-4f52-8c15-d6b514d6d1ef": {
+          "node_id": "3e9bc0d2-d270-4f52-8c15-d6b514d6d1ef",
+          "parent_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3",
+          "position": 0,
+          "title": "Dataset and method",
+          "summary": "The authors curate training-compute estimates for 123 milestone systems, separate models into historical eras, and fit log-linear trends with bootstrap confidence intervals.",
+          "content": "The dataset records estimated compute for final training runs. The study compares trends across time and model scale; its reported confidence intervals are based on 1,000 bootstrap samples.",
+          "citations": [
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 1,
+              "quote": "123 milestone Machine Learning systems",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "3e9bc0d2-d270-4f52-8c15-d6b514d6d1ef"
+            },
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 16,
+              "quote": "bootstrap with B = 1000 samples",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "3e9bc0d2-d270-4f52-8c15-d6b514d6d1ef"
+            }
+          ],
+          "children_ids": []
+        },
+        "7a221d20-2a81-4790-9635-4c21a139f727": {
+          "node_id": "7a221d20-2a81-4790-9635-4c21a139f727",
+          "parent_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3",
+          "position": 1,
+          "title": "Measured compute trends",
+          "summary": "The paper estimates roughly 20-month doubling before 2010, about six-month doubling for regular-scale deep-learning systems after 2010, and a distinct large-scale trend emerging around 2015.",
+          "content": "Large-scale systems begin roughly two orders of magnitude above the contemporary regular-scale trend. Their estimated training compute doubles in about ten months, although the authors caution that the category and slope are uncertain.",
+          "citations": [
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 3,
+              "quote": "5.7 months",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "7a221d20-2a81-4790-9635-4c21a139f727"
+            },
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 5,
+              "quote": "doubling every 9 to 10 months",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "7a221d20-2a81-4790-9635-4c21a139f727"
+            }
+          ],
+          "children_ids": []
+        },
+        "f99e3258-12ab-455c-b717-d89d2ba7cb71": {
+          "node_id": "f99e3258-12ab-455c-b717-d89d2ba7cb71",
+          "parent_id": "4d1ab280-b5a1-46ae-8139-d805038cafe3",
+          "position": 2,
+          "title": "Interpretation limits",
+          "summary": "The historical association between frontier systems and higher compute budgets supports infrastructure-demand research, but it is not a direct forecast and the paper documents material estimation and selection uncertainty.",
+          "content": "Only the final training run is counted, while hyperparameter searches are often undisclosed. Corporate labs may also withhold large models, and the boundary between regular-scale and large-scale systems is partly judgmental.",
+          "citations": [
+            {
+              "source_id": "arxiv:2202.05924v2",
+              "page": 24,
+              "quote": "sources of uncertainty and potential weaknesses",
+              "tree_id": "b25838d6-c3cc-4bf5-98c6-6f2aa686daf1",
+              "node_id": "f99e3258-12ab-455c-b717-d89d2ba7cb71"
+            }
+          ],
+          "children_ids": []
+        }
+      },
+      "arxiv_id": "2202.05924",
+      "authors": [
+        "Jaime Sevilla",
+        "Lennart Heim",
+        "Anson Ho",
+        "Tamay Besiroglu",
+        "Marius Hobbhahn",
+        "Pablo Villalobos"
+      ],
+      "asset_classes": [
+        "equities"
+      ]
+    },
+    {
+      "id": "07c75b73-4d11-49f3-a40a-f5b4327e2ec1",
+      "item_type": "news",
+      "schema_version": "1.0",
+      "as_of": "2025-01-03T00:00:00+00:00",
+      "available_at": "2025-01-03T00:00:00+00:00",
+      "created_at": "2026-07-16T15:59:16+08:00",
+      "source": {
+        "kind": "http",
+        "uri": "https://blogs.microsoft.com/on-the-issues/2025/01/03/the-golden-opportunity-for-american-ai/",
+        "fetched_at": "2026-07-16T15:59:16+08:00"
+      },
+      "confidence": "high",
+      "citations": [
+        {
+          "source_id": "microsoft:on-the-issues:2025-01-03",
+          "quote": "approximately $80 billion"
+        }
+      ],
+      "tags": [
+        "MSFT",
+        "ai-infrastructure",
+        "datacenters",
+        "capex"
+      ],
+      "disclaimers": [
+        "The source states an investment plan, not completed spending.",
+        "The source provides a publication date without a time; timestamp and available_at are normalized to midnight UTC."
+      ],
+      "headline": "Microsoft plans approximately $80 billion of FY2025 AI-datacenter investment, with more than half in the United States",
+      "event_type": "capital_investment_plan",
+      "timestamp": "2025-01-03T00:00:00+00:00",
+      "entities": [
+        "Microsoft",
+        "AI datacenters",
+        "United States"
+      ],
+      "sentiment": "positive",
+      "materiality": "high"
+    },
+    {
+      "id": "9204ab37-62dc-43d6-9e06-290abe2d1ff9",
+      "item_type": "earnings",
+      "schema_version": "1.0",
+      "as_of": "2025-04-27T23:59:59-07:00",
+      "available_at": "2025-05-28T00:00:00-07:00",
+      "created_at": "2026-07-16T15:59:16+08:00",
+      "source": {
+        "kind": "http",
+        "uri": "https://investor.nvidia.com/news/press-release-details/2025/NVIDIA-Announces-Financial-Results-for-First-Quarter-Fiscal-2026/default.aspx",
+        "fetched_at": "2026-07-16T15:59:16+08:00"
+      },
+      "confidence": "high",
+      "citations": [
+        {
+          "source_id": "nvidia:earnings:fy2026-q1",
+          "quote": "Data Center revenue of $39.1 billion"
+        },
+        {
+          "source_id": "nvidia:earnings:fy2026-q1",
+          "quote": "Revenue is expected to be $45.0 billion"
+        }
+      ],
+      "tags": [
+        "NVDA",
+        "ai-infrastructure",
+        "accelerators",
+        "data-center"
+      ],
+      "disclaimers": [
+        "Revenue is represented in US dollars and EPS is GAAP diluted EPS.",
+        "The source provides a release date without a time; available_at is normalized to midnight Pacific time.",
+        "Q2 FY2026 guidance is forward-looking and includes an expected H20 revenue loss from export controls."
+      ],
+      "ticker": "NVDA",
+      "period": "FY2026Q1",
+      "revenue": 44062000000.0,
+      "eps": 0.76,
+      "guidance": "NVIDIA expected Q2 FY2026 revenue of $45.0 billion, plus or minus 2%, including an approximately $8.0 billion H20 revenue loss attributed to export-control limitations.",
+      "surprise_flags": []
+    }
+  ]
+}

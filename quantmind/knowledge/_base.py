@@ -7,9 +7,10 @@ Three shapes share `BaseKnowledge`:
 - `GraphKnowledge` — cross-item edges (placeholder, future PR)
 
 The `as_of` field is mandatory by design: financial knowledge is only useful
-when its time-of-validity is explicit. `source` and `extraction` are typed
-references (not bare strings) so dedup, audit, and re-runs all have stable
-keys.
+when its information cutoff is explicit. Optional `available_at` records when
+the source became observable so research can prevent look-ahead independently
+from information time. `source` and `extraction` are typed references (not bare
+strings) so dedup, audit, and re-runs all have stable keys.
 
 Subclasses MUST override `embedding_text()` to declare what string the store
 layer should embed for them. The contract is enforced at runtime, not at
@@ -80,6 +81,10 @@ class BaseKnowledge(BaseModel):
 
     # Time (financial mandate)
     as_of: datetime = Field(..., description="Information cutoff time.")
+    available_at: datetime | None = Field(
+        default=None,
+        description="Time the source became observable to researchers.",
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
