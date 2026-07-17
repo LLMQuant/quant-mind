@@ -86,7 +86,7 @@ apply throughout.
 
 A public operation is complete only when all of these agree:
 
-1. A stage and name consistent with `docs/design/en/operations.md`.
+1. A stage and name consistent with `contexts/design/operations/naming.md`.
 2. Typed input and config models, exported from `quantmind.configs`.
 3. One intent-oriented `async def` operation exported from `quantmind.flows`,
    with its result contract exported from the canonical owning layer.

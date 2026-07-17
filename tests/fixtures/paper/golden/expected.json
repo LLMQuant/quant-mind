@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "document": {
+    "title": "A Synthetic Cross-Sectional Momentum Study",
+    "root": "paper",
+    "page_count": 4,
+    "span_unit": "pdf_page",
+    "indexing": "1-based-inclusive"
+  },
+  "nodes": [
+    {
+      "key": "paper",
+      "title": "A Synthetic Cross-Sectional Momentum Study",
+      "path": [
+        "A Synthetic Cross-Sectional Momentum Study"
+      ],
+      "span": {
+        "start": 1,
+        "end": 4
+      },
+      "anchors": [
+        {
+          "page": 1,
+          "text": "A Synthetic Cross-Sectional Momentum Study"
+        },
+        {
+          "page": 4,
+          "text": "This page closes the synthetic paper fixture."
+        }
+      ],
+      "parent": null,
+      "children": [
+        "introduction",
+        "method",
+        "limitations"
+      ]
+    },
+    {
+      "key": "introduction",
+      "title": "1 Introduction",
+      "path": [
+        "A Synthetic Cross-Sectional Momentum Study",
+        "1 Introduction"
+      ],
+      "span": {
+        "start": 1,
+        "end": 2
+      },
+      "anchors": [
+        {
+          "page": 1,
+          "text": "The introduction defines a twelve-month lookback signal."
+        },
+        {
+          "page": 2,
+          "text": "The continuation discusses turnover and transaction costs."
+        }
+      ],
+      "parent": "paper",
+      "children": []
+    },
+    {
+      "key": "method",
+      "title": "2 Method",
+      "path": [
+        "A Synthetic Cross-Sectional Momentum Study",
+        "2 Method"
+      ],
+      "span": {
+        "start": 2,
+        "end": 4
+      },
+      "anchors": [
+        {
+          "page": 2,
+          "text": "The method ranks securities by trailing excess return."
+        },
+        {
+          "page": 4,
+          "text": "Risk scaling completes the method on the final page."
+        }
+      ],
+      "parent": "paper",
+      "children": [
+        "portfolio-construction"
+      ]
+    },
+    {
+      "key": "portfolio-construction",
+      "title": "2.1 Portfolio Construction",
+      "path": [
+        "A Synthetic Cross-Sectional Momentum Study",
+        "2 Method",
+        "2.1 Portfolio Construction"
+      ],
+      "span": {
+        "start": 3,
+        "end": 4
+      },
+      "anchors": [
+        {
+          "page": 3,
+          "text": "The portfolio subsection forms equal-weighted quintiles."
+        },
+        {
+          "page": 4,
+          "text": "The top and bottom quintiles define the long-short portfolio."
+        }
+      ],
+      "parent": "method",
+      "children": []
+    },
+    {
+      "key": "limitations",
+      "title": "3 Limitations",
+      "path": [
+        "A Synthetic Cross-Sectional Momentum Study",
+        "3 Limitations"
+      ],
+      "span": {
+        "start": 4,
+        "end": 4
+      },
+      "anchors": [
+        {
+          "page": 4,
+          "text": "The fixture uses synthetic observations and no investable returns."
+        }
+      ],
+      "parent": "paper",
+      "children": []
+    }
+  ],
+  "invariants": [
+    "single_root",
+    "node_keys_unique",
+    "parents_exist",
+    "children_exist",
+    "parent_child_bidirectional",
+    "all_nodes_reachable",
+    "acyclic",
+    "spans_within_document"
+  ]
+}

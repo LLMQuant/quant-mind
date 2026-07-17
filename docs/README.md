@@ -6,7 +6,7 @@ acquisition mechanics remain internal unless they are intentionally documented
 as a public preprocessing primitive.
 
 Public callable names follow the
-[operation naming contract](design/en/operations.md). The runtime API serves
+[operation naming contract](../contexts/design/operations/naming.md). The runtime API serves
 Python callers; coding-agent guidance lives in the repository development
 harness.
 
@@ -14,8 +14,8 @@ harness.
 
 | Operation | Import | Input and config | Result | Example | Design or guide |
 |---|---|---|---|---|---|
-| Paper extraction | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `Paper` | [README usage](../README.md#-usage-examples) | [Papers](papers.md) |
-| News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](design/en/news.md) |
+| Paper extraction | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `Paper` | [README usage](../README.md#-usage-examples) | [Paper E2E design](../contexts/design/flow/paper.md) |
+| News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](../contexts/design/flow/news.md) |
 | Bounded fan-out | `quantmind.flows.batch_run` | Operation inputs and shared config | `BatchResult` | [README usage](../README.md#-usage-examples) | API docstrings |
 | Local semantic search | `quantmind.library.LocalKnowledgeLibrary` | `BaseKnowledge`, `SemanticQuery` | `list[SemanticHit]` | [Library example](../examples/library/README.md) | [Library guide](library.md) |
 
