@@ -74,12 +74,24 @@ class TreeKnowledge(BaseKnowledge):
             stack.extend(reversed(node.children_ids))
 
     def find_path(self, node_id: UUID) -> list[TreeNode]:
-        """Root-to-node path. Empty if `node_id` is not in the tree."""
+        """Root-to-node path.
+
+        Returns an empty list if ``node_id`` is not in the tree. If the
+        ancestor chain is malformed (a ``parent_id`` points outside the
+        node map, or the parents form a cycle), the walk stops early and
+        returns the best-effort partial path ending at ``node_id`` instead
+        of raising or looping forever. Node data may come from an LLM, so
+        ``parent_id`` carries no referential guarantee.
+        """
         if node_id not in self.nodes:
             return []
         path: list[TreeNode] = []
         cursor: UUID | None = node_id
-        while cursor is not None:
+        visited: set[UUID] = set()
+        while cursor is not None and cursor in self.nodes:
+            if cursor in visited:
+                break
+            visited.add(cursor)
             node = self.nodes[cursor]
             path.append(node)
             cursor = node.parent_id
