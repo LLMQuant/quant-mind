@@ -1,5 +1,23 @@
 # QuantMind Repository Context
 
+## Quick Summary
+
+- **Purpose**: Route agents to the minimum canonical context needed for a
+  QuantMind task.
+- **Read when**: Starting repository development, library usage, or design
+  work.
+- **Load next**: Choose exactly one primary route below, then follow only links
+  required by the task.
+- **Authority**: Design context is canonical for accepted contracts; code and
+  tests remain authoritative for current runtime behavior.
+
+## Contents
+
+- [Routes](#routes)
+- [Source of Truth and Ownership](#source-of-truth-and-ownership)
+
+## Routes
+
 This directory is the public repository context system for coding agents and
 maintainers. Start with the index that matches the work you are doing:
 

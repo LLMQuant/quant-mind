@@ -4,6 +4,49 @@ from pathlib import Path
 
 
 class TestContextEntryPoints(unittest.TestCase):
+    def test_context_pages_support_progressive_disclosure(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        context_root = repo_root / "contexts"
+        contents_link = re.compile(r"^- \[[^]]+]\(#([^)]+)\)$", re.MULTILINE)
+
+        def github_anchor(heading: str) -> str:
+            normalized = re.sub(r"[^\w\s-]", "", heading.lower())
+            return re.sub(r"[\s-]+", "-", normalized).strip("-")
+
+        for page in sorted(context_root.rglob("*.md")):
+            lines = page.read_text(encoding="utf-8").splitlines()
+            preview_lines = lines[:80]
+            preview = "\n".join(preview_lines)
+            contents_targets = set(contents_link.findall(preview))
+            detail_targets = {
+                github_anchor(line.removeprefix("## "))
+                for line in lines
+                if line.startswith("## ")
+                and line not in {"## Quick Summary", "## Contents"}
+            }
+            with self.subTest(page=page.relative_to(repo_root)):
+                self.assertIn("## Quick Summary", preview)
+                self.assertIn("## Contents", preview)
+                self.assertLess(
+                    preview_lines.index("## Quick Summary"),
+                    preview_lines.index("## Contents"),
+                )
+                self.assertEqual(contents_targets, detail_targets)
+
+    def test_agent_guides_define_progressive_context_loading(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+
+        for guide_path in ("AGENTS.md", "CLAUDE.md"):
+            guide = (repo_root / guide_path).read_text(encoding="utf-8")
+            with self.subTest(guide=guide_path):
+                self.assertIn("## Progressive Context Loading", guide)
+                self.assertIn("Read lines 1-80 first.", guide)
+                self.assertIn("read the entire page", guide)
+                self.assertIn(
+                    "The preview routes work; it does not replace the",
+                    guide,
+                )
+
     def test_context_index_targets_exist(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         context_indexes = (

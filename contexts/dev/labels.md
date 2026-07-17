@@ -1,5 +1,25 @@
 # Repository Label Guidance
 
+## Quick Summary
+
+- **Purpose**: Select consistent labels for QuantMind issues and pull requests.
+- **Read when**: Creating, updating, triaging, or reviewing an issue or PR.
+- **Cardinality**: Use exactly one `type:` label, normally one `area:` label
+  (at most two), and optional `impact:` labels.
+- **Selection rule**: Label accepted intent and ownership, not every file path
+  touched by an implementation.
+
+## Contents
+
+- [Cardinality](#cardinality)
+- [Type Labels](#type-labels)
+- [Area Labels](#area-labels)
+- [Impact Labels](#impact-labels)
+- [Resolution and Community Labels](#resolution-and-community-labels)
+- [Issues and Pull Requests](#issues-and-pull-requests)
+- [Examples](#examples)
+- [Existing Label Migration](#existing-label-migration)
+
 This file is the canonical decision guide for labeling QuantMind issues and
 pull requests. Labels describe three independent dimensions:
 

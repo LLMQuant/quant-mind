@@ -1,8 +1,23 @@
 # Local Semantic Knowledge Library Design
 
-- **Status**: Current design
-- **Runtime owner**: `quantmind.library`
+## Quick Summary
+
+- **Purpose**: Define local persistence and semantic retrieval for validated QuantMind knowledge.
+- **Read when**: Changing `LocalKnowledgeLibrary`, indexing, semantic filters, retrieval identity, or storage ownership.
+- **Status**: Current design owned at runtime by `quantmind.library`.
+- **Core boundary**: Canonical knowledge is source truth, semantic records and vectors are derived indexes, and raw source artifacts remain caller-owned.
 - **User guide**: [`docs/library.md`](../../../docs/library.md)
+
+## Contents
+
+- [Decision Summary](#decision-summary)
+- [Ownership Boundaries](#ownership-boundaries)
+- [Canonical and Derived Data](#canonical-and-derived-data)
+- [Retrieval Grain and Identity](#retrieval-grain-and-identity)
+- [Derived-Index Invalidation](#derived-index-invalidation)
+- [Financial-Time Semantics](#financial-time-semantics)
+- [Local Ranking Choice](#local-ranking-choice)
+- [Non-goals](#non-goals)
 
 ## Decision Summary
 

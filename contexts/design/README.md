@@ -1,5 +1,21 @@
 # QuantMind Design
 
+## Quick Summary
+
+- **Purpose**: Index accepted engineering designs and cross-domain target
+  contracts.
+- **Read when**: A task changes architecture, ownership boundaries, public
+  operation semantics, or a documented invariant.
+- **Load next**: Open only the domain design that matches the task, then read
+  that page in full before implementation.
+- **Authority**: These pages define intended contracts; each page must identify
+  current gaps when the runtime does not yet satisfy them.
+
+## Contents
+
+- [Design Index](#design-index)
+- [Organization Rules](#organization-rules)
+
 This directory is the canonical home for QuantMind engineering design. Use it
 for accepted ownership boundaries, cross-domain contracts, and target behavior
 that implementation work must preserve.

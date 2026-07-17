@@ -7,6 +7,21 @@ update both in the same change.
 Use [`contexts/README.md`](contexts/README.md) as the repository information
 entry point for either development or library-usage work.
 
+## Progressive Context Loading
+
+Pages under `contexts/` are agent-facing references designed for progressive
+disclosure:
+
+1. Read lines 1-80 first. The preview contains `Quick Summary` and `Contents`
+   sections that explain the page's purpose, authority, and scope.
+2. Use that preview to decide whether the page applies. Do not preload sibling
+   pages or follow unrelated links.
+3. When a page applies, read the entire page before changing code, contracts,
+   or repository guidance. The preview routes work; it does not replace the
+   detailed contract.
+4. Follow directly linked canonical sources only as the task requires. Avoid
+   deep reference chains and duplicate guidance in working context.
+
 ## What This Is
 
 QuantMind is a knowledge extraction and retrieval library for quantitative

@@ -1,5 +1,20 @@
 # GitHub Writing Style
 
+## Quick Summary
+
+- **Purpose**: Define the source-format contract for QuantMind GitHub Issue,
+  Pull Request, Discussion, and comment bodies.
+- **Read when**: Drafting or editing any text submitted to GitHub.
+- **Key rule**: Keep each logical paragraph, list item, checklist item, table
+  row, and blockquote paragraph on one physical source line.
+- **Required check**: Read the raw body back after writing and remove
+  formatter-introduced hard wrapping without changing meaning.
+
+## Contents
+
+- [No Hard-wrapped Prose](#no-hard-wrapped-prose)
+- [Write Workflow](#write-workflow)
+
 This guide is the canonical source-format contract for QuantMind Issue, Pull
 Request, Discussion, and comment bodies. It applies to text submitted to
 GitHub, not to Markdown files stored in the repository.

@@ -1,5 +1,25 @@
 # News Collection Design
 
+## Quick Summary
+
+- **Purpose**: Define the current contract for collecting source-faithful public news evidence.
+- **Read when**: Changing `collect_news`, `NewsWindow`, a news source adapter, batch completeness, or news verification.
+- **Status**: Current design; the open-source package currently supports PR Newswire.
+- **Core boundary**: Collection returns normalized evidence and honest failure/completeness metadata; semantic extraction, persistence, scheduling, and domain pruning remain downstream concerns.
+
+## Contents
+
+- [Status and Scope](#status-and-scope)
+- [Design Principles](#design-principles)
+- [Public API Contract](#public-api-contract)
+- [Returned Data](#returned-data)
+- [Collection Pipeline](#collection-pipeline)
+- [Failure and Completeness Semantics](#failure-and-completeness-semantics)
+- [Responsibility Boundary](#responsibility-boundary)
+- [Verification Contract](#verification-contract)
+- [Non-Goals and Extension Rule](#non-goals-and-extension-rule)
+- [Adding a Public News Source](#adding-a-public-news-source)
+
 ## Status and Scope
 
 This document defines the OSS contract for collecting public company news in

@@ -1,8 +1,29 @@
 # Paper End-to-End Design Contract
 
-- **Status**: Target contract with current gaps called out below
-- **Scope**: Paper source resolution through canonical `Paper` assembly
-- **Golden span convention**: PDF pages, 1-based and inclusive
+## Quick Summary
+
+- **Purpose**: Define the target end-to-end contract from paper source resolution through canonical `Paper` assembly.
+- **Read when**: Changing paper inputs, parsing, structural extraction, tree assembly, provenance, spans, or future PageIndex integration.
+- **Status**: Target contract with current implementation gaps called out below.
+- **Core boundary**: A model or PageIndex adapter may propose structure; deterministic code owns canonical IDs, edges, ordering, spans, citations, validation, and source truth.
+- **Golden span convention**: PDF pages are 1-based and inclusive.
+
+## Contents
+
+- [Decision Summary](#decision-summary)
+- [Product and Ownership Boundary](#product-and-ownership-boundary)
+- [Inputs and Source Resolution](#inputs-and-source-resolution)
+- [Page-Preserving Source Document](#page-preserving-source-document)
+- [Authoritative Metadata](#authoritative-metadata)
+- [Structural Extraction Draft](#structural-extraction-draft)
+- [Deterministic Canonical Assembly](#deterministic-canonical-assembly)
+- [Tree and Paper Invariants](#tree-and-paper-invariants)
+- [Branch Content and Source Slicing](#branch-content-and-source-slicing)
+- [Determinism, Retry, and Failure](#determinism-retry-and-failure)
+- [Output Boundary and Downstream Consumers](#output-boundary-and-downstream-consumers)
+- [Future PageIndex Compatibility Seam](#future-pageindex-compatibility-seam)
+- [Golden Fixture Contract](#golden-fixture-contract)
+- [Current Behavior and Known Gaps](#current-behavior-and-known-gaps)
 
 ## Decision Summary
 

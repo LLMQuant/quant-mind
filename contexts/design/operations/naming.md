@@ -1,5 +1,20 @@
 # Public Operation Naming
 
+## Quick Summary
+
+- **Purpose**: Define consistent names for public QuantMind operations and their input, config, and result types.
+- **Read when**: Adding or renaming a public callable, operation type, or composed recipe.
+- **Status**: Current naming direction; the legacy `paper_flow` name remains unchanged until a separately approved migration.
+- **Core rule**: Name a public operation with its stage verb; reserve `pipeline` for composed recipes, and do not use `flow` as an operation verb.
+
+## Contents
+
+- [Scope](#scope)
+- [Operation Stages](#operation-stages)
+- [Type Names](#type-names)
+- [Current API](#current-api)
+- [Review Checklist](#review-checklist)
+
 ## Scope
 
 This document defines how public QuantMind callables communicate intent. It is

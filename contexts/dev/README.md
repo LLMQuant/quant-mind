@@ -1,5 +1,21 @@
 # Develop QuantMind
 
+## Quick Summary
+
+- **Purpose**: Route contributors and coding agents to canonical development
+  rules without copying them here.
+- **Read when**: Extending, fixing, reviewing, testing, or publishing QuantMind.
+- **Load next**: Select the single row that matches the task; load additional
+  sources only when that workflow explicitly requires them.
+- **Required check**: Run `bash scripts/verify.sh` for every repository change.
+
+## Contents
+
+- [Canonical Sources](#canonical-sources)
+- [Verification Rule](#verification-rule)
+
+## Canonical Sources
+
 Use this index when extending or maintaining the repository. Follow the linked
 canonical source instead of treating this page as a replacement for it.
 
@@ -15,6 +31,8 @@ canonical source instead of treating this page as a replacement for it.
 | Test patterns and coverage | [`tests/`](../../tests/) |
 | Focused runnable examples | [`examples/`](../../examples/) |
 | Deterministic verification | [`scripts/verify.sh`](../../scripts/verify.sh) |
+
+## Verification Rule
 
 Run `bash scripts/verify.sh` for every change. For a public-network component,
 also run the bounded live verifier listed in the public component catalog.
