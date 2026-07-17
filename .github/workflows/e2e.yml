@@ -16,19 +16,59 @@ on:
       - 'quantmind/preprocess/fetch/_types.py'
       - 'quantmind/preprocess/fetch/http.py'
       - 'quantmind/preprocess/fetch/rss.py'
+      - 'quantmind/preprocess/fetch/arxiv.py'
+      - 'quantmind/preprocess/format/pdf.py'
+      - 'scripts/verify_pdf_rag_e2e.py'
+      - 'pyproject.toml'
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      news: ${{ steps.filter.outputs.news }}
+      pdf_rag: ${{ steps.filter.outputs.pdf_rag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect component changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            news:
+              - '.github/workflows/e2e.yml'
+              - 'scripts/verify_news_e2e.py'
+              - 'quantmind/preprocess/_news_types.py'
+              - 'quantmind/preprocess/clean.py'
+              - 'quantmind/preprocess/news.py'
+              - 'quantmind/preprocess/pr_newswire.py'
+              - 'quantmind/preprocess/time.py'
+              - 'quantmind/preprocess/format/html.py'
+              - 'quantmind/preprocess/fetch/**'
+              - 'pyproject.toml'
+            pdf_rag:
+              - '.github/workflows/e2e.yml'
+              - 'scripts/verify_pdf_rag_e2e.py'
+              - 'quantmind/preprocess/fetch/arxiv.py'
+              - 'quantmind/preprocess/format/pdf.py'
+              - 'pyproject.toml'
+
   news:
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.news == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -55,3 +95,33 @@ jobs:
 
       - name: Run live news E2E
         run: .venv/bin/python scripts/verify_news_e2e.py
+
+  pdf-rag:
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.pdf_rag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Create virtual environment
+        run: uv venv
+
+      - name: Install project runtime dependencies
+        run: uv pip install --python .venv/bin/python -e .
+
+      - name: Run live PDF RAG E2E
+        run: .venv/bin/python scripts/verify_pdf_rag_e2e.py

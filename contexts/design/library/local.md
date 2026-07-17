@@ -16,7 +16,8 @@
 - [What Can Match a Query](#what-can-match-a-query)
 - [When to Rebuild Search Data](#when-to-rebuild-search-data)
 - [Time Fields and Look-Ahead](#time-fields-and-look-ahead)
-- [Why SQLite and Simple Exact Ranking](#why-sqlite-and-simple-exact-ranking)
+- [Why SQLite and LlamaIndex Ranking](#why-sqlite-and-llamaindex-ranking)
+- [Independent tree navigation](#independent-tree-navigation)
 - [Out of Scope](#out-of-scope)
 
 ## Key Decisions
@@ -104,16 +105,29 @@ or have no known availability time. Filtering only by `as_of_before` can still
 leak future information. Apply source kind, item type, confidence, tags, tree
 ID, and both time cutoffs before ranking results.
 
-## Why SQLite and Simple Exact Ranking
+## Why SQLite and LlamaIndex Ranking
 
 SQLite provides transactions, foreign keys, and reliable reconstruction of
-typed knowledge. NumPy can compare every embedding with cosine similarity at
-the current local data size. This simple exact ranking can later be replaced
-without changing user code.
+typed knowledge. LlamaIndex owns the private collection-wide vector retrieval
+and ranking mechanics. On the first search after open or a write, private
+retrieval state is rebuilt from the filtered semantic records stored in SQLite;
+unchanged records reuse their persisted embeddings and are not sent to the
+embedding provider again.
 
-A future approximate or remote index may replace the private search
-implementation. It does not replace stored knowledge and must return the same
-`SemanticHit` type regardless of provider.
+LlamaIndex nodes and retrievers remain implementation details. They do not
+enter `SemanticQuery`, `SemanticHit`, canonical Pydantic payloads, or public
+signatures. A future approximate or remote index may replace the private
+search implementation without replacing stored knowledge or changing the
+public result type.
+
+## Independent tree navigation
+
+`LocalKnowledgeLibrary` is canonical knowledge storage with rebuildable
+retrieval capabilities; it is not defined as a vector database. A future
+PageIndex path can select a paper through collection-wide semantic retrieval,
+then navigate that selected document's tree through a separate operation and
+separately rebuildable state. PageIndex does not have to be served through
+`search()` or LlamaIndex ranking.
 
 ## Out of Scope
 

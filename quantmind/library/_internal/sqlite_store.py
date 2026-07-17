@@ -21,7 +21,7 @@ from quantmind.knowledge import (
     Thesis,
     TreeKnowledge,
 )
-from quantmind.library._internal.exact_cosine import _IndexRecord
+from quantmind.library._internal.llamaindex_retriever import _IndexRecord
 from quantmind.library._internal.retrieval_targets import (
     _PROJECTION_SCHEMA_VERSION,
     _RetrievalTarget,
