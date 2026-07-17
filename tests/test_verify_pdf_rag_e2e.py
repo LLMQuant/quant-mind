@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from quantmind.preprocess import (
+from quantmind.preprocess.format import (
     ParsedChunk,
     ParsedDocument,
     ParsedDocumentHit,
