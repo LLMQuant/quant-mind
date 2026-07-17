@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from quantmind.preprocess import (
+from quantmind.preprocess.format import (
     chunk_parsed_document,
     parse_pdf,
     retrieve_parsed_document,
