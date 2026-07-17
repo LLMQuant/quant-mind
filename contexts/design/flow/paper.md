@@ -29,14 +29,14 @@
 
 Paper extraction is a staged operation with one canonical output boundary:
 
-```text
-Paper input
-  -> resolve and fetch
-  -> page-preserving source document plus authoritative metadata
-  -> structural extraction draft
-  -> deterministic canonical assembly
-  -> tree and provenance validation
-  -> Paper
+```mermaid
+flowchart LR
+    input["Paper input"] --> resolve["Resolve and fetch"]
+    resolve --> source["Page-preserving source document<br/>and authoritative metadata"]
+    source --> draft["Structural extraction draft"]
+    draft --> assembly["Deterministic canonical assembly"]
+    assembly --> validate["Tree and provenance validation"]
+    validate --> paper["Canonical Paper"]
 ```
 
 Deterministic code owns source evidence, canonical identity, graph structure,
