@@ -26,6 +26,7 @@ implementation must preserve.
 |---|---|
 | Flow | [Paper extraction from input to validated result](flow/paper.md) |
 | Flow | [News collection](flow/news.md) |
+| Preprocess | [Page-aware multimodal PDF parsing](preprocess/pdf.md) |
 | Library | [Local knowledge storage and meaning-based search](library/local.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 

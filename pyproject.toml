@@ -10,7 +10,6 @@ requires-python = ">=3.10"
 dependencies = [
     "arxiv",
     "pyyaml",
-    "numpy>=2.2.4",
     "openai>=1.68.2",
     "openai-agents>=0.14",
     "pillow>=10.1.0,<11.0.0",
@@ -20,6 +19,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx[socks]>=0.28.1",
     "litellm>=1.74.0.post1",
+    "liteparse>=2.6,<3",
+    "llama-index-core>=0.14,<0.15",
+    "llama-index-retrievers-bm25>=0.6,<0.7",
     "jinja2>=3.0.0",
     "trafilatura>=1.10",
 ]

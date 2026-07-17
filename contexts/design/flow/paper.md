@@ -4,7 +4,7 @@
 
 - **Purpose**: Define how a paper input becomes a validated `Paper`.
 - **Read when**: Changing paper inputs, parsing, section trees, source tracking, page ranges, or future PageIndex support.
-- **Status**: Planned design; [Current Gaps](#current-gaps) lists what is not implemented yet.
+- **Status**: Mixed. Page-aware PDF parsing and LlamaIndex ingestion are implemented; [Current Gaps](#current-gaps) lists the remaining paper assembly work.
 - **Core rule**: A model or PageIndex may suggest a section tree. Code creates the final IDs, links, order, page ranges, citations, and source-backed text.
 - **Page numbering**: PDF page ranges start at 1 and include both the first and last page.
 
@@ -139,9 +139,12 @@ Required properties:
 - A page-based tree builder, including a future PageIndex integration, accepts
   only a source document whose range unit is `pdf_page`.
 
-`PaperSourceDocument` is a temporary value used during extraction, not another
-public knowledge model. The caller keeps raw PDF or HTML files; this design
-does not embed them inside `Paper`.
+For PDF inputs, [`ParsedDocument`](../preprocess/pdf.md) is the implemented
+deterministic source value. It preserves blocks, coordinates, and optional page
+screenshots as well as page text. `PaperSourceDocument` is the flow's temporary
+view over that value, not another public knowledge model. The caller keeps raw
+PDF, HTML, and screenshot files; this design does not embed them inside
+`Paper`.
 
 ## Which Source Provides Each Field
 
@@ -331,8 +334,10 @@ rather than create a competing test paper.
 
 The repository does not yet guarantee the target pipeline above:
 
-- `pdf_to_markdown()` concatenates non-empty page text and drops page
-  boundaries and empty pages.
+- `pdf_to_markdown()` remains a compatibility view, while the primary
+  `parse_pdf()` path now preserves pages, blocks, coordinates, and artifacts.
+- `paper_flow()` has not yet adopted `ParsedDocument`; it still consumes the
+  compatibility Markdown view.
 - `paper_flow()` sends the flattened document to one extraction agent and asks
   it to return the final `Paper` directly.
 - The model currently controls IDs, edges, citations, source fields, and

@@ -1,7 +1,7 @@
 # Local Semantic Knowledge Library
 
 `quantmind.library` persists canonical `BaseKnowledge` in SQLite and ranks
-rebuildable NumPy indexes with exact cosine similarity. It is a financial
+rebuildable semantic records through a private LlamaIndex vector index. It is a financial
 knowledge API, not a generic RAG framework: provider and storage details remain
 private, and search returns typed QuantMind evidence without generating an
 answer.
@@ -37,11 +37,12 @@ SQLite is the default because canonical knowledge needs transactions, foreign
 keys, typed reconstruction, and explicit corrupt/stale/not-found behavior. A
 vector database such as Chroma optimizes the derived similarity-search layer;
 it does not replace those canonical-storage responsibilities. The current local
-scale therefore uses a rebuildable NumPy exact-cosine index backed by
-`semantic_records`, without adding another service or dependency. If corpus
-size later requires an approximate or remote vector index, that derived layer
-can change privately without changing `LocalKnowledgeLibrary`, the canonical
-tables, or user code.
+implementation rebuilds a private in-memory LlamaIndex vector index from
+`semantic_records`, without adding another service. If corpus size later
+requires an approximate or remote vector index, that derived layer can change
+privately without changing `LocalKnowledgeLibrary`, the canonical tables, or
+user code. A future PageIndex operation may navigate a selected document tree
+separately; the library is not defined as vector-only.
 
 The durable vector metadata records the embedding model and dimension, exact
 projection hash, source content hash, knowledge schema version, and projection

@@ -1,4 +1,4 @@
-"""Opinionated SQLite and NumPy semantic knowledge library."""
+"""Opinionated SQLite and LlamaIndex semantic knowledge library."""
 
 import asyncio
 from pathlib import Path
@@ -7,15 +7,15 @@ from uuid import UUID
 from typing_extensions import Self
 
 from quantmind.knowledge import BaseKnowledge, TreeKnowledge
-from quantmind.library._internal.exact_cosine import (
-    _coerce_provider_vectors,
-    _decode_stored_vector,
-    _encode_vector,
-    _ExactCosineIndex,
-)
 from quantmind.library._internal.index_embeddings import (
     _EmbeddingProvider,
     _OpenAIEmbeddingProvider,
+)
+from quantmind.library._internal.llamaindex_retriever import (
+    _coerce_provider_vectors,
+    _decode_stored_vector,
+    _encode_vector,
+    _LlamaIndexRetriever,
 )
 from quantmind.library._internal.retrieval_targets import (
     _PROJECTION_SCHEMA_VERSION,
@@ -42,7 +42,7 @@ class LocalKnowledgeLibrary:
         self._embedding_dimensions = embedding_dimensions
         self._embedding_provider = embedding_provider
         self._lock = asyncio.Lock()
-        self._index: _ExactCosineIndex | None = None
+        self._index: _LlamaIndexRetriever | None = None
 
     @classmethod
     async def open(
@@ -150,20 +150,20 @@ class LocalKnowledgeLibrary:
             return store.get(item_id)
 
     async def search(self, query: SemanticQuery) -> list[SemanticHit]:
-        """Rank filtered targets with deterministic exact cosine similarity."""
+        """Rank filtered targets through the private LlamaIndex retriever."""
         async with self._lock:
             store = self._store
             if store is None:
                 raise RuntimeError("LocalKnowledgeLibrary is closed")
             if self._index is None:
-                self._index = _ExactCosineIndex.build(
+                self._index = _LlamaIndexRetriever(
                     store.load_index_records(
                         embedding_model=self._embedding_model,
                         embedding_dimensions=self._embedding_dimensions,
                     )
                 )
             candidates = self._index.filter(query)
-            if candidates is None:
+            if not candidates:
                 return []
 
             provider_values = await self._embedding_provider.embed(
@@ -176,7 +176,9 @@ class LocalKnowledgeLibrary:
                 expected_count=1,
                 expected_dimensions=self._embedding_dimensions,
             )
-            ranked = candidates.rank(query_vectors[0], top_k=query.top_k)
+            ranked = self._index.rank(
+                candidates, query_vectors[0], top_k=query.top_k
+            )
 
             canonical: dict[UUID, BaseKnowledge] = {}
             hits: list[SemanticHit] = []
