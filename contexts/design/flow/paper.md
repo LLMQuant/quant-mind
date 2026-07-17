@@ -1,88 +1,89 @@
-# Paper End-to-End Design Contract
+# Paper Extraction: End-to-End Design
 
 ## Quick Summary
 
-- **Purpose**: Define the target end-to-end contract from paper source resolution through canonical `Paper` assembly.
-- **Read when**: Changing paper inputs, parsing, structural extraction, tree assembly, provenance, spans, or future PageIndex integration.
-- **Status**: Target contract with current implementation gaps called out below.
-- **Core boundary**: A model or PageIndex adapter may propose structure; deterministic code owns canonical IDs, edges, ordering, spans, citations, validation, and source truth.
-- **Golden span convention**: PDF pages are 1-based and inclusive.
+- **Purpose**: Define how a paper input becomes a validated `Paper`.
+- **Read when**: Changing paper inputs, parsing, section trees, source tracking, page ranges, or future PageIndex support.
+- **Status**: Planned design; [Current Gaps](#current-gaps) lists what is not implemented yet.
+- **Core rule**: A model or PageIndex may suggest a section tree. Code creates the final IDs, links, order, page ranges, citations, and source-backed text.
+- **Page numbering**: PDF page ranges start at 1 and include both the first and last page.
 
 ## Contents
 
-- [Decision Summary](#decision-summary)
-- [Product and Ownership Boundary](#product-and-ownership-boundary)
-- [Inputs and Source Resolution](#inputs-and-source-resolution)
-- [Page-Preserving Source Document](#page-preserving-source-document)
-- [Authoritative Metadata](#authoritative-metadata)
-- [Structural Extraction Draft](#structural-extraction-draft)
-- [Deterministic Canonical Assembly](#deterministic-canonical-assembly)
-- [Tree and Paper Invariants](#tree-and-paper-invariants)
-- [Branch Content and Source Slicing](#branch-content-and-source-slicing)
-- [Determinism, Retry, and Failure](#determinism-retry-and-failure)
-- [Output Boundary and Downstream Consumers](#output-boundary-and-downstream-consumers)
-- [Future PageIndex Compatibility Seam](#future-pageindex-compatibility-seam)
-- [Golden Fixture Contract](#golden-fixture-contract)
-- [Current Behavior and Known Gaps](#current-behavior-and-known-gaps)
+- [Overview](#overview)
+- [Who Owns Each Step](#who-owns-each-step)
+- [Supported Inputs and Fetching](#supported-inputs-and-fetching)
+- [Keep PDF Pages Separate](#keep-pdf-pages-separate)
+- [Which Source Provides Each Field](#which-source-provides-each-field)
+- [Model Output Is a Draft](#model-output-is-a-draft)
+- [Build and Validate the Final Paper](#build-and-validate-the-final-paper)
+- [Rules for a Valid Paper](#rules-for-a-valid-paper)
+- [Get Node Content from Source Pages](#get-node-content-from-source-pages)
+- [Retries and Failures by Step](#retries-and-failures-by-step)
+- [What Paper Extraction Does Not Do](#what-paper-extraction-does-not-do)
+- [How PageIndex Can Fit Later](#how-pageindex-can-fit-later)
+- [Fixed Paper Test Data](#fixed-paper-test-data)
+- [Current Gaps](#current-gaps)
 
-## Decision Summary
+## Overview
 
-Paper extraction is a staged operation with one canonical output boundary:
+Paper extraction has six steps and returns one validated result:
 
 ```mermaid
 flowchart LR
     input["Paper input"] --> resolve["Resolve and fetch"]
-    resolve --> source["Page-preserving source document<br/>and authoritative metadata"]
-    source --> draft["Structural extraction draft"]
-    draft --> assembly["Deterministic canonical assembly"]
-    assembly --> validate["Tree and provenance validation"]
-    validate --> paper["Canonical Paper"]
+    resolve --> source["Keep pages separate<br/>and record source facts"]
+    source --> draft["Suggest a section tree"]
+    draft --> assembly["Build the final Paper in code"]
+    assembly --> validate["Validate the tree and source links"]
+    validate --> paper["Validated Paper"]
 ```
 
-Deterministic code owns source evidence, canonical identity, graph structure,
-page slicing, citations, and validation. A model or future PageIndex adapter
-may propose semantic structure, titles, summaries, and source spans, but its
-output is a draft rather than a canonical `Paper`.
+Code, not the model, records source facts, creates IDs and tree links, copies
+text from source pages, creates citations, and validates the result. A model or
+future PageIndex integration may suggest sections, titles, summaries, and page
+ranges, but that output remains a draft.
 
-PageIndex is not a prerequisite. The pipeline first preserves ordered source
-pages and uses a narrow tree-builder seam; PageIndex can later implement that
-seam without changing the `Paper` schema or taking ownership of canonical IDs.
+Paper extraction does not require PageIndex. It first preserves ordered source
+pages and passes them through a small `PaperSourceDocument -> draft` interface.
+PageIndex can later implement that interface without changing the `Paper` type
+or creating the final IDs.
 
-## Product and Ownership Boundary
+## Who Owns Each Step
 
-This contract covers one extraction result. It does not make Paper extraction
-responsible for persistence, retrieval, or answer generation.
+This operation creates one extraction result. It does not store papers, search
+across them, or write answers.
 
-| Concern | Owner |
+| Work | Owner |
 |---|---|
 | Resolve identifiers, fetch bytes, parse pages, and hash source content | `quantmind.preprocess` |
 | Configure the operation and select the input variant | `quantmind.configs` |
-| Produce semantic structure and assemble a canonical result | `quantmind.flows` |
-| Define `Paper`, `TreeKnowledge`, `TreeNode`, source, citation, and extraction schemas | `quantmind.knowledge` |
-| Persist and semantically index canonical knowledge | `quantmind.library` |
-| Navigate a tree and synthesize an answer | A future `quantmind.mind` consumer or agent application |
+| Suggest a section tree and build the final `Paper` | `quantmind.flows` |
+| Define the `Paper`, `TreeKnowledge`, `TreeNode`, source, citation, and extraction models | `quantmind.knowledge` |
+| Store knowledge and make it searchable by meaning | `quantmind.library` |
+| Navigate a tree and write an answer | A future `quantmind.mind` consumer or agent application |
 
-`flow/` is a documentation grouping for this cross-domain behavior. It does
-not require a new `*_flow` public API and does not override the
-[public operation naming contract](../operations/naming.md).
+The `flow/` directory groups this work because it spans several packages. It
+does not require a new `*_flow` public API and does not override the
+[public operation naming rules](../operations/naming.md).
 
-## Inputs and Source Resolution
+## Supported Inputs and Fetching
 
-### Supported input intents
+### Supported inputs
 
-The target pipeline accepts the existing `PaperInput` intents with the
-following semantics:
+The planned pipeline accepts the existing `PaperInput` types with the following
+behavior:
 
-| Input | Resolution behavior |
+| Input | What happens |
 |---|---|
-| `ArxivIdentifier` | Resolve the identifier to an exact arXiv version, authoritative metadata, and PDF bytes. Preserve the resolved source URL and version-specific availability time. |
-| `HttpUrl` | Follow bounded redirects and accept supported PDF, HTML, Markdown, or plain-text content. Record the final canonical URL and fetched representation. |
+| `ArxivIdentifier` | Resolve the identifier to an exact arXiv version, provider metadata, and PDF bytes. Preserve the resolved URL and the time that version became available. |
+| `HttpUrl` | Follow a limited number of redirects and accept supported PDF, HTML, Markdown, or plain-text content. Record the final URL and exact fetched content. |
 | `LocalFilePath` | Read a supported PDF, HTML, Markdown, or plain-text file. The caller owns file retention; extraction records a local source reference and content hash. |
-| `RawText` | Treat the supplied text as one non-paginated source document. It can produce a `Paper`, but it cannot claim PDF page spans. |
+| `RawText` | Treat the supplied text as one source document without pages. It can produce a `Paper`, but it cannot claim PDF page ranges. |
 
-`DoiIdentifier` remains explicitly unsupported until an open-access resolver
-can produce an exact fetchable representation. A DOI landing page alone is
-metadata, not necessarily the paper content.
+`DoiIdentifier` remains unsupported until an open-access resolver can fetch the
+exact paper content. A DOI landing page alone contains metadata and may not
+contain the paper itself.
 
 ### Explicitly unsupported inputs
 
@@ -91,232 +92,223 @@ V1 does not claim support for:
 - password-protected or corrupt PDFs;
 - image-only scans that require OCR;
 - authenticated, paywalled, or dynamically rendered sources without a
-  separately authorized fetch adapter;
+  separately authorized fetcher;
 - unsupported binary or media content types;
 - a DOI that cannot be resolved to accessible paper content;
-- a source whose exact fetched representation cannot be identified.
+- a source whose exact fetched content cannot be identified.
 
-Unsupported input fails before semantic extraction. The pipeline must not send
-an error page, login page, or unresolved metadata page to a model and call the
-result a successfully extracted paper.
+Unsupported input fails before a model or tree builder runs. The pipeline must
+not send an error page, login page, or unresolved metadata page to a model and
+call the result a successfully extracted paper.
 
-### Resolution rules
+### Fetching rules
 
-Resolution produces one exact source version. Redirects, arXiv revisions, and
-content negotiation are resolved before parsing. The resolved URI and SHA-256
-hash identify the bytes used for this extraction. A retry may fetch a changed
-representation; if its content hash changes, it is a new source version and
-must not be merged silently with an earlier attempt.
+Fetching produces one exact source version. Resolve redirects, arXiv revisions,
+and the content selected by the server before parsing. The final URI and
+SHA-256 hash identify the exact bytes used. A retry may receive changed
+content; when the hash changes, treat it as a new source version rather than
+silently merging it with the earlier attempt.
 
-## Page-Preserving Source Document
+## Keep PDF Pages Separate
 
-PDF parsing must preserve ordered pages before any tree builder runs. The
-conceptual deterministic handoff has this shape:
+PDF parsing must preserve ordered pages before any tree builder runs. The next
+step receives data shaped like this:
 
 ```text
 PaperSourceDocument
-├── source metadata and exact content hash
-├── span unit and indexing convention
+├── source details and exact content hash
+├── page or character range format
 └── ordered pages
     ├── page number
     ├── extracted text, including an empty string when the page has no text
-    └── optional deterministic layout or outline signals
+    └── optional parser-provided layout or outline hints
 ```
 
 Required properties:
 
-- PDF page numbers are 1-based and inclusive everywhere in the Paper golden
-  contract, structural drafts, and citations.
+- PDF page ranges in the fixed test PDF, model draft, and citations start at 1
+  and include both the first and last page.
 - Every physical page remains represented and in order. Empty pages are not
-  dropped because doing so would renumber later evidence.
-- Text normalization may remove parser noise, but it must not erase the page
+  dropped because doing so would renumber later page references.
+- Text cleanup may remove parser noise, but it must not erase the page
   boundary or change which page owns an anchor.
-- The exact source hash, parser identity/version, and any deterministic
-  normalization identity are available to provenance assembly.
-- HTML, Markdown, plain text, and `RawText` are non-paginated. They retain
-  source text and character evidence but do not invent PDF page numbers.
-- A page-based tree builder, including a future PageIndex adapter, accepts only
-  a source document whose span unit is `pdf_page`.
+- Record the exact source hash, parser name and version, and cleanup version
+  with the extraction run.
+- HTML, Markdown, plain text, and `RawText` have no pages. They retain source
+  text and character positions but do not invent PDF page numbers.
+- A page-based tree builder, including a future PageIndex integration, accepts
+  only a source document whose range unit is `pdf_page`.
 
-The page-preserving document is an extraction intermediate, not a second
-canonical knowledge schema. Raw PDF/HTML retention remains caller-owned and is
-not embedded inside `Paper` by this contract.
+`PaperSourceDocument` is a temporary value used during extraction, not another
+public knowledge model. The caller keeps raw PDF or HTML files; this design
+does not embed them inside `Paper`.
 
-## Authoritative Metadata
+## Which Source Provides Each Field
 
-Source-derived metadata and model-derived semantics have different authority.
-The model may fill an explicitly missing semantic field, but it may not
-overwrite authoritative source evidence.
+Facts from the fetched source take priority over model suggestions. A model may
+fill a missing summary or section title, but it must not overwrite a URL,
+content hash, publication time, or other known source fact.
 
-| Field or fact | Authority and canonical destination |
+| Field or fact | Who sets it and where it is stored |
 |---|---|
 | Resolved source URI and source kind | Resolver/fetcher; `SourceRef.kind` and `SourceRef.uri` |
-| Exact fetched bytes and content hash | Fetcher; `SourceRef.content_hash` plus caller-owned raw artifact |
+| Exact fetched bytes and content hash | Fetcher; `SourceRef.content_hash`, while the caller keeps the raw file |
 | Fetch time | Fetcher clock; `SourceRef.fetched_at` |
-| Publication/version time | Authoritative provider metadata; establishes when the exact version became public and must not be replaced with the first-version date |
-| Source availability time | Exact-version provider metadata when available; `Paper.available_at`. Fetch time is a conservative upper bound when publication availability is unknown. |
-| Information cutoff | A source-declared study/data cutoff when present; otherwise the exact version publication time is a documented conservative fallback for `Paper.as_of`, never fetch time |
-| Authors and authoritative title | Provider or document metadata; `Paper.authors` and root title unless the metadata is missing or demonstrably invalid |
+| Publication/version time | Provider metadata for the exact version; do not replace it with the first-version date |
+| Source availability time | Provider metadata for the exact version; `Paper.available_at`. Use fetch time as the latest possible availability time only when the publication time is unknown. |
+| Latest date covered by the paper | A study or data cutoff stated by the source; otherwise use the exact version's publication time for `Paper.as_of`, never fetch time |
+| Authors and title | Provider or document metadata; `Paper.authors` and root title unless that metadata is missing or clearly invalid |
 | Extraction model, operation, run, and time | Runtime; `ExtractionRef` |
-| Parser and normalization identity | Deterministic runtime provenance; retained with the extraction run until the canonical item schema has an explicit item-level field |
-| Summaries, semantic section titles, methodology, findings, and limitations | Structural draft producer; validated before canonical assembly |
-| Canonical item/node IDs and graph links | Deterministic assembly code only |
+| Parser and cleanup versions | Runtime; keep them with the extraction run until `Paper` has a dedicated field |
+| Summaries, section titles, methodology, findings, and limitations | Model or tree builder; validate them before building the final `Paper` |
+| Final item/node IDs and tree links | Code only |
 
 For an arXiv revision, `available_at` refers to the exact revision used, not the
-first submission date. `as_of` is the information cutoff represented by the
-paper; it must remain distinct from fetch time. Unknown publication or
-availability metadata remains unknown rather than being guessed by a model.
+first submission date. `as_of` is the latest date covered by the paper, not the
+time it was fetched. Unknown publication or availability data remains unknown
+rather than being guessed by a model.
 
-## Structural Extraction Draft
+## Model Output Is a Draft
 
-A draft is the only provider- or model-facing structural contract. It may
-contain:
+A model or PageIndex integration returns a draft with only the information
+needed to suggest a section tree. It may contain:
 
-- adapter-local node keys used only within the draft;
+- temporary node keys used only by that integration;
 - candidate titles and summaries;
-- an ordered parent/child outline expressed with draft-local references;
-- candidate page spans using the source document's explicit span unit;
-- confidence or diagnostic information needed to accept, repair, or reject the
-  draft.
+- an ordered parent/child outline using those temporary keys;
+- suggested page ranges using the source document's range format;
+- confidence values or errors needed to accept, repair, or reject the draft.
 
-A draft must not contain canonical `Paper.id`, `TreeNode.node_id`, canonical
-`parent_id`/`children_ids`, copied source text, authoritative metadata, or a
-provider-specific object that leaks through the public result.
+A draft must not set the final `Paper.id`, `TreeNode.node_id`,
+`parent_id`/`children_ids`, copied source text, known source facts, or a
+object tied to one provider and exposed through the public result.
 
-The structural producer is intentionally narrow: conceptually it maps one
-`PaperSourceDocument` to one structural draft. The default implementation can
-use an LLM; a future PageIndex adapter can provide the same kind of draft.
-Neither becomes the canonical `Paper` schema.
+The interface is intentionally small: one `PaperSourceDocument` produces one
+draft. The default implementation can use an LLM; a future PageIndex
+integration can return the same draft shape. Neither defines the public
+`Paper` type.
 
-## Deterministic Canonical Assembly
+## Build and Validate the Final Paper
 
-Assembly treats the accepted draft as untrusted input and performs these steps
-in code:
+Code treats the accepted draft as untrusted input and performs these steps:
 
-1. Generate canonical item and node IDs. External or draft-local IDs never
-   escape their adapter.
-2. Resolve each draft parent reference and derive both `parent_id` and ordered
-   `children_ids` from one checked relation.
-3. Assign sibling positions deterministically from the accepted order.
-4. Validate and normalize page spans against the preserved source pages.
-5. Slice source content from the inclusive page range and construct citations
-   from the same source evidence. Model-generated paraphrases never become
-   source content or quotes.
-6. Apply authoritative metadata and runtime extraction provenance.
-7. Construct the canonical `Paper` and run the complete invariant validator.
+1. Generate the final item and node IDs. Temporary integration IDs never
+   appear in the returned result.
+2. Set `parent_id` and ordered `children_ids` together for each parent-child
+   link so they cannot disagree.
+3. Assign sibling positions from the accepted order.
+4. Check page ranges against the preserved source pages.
+5. Copy source content from the stated page range and build citations from the
+   same pages. Model-written paraphrases never become source text or quotes.
+6. Apply known source facts and extraction run details.
+7. Construct the final `Paper` and run every validation rule below.
 
-Canonical IDs are code-owned, but this contract does not require them to be
-identical across independent extraction runs. Stable cross-run identity is a
-separate deduplication decision.
+Code owns the final IDs, but separate extraction runs do not need to create the
+same IDs. Merging results across runs is a separate decision.
 
-## Tree and Paper Invariants
+## Rules for a Valid Paper
 
 A successful `Paper` satisfies all of the following before it is returned:
 
-### Identity and root
+### IDs and root
 
 - `root_node_id` identifies exactly one entry in `nodes`.
 - Every dictionary key equals that node's `node_id`.
 - The root has `parent_id=None`; every other node has exactly one parent.
-- All canonical item and node IDs are code-owned and unique within the result.
+- All item and node IDs are created by code and unique within the result.
 
-### Edges and ordering
+### Parent and child links
 
 - Every referenced parent and child exists.
-- Parent/child relationships are bidirectionally consistent.
+- A parent lists each child, and each child points back to that parent.
 - A child appears at most once in a parent's `children_ids`.
-- Sibling order is deterministic, and sibling positions are unique within one
-  parent.
+- The same accepted draft produces the same sibling order, and sibling
+  positions are unique within one parent.
 
 ### Reachability and safe traversal
 
 - Every node is reachable from the root.
-- The graph is acyclic and contains no self-edge.
+- The graph has no cycles and no node points to itself.
 - No node is shared by multiple parents.
-- Depth-first walk and root-to-node path lookup terminate for every canonical
-  node. Unknown node lookup returns the documented safe result rather than
-  following unchecked links.
+- Depth-first walk and root-to-node path lookup finish for every node. Looking
+  up an unknown node returns the documented safe result.
 
-### Source spans and citations
+### Source page ranges and citations
 
-- A PDF span uses `pdf_page`, starts at 1 or later, has
+- A PDF page range uses `pdf_page`, starts at 1 or later, has
   `start_page <= end_page`, and ends within the preserved PDF page count.
-- Citation page ranges obey the same 1-based inclusive convention and source
-  bounds.
+- Citation page ranges also start at 1, include both ends, and stay within the
+  PDF page count.
 - Citation quotes and node content come from the identified source range.
-- Non-paginated inputs do not carry fabricated PDF spans.
-- Sibling spans may overlap. A child span is not required to be strictly
-  contained by its parent's span unless a later canonical rule adds that
-  independent requirement.
+- Inputs without pages do not carry made-up PDF page ranges.
+- Sibling page ranges may overlap. A child range is not required to fit
+  completely inside its parent range unless a future rule adds that
+  requirement.
 
-## Branch Content and Source Slicing
+## Get Node Content from Source Pages
 
 Branch nodes may retain source content. `content=None` remains useful for a
 navigation-only node, but being a branch is not itself a reason to discard its
-evidence.
+source text.
 
-When content is present, deterministic code slices it from the node's tight
-1-based inclusive source page range. Page-granular ranges can include a heading
-or paragraph also used by an adjacent node; this is expected when spans
-overlap. Assembly must not ask the model to reproduce source text, and it must
-not derive a parent node's content by concatenating model summaries.
+When content is present, code copies it from the node's 1-based inclusive page
+range. Page-level ranges can include a heading or paragraph also used by an
+adjacent node; this is expected when ranges overlap. Do not ask the model to
+reproduce source text or create a parent node by joining model summaries.
 
-Navigation and evidence loading remain separate operations: an agent can read
-titles and summaries to select a node, then fetch the selected node's tight
-source page range. A future PageIndex adapter may help build the outline, but
-it does not own source-range fetching.
+Choosing a section and loading its source text remain separate operations. An
+agent can read titles and summaries to select a node, then fetch that node's
+page range. A future PageIndex integration may help build the outline, but it
+does not fetch the source text.
 
-## Determinism, Retry, and Failure
+## Retries and Failures by Step
 
-| Stage | Determinism | Retry and failure contract |
+| Step | Same input, same result? | Retry and failure behavior |
 |---|---|---|
-| Input validation and resolution policy | Deterministic for one configuration | Invalid or unsupported input fails immediately. |
-| Network fetch | Externally variable | Retry only bounded transient failures. Record and hash the exact successful response. Permanent status/content failures stop the operation. |
-| PDF or text parsing | Deterministic for fixed bytes and parser version | Parser failure stops before semantic extraction. Do not skip corrupt pages or renumber around them. |
-| Structural draft production | Nondeterministic when model-backed | Bounded retries may repair transport or draft-schema failures against the same source version. Each attempt is observable. |
-| Canonical assembly | Deterministic for one accepted draft and source version, except generated UUID values | Invalid references, spans, or authoritative metadata conflicts reject the draft. |
-| Invariant validation | Deterministic | Any failure rejects the entire result; no partial `Paper` is returned as success. |
+| Input validation and fetching rules | Yes, for one configuration | Invalid or unsupported input fails immediately. |
+| Network fetch | No; the remote source may change | Retry only a limited number of temporary failures. Record and hash the exact successful response. Permanent HTTP or content failures stop the operation. |
+| PDF or text parsing | Yes, for the same bytes and parser version | Parser failure stops before the model or tree builder runs. Do not skip corrupt pages or renumber later pages. |
+| Model or PageIndex draft | No when a model is used | Limited retries may repair network or invalid-draft failures against the same source version. Record every attempt. |
+| Build the final `Paper` | Yes for one accepted draft and source version, except for new UUID values | Invalid links, page ranges, or conflicts with source facts reject the draft. |
+| Final validation | Yes | Any failure rejects the entire result; never return a partial `Paper` as success. |
 
-A successful result means one canonical `Paper` passed provenance, span, and
-tree validation. Fetching bytes, obtaining a model response, or constructing a
-Pydantic object alone is not success. Failure preserves enough stage and source
-identity to diagnose or retry the operation, but it does not persist partial
-canonical knowledge implicitly.
+A successful result means one `Paper` passed its source, page-range, and tree
+checks. Fetching bytes, receiving a model response, or constructing a Pydantic
+object alone is not success. A failure records enough about the failed step and
+source to diagnose or retry it, but it does not store a partial `Paper`.
 
-## Output Boundary and Downstream Consumers
+## What Paper Extraction Does Not Do
 
-Paper extraction returns canonical knowledge. The following are explicit
-downstream consumers and stay outside this operation:
+Paper extraction returns one validated `Paper`. Other components handle:
 
-- persistence and idempotent storage in `LocalKnowledgeLibrary`;
-- embedding generation and semantic indexing;
-- semantic retrieval across a collection;
+- storing and safely updating it in `LocalKnowledgeLibrary`;
+- generating embeddings and building search records;
+- searching across a collection;
 - PageIndex-style tree navigation within one selected document;
-- answer synthesis, conversational state, and citations in a final response;
-- caller policy for retaining raw source bytes.
+- writing answers, managing conversation state, and citing a final response;
+- deciding whether to keep raw source bytes.
 
-Keeping these concerns separate lets Paper extraction land before PageIndex and
-lets PageIndex arrive later without replacing semantic retrieval or the
-canonical library.
+Keeping this work separate allows Paper extraction to be implemented before
+PageIndex. PageIndex can then be added without replacing collection-wide search
+or stored knowledge.
 
-## Future PageIndex Compatibility Seam
+## How PageIndex Can Fit Later
 
 Future integration must preserve these decisions:
 
-1. PageIndex receives ordered source pages before any flattening step.
-2. Its node IDs remain adapter-local. Canonical IDs and graph links are created
-   during deterministic assembly.
+1. PageIndex receives ordered source pages before they are joined into one text.
+2. Its node IDs remain temporary. Code creates the final IDs and tree links.
 3. It may propose titles, summaries, ordering, and 1-based inclusive page
-   spans through the structural draft seam.
-4. It does not become the `Paper`, `TreeKnowledge`, or `TreeNode` schema.
-5. Outline navigation uses titles and summaries; evidence loading separately
-   fetches the selected tight source range.
-6. Integration does not assume non-overlapping sibling spans or strict child
-   containment.
+   ranges through the draft described above.
+4. It does not become the `Paper`, `TreeKnowledge`, or `TreeNode` type.
+5. Navigation uses titles and summaries; loading source text separately fetches
+   the selected page range.
+6. Sibling page ranges may overlap, and a child range does not need to fit
+   completely inside its parent range.
 
-## Golden Fixture Contract
+## Fixed Paper Test Data
 
-The repository-owned fixture lives at:
+The fixed test files live at:
 
 ```text
 tests/fixtures/paper/golden/
@@ -324,35 +316,35 @@ tests/fixtures/paper/golden/
 └── expected.json
 ```
 
-It is a small four-page synthetic paper with a nested subsection, multi-page
-sections, and intentionally overlapping sibling page spans. `expected.json`
+It is a small four-page test paper with a nested subsection, multi-page
+sections, and intentionally overlapping sibling page ranges. `expected.json`
 contains only stable facts: page count, titles and paths, 1-based inclusive
-spans, distinctive text anchors, topology, and named invariants. It does not
-pin summaries or any other wording produced by a model.
+page ranges, distinctive text anchors, tree shape, and validation rules. It
+does not pin summaries or any other wording produced by a model.
 
-The offline contract test parses the fixed PDF, checks every anchor against its
-declared page, validates topology and invariants, and confirms the overlap case
-remains representable. Paper extraction and future PageIndex work must reuse
-this fixture rather than create a competing golden document.
+The offline test parses the fixed PDF, checks every text anchor against its
+declared page, validates the tree and all rules, and confirms that overlapping
+ranges work. Paper extraction and future PageIndex work must reuse these files
+rather than create a competing test paper.
 
-## Current Behavior and Known Gaps
+## Current Gaps
 
 The repository does not yet guarantee the target pipeline above:
 
 - `pdf_to_markdown()` concatenates non-empty page text and drops page
   boundaries and empty pages.
 - `paper_flow()` sends the flattened document to one extraction agent and asks
-  it to return the canonical `Paper` directly.
+  it to return the final `Paper` directly.
 - The model currently controls IDs, edges, citations, source fields, and
-  content instead of returning a restricted structural draft.
+  content instead of returning the limited draft described above.
 - Resolved source URL, content hash, publication/version time, fetch time, and
-  exact-version availability are not assembled authoritatively end to end.
+  exact-version availability are not consistently collected from the source.
 - `DoiIdentifier` raises `NotImplementedError` because there is no accessible
   content resolver.
-- `TreeKnowledge` provides traversal helpers but does not yet enforce the full
-  root, edge, reachability, acyclicity, or span invariant set at construction.
+- `TreeKnowledge` provides traversal helpers but does not yet check every root,
+  link, reachability, cycle, or page-range rule when it is created.
 - The structured-output failure tracked by issue #91 remains separate from
   this design issue.
 
-Those gaps are implementation work after this contract. Adding PageIndex first
-would not fix them and is not required to implement the staged Paper pipeline.
+Those gaps are future implementation work. Adding PageIndex first would not fix
+them and is not required to implement the Paper steps above.

@@ -8,31 +8,32 @@
   operation.
 - **Load next**: Start with the component row that matches the requested
   operation; do not load unrelated component designs.
-- **Import rule**: Inputs/configs come from `quantmind.configs`, operations from
-  `quantmind.flows`, and result types from their owning layer.
+- **Import rule**: Import inputs and configs from `quantmind.configs`,
+  operations from `quantmind.flows`, and result types from the package shown in
+  the component catalog.
 
 ## Contents
 
 - [Public Usage Sources](#public-usage-sources)
-- [Import Boundary](#import-boundary)
+- [Where to Import From](#where-to-import-from)
 
 ## Public Usage Sources
 
 Use this index when calling QuantMind as a library. These links point to the
 current public API, focused examples, and component-specific guidance.
 
-| Need | Canonical source |
+| Need | Read |
 |---|---|
 | Current operations, inputs, results, and sources | [Public component catalog](../../docs/README.md) |
 | Installation and common usage | [Root README usage](../../README.md#-usage-examples) |
-| Paper extraction | [Paper E2E design contract](../design/flow/paper.md) |
+| Paper extraction | [Paper extraction design](../design/flow/paper.md) |
 | News collection | [News design and behavior](../design/flow/news.md) |
-| Local semantic search | [Library guide](../../docs/library.md) and [focused example](../../examples/library/README.md) |
+| Search local knowledge by meaning | [Library guide](../../docs/library.md) and [focused example](../../examples/library/README.md) |
 | Runnable operation examples | [`examples/flows/`](../../examples/flows/) |
 | Focused preprocessing examples | [`examples/preprocess/`](../../examples/preprocess/) |
 
-## Import Boundary
+## Where to Import From
 
 Import public inputs and configs from `quantmind.configs`, public operations
-from `quantmind.flows`, and result contracts from the owning layer identified
-by the component catalog.
+from `quantmind.flows`, and result types from the package shown in the
+component catalog.

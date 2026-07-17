@@ -1,77 +1,77 @@
-# Public Operation Naming
+# Public Operation Names
 
 ## Quick Summary
 
-- **Purpose**: Define consistent names for public QuantMind operations and their input, config, and result types.
-- **Read when**: Adding or renaming a public callable, operation type, or composed recipe.
-- **Status**: Current naming direction; the legacy `paper_flow` name remains unchanged until a separately approved migration.
-- **Core rule**: Name a public operation with its stage verb; reserve `pipeline` for composed recipes, and do not use `flow` as an operation verb.
+- **Purpose**: Define clear names for public QuantMind functions and their input, config, and result types.
+- **Read when**: Adding or renaming a public function, operation type, or pipeline.
+- **Status**: Use these rules for new names. Keep the existing `paper_flow` name until a separate change explains how callers will migrate.
+- **Core rule**: Use a verb that says what the function does. Use `pipeline` only when one function combines several public operations. Do not use `flow` as a verb.
 
 ## Contents
 
 - [Scope](#scope)
-- [Operation Stages](#operation-stages)
+- [Name Patterns](#name-patterns)
 - [Type Names](#type-names)
 - [Current API](#current-api)
 - [Review Checklist](#review-checklist)
 
 ## Scope
 
-This document defines how public QuantMind callables communicate intent. It is
-a naming contract, not a package-layout migration. Existing names may be
-changed in focused compatibility work; they are not silently renamed here.
+This page defines how to name public QuantMind functions. It does not rename
+packages or existing functions. Any existing name change needs a separate plan
+for users who depend on the old name.
 
 The runtime library API is designed for Python callers. Repository guidance
-for coding agents belongs to the development harness (`AGENTS.md`, skills,
-docs, fixtures, and verification), not in the runtime API description.
+for coding agents belongs in `AGENTS.md`, skills, docs, fixtures, and checks;
+it does not belong in the runtime API.
 
-## Operation Stages
+## Name Patterns
 
-Public names use a stage verb plus the domain or result:
+Start a public function name with a verb that describes its result:
 
-| Stage | Name pattern | Transformation |
+| Work | Name pattern | What it does |
 |-------|--------------|----------------|
-| Collection | `collect_<domain>` | External sources to source-faithful documents and evidence |
-| Knowledge extraction | `extract_<domain>_knowledge` | Documents to typed `quantmind.knowledge` values |
-| Index construction | `build_<domain>_index` | Documents or knowledge to a retrieval index |
+| Collection | `collect_<domain>` | Fetch source documents and the details needed to verify them |
+| Knowledge extraction | `extract_<domain>_knowledge` | Turn documents into typed `quantmind.knowledge` values |
+| Index construction | `build_<domain>_index` | Turn documents or knowledge into a search index |
 | Analysis | `analyze_<domain>` | Domain inputs to an analytical result |
-| Generic execution | `batch_run` and similar combinators | Apply an operation without changing its domain meaning |
-| Composed recipe | `<domain>_<purpose>_pipeline` | Compose multiple named stages into a reusable pipeline |
+| Generic execution | `batch_run` and similar helpers | Apply an operation to a batch without changing what the operation means |
+| Pipeline | `<domain>_<purpose>_pipeline` | Combine several named operations into one reusable function |
 
-`flow` is not a domain verb. Do not add new public `*_flow` names merely
-because a callable performs several steps. Use a precise operation name, or a
-`*_pipeline` name only when the callable deliberately composes multiple public
-stages as a reusable recipe.
+`flow` is not a verb that explains a result. Do not add a public `*_flow` name
+only because a function performs several steps. Name the result precisely, or
+use `*_pipeline` when the function combines multiple public operations.
 
 ## Type Names
 
-- Input types describe caller intent, such as `NewsWindow` or `PaperInput`.
+- Input types describe what the caller supplies, such as `NewsWindow` or
+  `PaperInput`.
 - Config types name the domain and stage, such as `NewsCollectionCfg` or a
   future `PaperExtractionCfg`.
 - Result types describe returned data, such as `NewsBatch`, `Paper`, or
   `PageIndex`.
-- Provider names stay out of public operation names unless provider-specific
-  behavior is itself the public contract.
+- Keep provider names out of public function names unless callers are choosing
+  provider-specific behavior.
 
 ## Current API
 
-- `collect_news` is a collection operation and follows this contract.
-- `batch_run` is a generic execution combinator, not a news or paper stage.
-- `paper_flow` is an existing semantic-extraction API with legacy naming. It
-  is not the naming precedent for new operations; any rename belongs in a
-  separate compatibility change.
+- `collect_news` is a collection operation and follows these naming rules.
+- `batch_run` is a generic batch helper, not a news or paper operation.
+- `paper_flow` is an existing extraction API with an old name. Do not copy that
+  pattern for new operations. Renaming it requires a separate migration plan.
 
-The current `quantmind.flows` package remains the apex implementation namespace
-for this release. Whether it should become `operations` or be split from a
-future `pipelines` package is deliberately outside this document.
+The current `quantmind.flows` package continues to contain public operations in
+this release. Renaming it to `operations` or adding a separate `pipelines`
+package is outside this page.
 
 ## Review Checklist
 
 Before adding a public callable, state:
 
-1. Its operation stage.
-2. Its input and result contracts.
-3. Whether it is one operation or a genuine multi-stage pipeline.
-4. Why its verb matches the observable result.
+1. What work it performs.
+2. What it accepts and returns.
+3. Whether it is one operation or combines several operations.
+4. Why its verb describes the returned result.
 
-If those answers are unclear, settle the contract before adding a public name.
+If those answers are unclear, define the behavior before choosing a public
+name.

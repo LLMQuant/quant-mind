@@ -2,45 +2,47 @@
 
 ## Quick Summary
 
-- **Purpose**: Index accepted engineering designs and cross-domain target
-  contracts.
-- **Read when**: A task changes architecture, ownership boundaries, public
-  operation semantics, or a documented invariant.
+- **Purpose**: Find accepted designs for QuantMind packages and public
+  operations.
+- **Read when**: A task changes architecture, package responsibilities, public
+  behavior, or a required validation rule.
 - **Load next**: Open only the domain design that matches the task, then read
   that page in full before implementation.
-- **Authority**: These pages define intended contracts; each page must identify
-  current gaps when the runtime does not yet satisfy them.
+- **Authority**: These pages explain agreed behavior. Each page lists any part
+  that is not implemented yet.
 
 ## Contents
 
 - [Design Index](#design-index)
 - [Organization Rules](#organization-rules)
 
-This directory is the canonical home for QuantMind engineering design. Use it
-for accepted ownership boundaries, cross-domain contracts, and target behavior
-that implementation work must preserve.
+This directory records QuantMind engineering decisions. Use it to understand
+which package owns each step, how packages work together, and what behavior an
+implementation must preserve.
 
 ## Design Index
 
 | Domain | Design |
 |---|---|
-| Flow | [Paper end-to-end contract](flow/paper.md) |
+| Flow | [Paper extraction from input to validated result](flow/paper.md) |
 | Flow | [News collection](flow/news.md) |
-| Library | [Local semantic knowledge library](library/local.md) |
+| Library | [Local knowledge storage and meaning-based search](library/local.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 
 ## Organization Rules
 
-- Organize designs directly by owning domain, such as `flow/`, `knowledge/`,
+- Organize designs directly by package or feature, such as `flow/`, `knowledge/`,
   `library/`, `operations/`, or `preprocess/`. Do not add an intermediate
   `components/` directory.
 - Keep this page as the single global design index. Domain directories do not
   need their own index.
 - Add a design page only for real design content. Do not create empty
   directories, placeholders, or speculative component pages.
-- State whether a document describes current behavior, a target contract, or
-  both. Target contracts must identify current gaps so readers do not mistake
-  an intended guarantee for an implemented one.
-- Keep code and tests authoritative for current runtime behavior. Keep `docs/`
-  focused on user-facing guides, examples, and catalogs; those pages may link
-  here but must not maintain a second design copy.
+- State whether a document describes current behavior, planned behavior, or
+  both. List current gaps so readers can distinguish a plan from working code.
+- Write headings and summaries as an action plus a concrete object. Avoid
+  unexplained project shorthand and define any necessary domain term when it
+  first appears.
+- Use code and tests to check current behavior. Keep `docs/` focused on
+  user-facing guides, examples, and catalogs; those pages may link here but
+  must not maintain a second copy of a design.

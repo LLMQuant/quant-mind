@@ -1,125 +1,124 @@
-# Local Semantic Knowledge Library Design
+# Local Knowledge Library Design
 
 ## Quick Summary
 
-- **Purpose**: Define local persistence and semantic retrieval for validated QuantMind knowledge.
-- **Read when**: Changing `LocalKnowledgeLibrary`, indexing, semantic filters, retrieval identity, or storage ownership.
+- **Purpose**: Define how the local library stores validated knowledge and searches it by meaning.
+- **Read when**: Changing `LocalKnowledgeLibrary`, search records, filters, query results, or file ownership.
 - **Status**: Current design owned at runtime by `quantmind.library`.
-- **Core boundary**: Canonical knowledge is source truth, semantic records and vectors are derived indexes, and raw source artifacts remain caller-owned.
+- **Core rule**: Stored `BaseKnowledge` is the data to keep. Search text and vectors can be rebuilt. The caller stores raw PDF, HTML, and media files.
 - **User guide**: [`docs/library.md`](../../../docs/library.md)
 
 ## Contents
 
-- [Decision Summary](#decision-summary)
-- [Ownership Boundaries](#ownership-boundaries)
-- [Canonical and Derived Data](#canonical-and-derived-data)
-- [Retrieval Grain and Identity](#retrieval-grain-and-identity)
-- [Derived-Index Invalidation](#derived-index-invalidation)
-- [Financial-Time Semantics](#financial-time-semantics)
-- [Local Ranking Choice](#local-ranking-choice)
-- [Non-goals](#non-goals)
+- [Key Decisions](#key-decisions)
+- [Who Owns What](#who-owns-what)
+- [Stored Knowledge and Rebuildable Search Data](#stored-knowledge-and-rebuildable-search-data)
+- [What Can Match a Query](#what-can-match-a-query)
+- [When to Rebuild Search Data](#when-to-rebuild-search-data)
+- [Time Fields and Look-Ahead](#time-fields-and-look-ahead)
+- [Why SQLite and Simple Exact Ranking](#why-sqlite-and-simple-exact-ranking)
+- [Out of Scope](#out-of-scope)
 
-## Decision Summary
+## Key Decisions
 
-`quantmind.library` owns persistence and semantic retrieval for canonical
-QuantMind knowledge. It replaces the obsolete repository concept of a generic
-storage layer that stored raw files, knowledge JSON, embeddings, and indexes
-behind one extensible backend abstraction.
+`quantmind.library` stores validated QuantMind knowledge and searches it by
+meaning. It replaces an older design for one generic storage layer that would
+hide raw files, knowledge JSON, embeddings, and indexes behind one backend API.
 
-The current public surface is deliberately domain-level:
+The public API is intentionally small:
 
 - `LocalKnowledgeLibrary`
 - `SemanticQuery`
 - `SemanticHit`
 
 There is no public `Storage`, `VectorStore`, `Retriever`, provider registry, or
-backend hierarchy. A new backend abstraction is justified only by a second
-real implementation and a stable shared contract.
+backend class hierarchy. Add a shared backend API only after a second working
+implementation proves which behavior is truly shared.
 
-## Ownership Boundaries
+## Who Owns What
 
-| Layer | Responsibility |
+| Package or caller | Responsibility |
 |---|---|
-| `quantmind.knowledge` | Immutable canonical schemas and embedding projections; no I/O |
-| `quantmind.library` | Persist canonical knowledge, maintain rebuildable semantic records, and return typed evidence |
-| `quantmind.flows` | Produce canonical knowledge and optionally pass it to a library consumer |
-| `quantmind.mind` or an agent application | Use retrieval as a tool and synthesize answers |
-| Caller or source-specific pipeline | Retain raw PDF, HTML, media, and operational artifacts |
+| `quantmind.knowledge` | Define immutable knowledge models and the text used for embeddings; perform no I/O |
+| `quantmind.library` | Store validated knowledge, maintain rebuildable search records, and return `SemanticHit` results |
+| `quantmind.flows` | Produce validated knowledge and optionally pass it to a library |
+| `quantmind.mind` or an agent application | Search the library and use matches to write answers |
+| Caller or source-specific pipeline | Retain raw PDF, HTML, media, and operational files |
 
-Raw source retention is intentionally outside the V1 library. A canonical
-`SourceRef` and citations preserve provenance identity; they do not turn the
-library into an artifact store.
+The V1 library does not store raw source files. `SourceRef` and citations point
+back to the source, but they do not contain the source file itself.
 
-## Canonical and Derived Data
+## Stored Knowledge and Rebuildable Search Data
 
-Canonical `BaseKnowledge` is the source of truth. Embeddings, projection text,
-filter columns, and vector indexes are derived and rebuildable even when they
-share one SQLite database.
+Validated `BaseKnowledge` is the record that must be preserved. Embeddings,
+the text sent to the embedder, filter columns, and vector indexes can all be
+rebuilt, even when they share one SQLite database with the knowledge records.
 
 The local implementation separates three concerns:
 
-- `knowledge_items` stores one validated aggregate root per knowledge item.
-- `knowledge_nodes` stores canonical `TreeNode` values separately with parent,
-  position, content hash, and item ownership.
-- `semantic_records` stores item/root/node projections and vector metadata used
-  by exact cosine ranking.
+- `knowledge_items` stores one complete validated knowledge item.
+- `knowledge_nodes` stores each `TreeNode` in a separate row with its parent,
+  position, content hash, and owning item.
+- `semantic_records` stores searchable text and vector details for whole items,
+  roots, and nodes.
 
-Concrete types do not get a table per Pydantic subtype. The aggregate-root plus
-normalized-node design preserves typed reconstruction while giving future tree
-navigation a node-level persistence boundary.
+Concrete types do not get a table per Pydantic subtype. Storing each complete
+item plus separate node rows lets the library rebuild the original typed item
+and later navigate a tree one node at a time.
 
-## Retrieval Grain and Identity
+## What Can Match a Query
 
-- A `FlattenKnowledge` item produces one semantic target from its exact
-  `embedding_text()` projection.
-- A `TreeKnowledge` item produces one item target for its root with
-  `node_id=None`, plus one target for every non-root node.
-- Target identity distinguishes a whole item from one of its nodes.
-- `SemanticHit.matched_text` is the exact projection used for ranking.
-- Callers use `get(item_id)` to resolve full canonical knowledge and node paths.
+- A `FlattenKnowledge` item produces one searchable record from its exact
+  `embedding_text()` value.
+- A `TreeKnowledge` item produces one record for the whole item with
+  `node_id=None`, plus one record for every non-root node.
+- Each record says whether it represents a whole item or one node.
+- `SemanticHit.matched_text` is the exact text used to rank the match.
+- Callers use `get(item_id)` to load the full knowledge item and node paths.
 
-Re-putting unchanged knowledge with the same canonical item ID is idempotent
-and reuses its embeddings. This does not claim deduplication across independent
-extraction runs that generated different canonical IDs.
+Putting unchanged knowledge with the same item ID is safe to repeat and reuses
+its embeddings. The library does not merge separate extraction runs that
+created different item IDs.
 
-## Derived-Index Invalidation
+## When to Rebuild Search Data
 
 Every stored vector records the information needed to decide whether it is
-reusable: embedding model, dimension, projection hash, source content hash,
-knowledge schema version, and projection schema version.
+reusable: embedding model, dimension, embedding-text hash, source content hash,
+knowledge model version, and embedding-text format version.
 
-Changed metadata invalidates only affected targets. Canonical deletion removes
-the item, its normalized nodes, and its derived semantic records in one
-transaction. Corrupt dimensions, vector bytes, canonical payloads, or orphaned
-derived records fail explicitly instead of producing a plausible partial hit.
+When any of those values changes, rebuild only the affected search records.
+Deleting an item removes the item, its nodes, and its search records in one
+transaction. Invalid vector sizes or bytes, unreadable knowledge data, and
+search rows without an item raise an error instead of returning an incomplete
+match that looks valid.
 
-## Financial-Time Semantics
+## Time Fields and Look-Ahead
 
 `as_of` and `available_at` answer different questions:
 
-- `as_of` is the information cutoff represented by the knowledge.
+- `as_of` is the latest date covered by the knowledge.
 - `available_at` is when that source version became observable.
 
-`available_at_before` excludes records whose availability is unknown or after
-the cutoff. `as_of_before` alone does not prevent look-ahead. Source kind,
-item type, confidence, tags, tree ID, and both time cutoffs combine before
-ranking.
+`available_at_before` excludes records that became available after the cutoff
+or have no known availability time. Filtering only by `as_of_before` can still
+leak future information. Apply source kind, item type, confidence, tags, tree
+ID, and both time cutoffs before ranking results.
 
-## Local Ranking Choice
+## Why SQLite and Simple Exact Ranking
 
-SQLite provides transactions, foreign keys, typed reconstruction, and explicit
-stale/corrupt behavior for canonical knowledge. NumPy exact cosine ranking is
-sufficient for the current local scale and keeps the derived search layer
-replaceable without changing user code.
+SQLite provides transactions, foreign keys, and reliable reconstruction of
+typed knowledge. NumPy can compare every embedding with cosine similarity at
+the current local data size. This simple exact ranking can later be replaced
+without changing user code.
 
-A future approximate or remote index may replace the private derived layer. It
-does not replace canonical persistence and must not leak a provider-specific
-result through `SemanticHit`.
+A future approximate or remote index may replace the private search
+implementation. It does not replace stored knowledge and must return the same
+`SemanticHit` type regardless of provider.
 
-## Non-goals
+## Out of Scope
 
-- raw source artifact storage;
-- a generic RAG framework or answer synthesis;
+- raw source file storage;
+- a generic framework for retrieving context and writing answers;
 - a public embedder, vector-store, retriever, or backend registry;
 - PageIndex tree construction or navigation;
-- cross-run knowledge deduplication without a separate stable-ID contract.
+- merging knowledge across runs without a separate stable-ID design.
