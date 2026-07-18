@@ -27,6 +27,7 @@ from quantmind.preprocess.fetch.http import (
     HttpFetcher,
 )
 from quantmind.preprocess.news import (
+    build_news_identity,
     canonicalize_source_url,
     news_document_from_fetched,
     preprocess_news_document,
@@ -560,9 +561,10 @@ def _observation_from_row(
     canonical_url = canonicalize_source_url(urljoin(_BASE_URL, row.href))
     payload_match = _PAYLOAD_ID_RE.search(canonical_url)
     payload_id = payload_match.group("id") if payload_match else None
-    identity = _build_identity(
+    identity = build_news_identity(
+        source_type="press_release",
         payload_id=payload_id,
-        canonical_url=canonical_url,
+        source_url=canonical_url,
     )
     return PRNewswireObservation(
         identity=identity,
@@ -686,16 +688,6 @@ def _artifact_from_fetched(
         headers=dict(fetched.headers),
         fetched_at=fetched.fetched_at,
     )
-
-
-def _build_identity(
-    *,
-    payload_id: str | None,
-    canonical_url: str,
-) -> str:
-    raw = "\x1f".join((_SOURCE, payload_id or canonical_url))
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    return f"news:{_SOURCE}:{digest}"
 
 
 def _failure(
