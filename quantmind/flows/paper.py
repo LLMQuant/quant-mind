@@ -3,17 +3,19 @@
 `paper_flow` ingests one of the ``PaperInput`` discriminated-union
 variants, fetches and converts the raw payload to markdown via
 ``preprocess.fetch`` + ``preprocess.format``, then runs an
-``Agent(output_type=Paper)`` to produce a typed ``Paper``
-``TreeKnowledge`` object.
+``Agent(output_type=DraftPaper)`` to produce an id-less draft tree.
+``assemble_paper`` then mints ids and provenance to build the typed
+``Paper`` ``TreeKnowledge`` object.
 
 Customization happens through the configured ``PaperFlowCfg`` (Layer 1)
 or the keyword arguments on this function (Layer 2). To swap the whole
 flow, fork this file (Layer 3 — design doc §9).
 """
 
+from datetime import datetime, timezone
 from typing import Any, TypeVar
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -24,8 +26,9 @@ from quantmind.configs.paper import (
     PaperInput,
     RawText,
 )
+from quantmind.flows._paper_draft import DraftPaper, assemble_paper
 from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import Paper
+from quantmind.knowledge import ExtractionRef, Paper, SourceRef
 from quantmind.preprocess.fetch import (
     Fetched,
     fetch_arxiv,
@@ -37,23 +40,29 @@ from quantmind.preprocess.format import html_to_markdown, pdf_to_markdown
 P = TypeVar("P", bound=Paper)
 
 _DEFAULT_INSTRUCTIONS = """\
-You are extracting a research paper into a structured QuantMind ``Paper``
-TreeKnowledge object. Build the section tree top-down: every node has a
-title and a short summary; leaf nodes additionally carry the section
-markdown content. Cite supporting passages on each node.
+You are extracting a research paper into a nested draft tree. The top-level
+DraftPaper IS the root of the tree: give it the paper's ``title`` and a short
+``summary``, and put the paper's top-level sections in its ``children``. Every
+node (the paper itself and each section) has a ``title`` and a short
+``summary``; put the section body Markdown in ``content`` on the nodes that
+carry text. Nest subsections under their parent section via that section's
+``children``.
+
+Do NOT invent identifiers of any kind — the system assigns all ids. Attach
+supporting ``citations`` (quote + page) to the node they support; never
+reference a node by id.
+
+Set ``published_date`` to the paper's publication date when the text states
+it. Fill ``arxiv_id``, ``authors``, and ``asset_classes`` from the metadata
+and content when available.
 
 Honour these flags from the run config:
 - extract_methodology={extract_methodology}: when true, every methodology
   section becomes its own subtree with a per-step summary.
-- extract_limitations={extract_limitations}: when true, surface
-  limitations as a dedicated top-level child rather than inlining them.
-- asset_class_hint={asset_class_hint!r}: when set, prefer this asset
-  class for ``Paper.asset_classes`` if the paper does not state one
-  explicitly.
-
-Set ``as_of`` to the publication date when given; otherwise use today's
-date. Set the ``source`` provenance ref using the metadata supplied in
-the prompt.
+- extract_limitations={extract_limitations}: when true, surface limitations
+  as a dedicated top-level child rather than inlining them.
+- asset_class_hint={asset_class_hint!r}: when set, prefer this asset class
+  for ``asset_classes`` if the paper does not state one explicitly.
 """
 
 
@@ -98,19 +107,36 @@ async def paper_flow(
         ),
         "model": cfg.model,
         "tools": list(extra_tools or []),
-        "output_type": out_type,
+        # The Agent always emits the id-less `DraftPaper` (never the real
+        # `Paper`): the LLM must not mint UUIDs, so ids are assembled in
+        # code via `assemble_paper` below. Non-strict schema mode is kept
+        # so optional fields stay simple across SDK versions.
+        "output_type": AgentOutputSchema(DraftPaper, strict_json_schema=False),
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }
     if cfg.model_settings is not None:
         agent_kwargs["model_settings"] = cfg.model_settings
     agent: Agent[Any] = Agent(**agent_kwargs)
-    return await run_with_observability(
+    draft: DraftPaper = await run_with_observability(
         agent,
         _format_input(raw_md, source_meta),
         cfg=cfg,
         memory=memory,
         extra_run_hooks=list(extra_run_hooks or []),
+    )
+    return assemble_paper(
+        draft,
+        source=_source_ref(source_meta),
+        source_id=_source_id(source_meta),
+        as_of=_as_of(draft),
+        extraction=ExtractionRef(
+            flow="paper_flow",
+            model=cfg.model,
+            run_id=None,
+            extracted_at=datetime.now(timezone.utc),
+        ),
+        out_type=out_type,
     )
 
 
@@ -201,3 +227,37 @@ def _format_input(raw_md: str, source_meta: dict[str, Any]) -> str:
     return (
         f"--- Source metadata ---\n{header}\n\n--- Paper content ---\n{raw_md}"
     )
+
+
+def _source_ref(source_meta: dict[str, Any]) -> SourceRef:
+    """Build a typed ``SourceRef`` from fetch metadata."""
+    src = source_meta.get("source", "inline")
+    if src == "arxiv":
+        arxiv_id = source_meta.get("arxiv_id")
+        uri = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None
+        return SourceRef(kind="arxiv", uri=uri)
+    if src == "web":
+        return SourceRef(kind="http", uri=source_meta.get("url"))
+    if src == "local":
+        return SourceRef(kind="local", uri=source_meta.get("path"))
+    return SourceRef(kind="manual", uri=None)
+
+
+def _source_id(source_meta: dict[str, Any]) -> str:
+    """Return a stable citation source id from fetch metadata."""
+    src = source_meta.get("source", "inline")
+    if src == "arxiv":
+        return source_meta.get("arxiv_id") or "arxiv"
+    if src == "web":
+        return source_meta.get("url") or "web"
+    if src == "local":
+        return source_meta.get("path") or "local"
+    return "inline"
+
+
+def _as_of(draft: DraftPaper) -> datetime:
+    """Publication date from the draft if present, else now (UTC)."""
+    if draft.published_date is not None:
+        d = draft.published_date
+        return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    return datetime.now(timezone.utc)
