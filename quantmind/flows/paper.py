@@ -13,7 +13,7 @@ flow, fork this file (Layer 3 — design doc §9).
 
 from typing import Any, TypeVar
 
-from agents import Agent, RunHooks, Tool
+from agents import Agent, AgentOutputSchema, RunHooks, Tool
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -25,7 +25,7 @@ from quantmind.configs.paper import (
     RawText,
 )
 from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import Paper
+from quantmind.knowledge import Paper, PaperExtraction
 from quantmind.preprocess.fetch import (
     Fetched,
     fetch_arxiv,
@@ -85,7 +85,10 @@ async def paper_flow(
             unpaywall fallback is its own follow-up issue).
     """
     cfg = cfg or PaperFlowCfg()
-    out_type: type[Paper] = output_type or Paper  # type: ignore[assignment]
+    # Default to the slug-tolerant extraction model so the LLM's human-readable
+    # node ids are canonicalised to UUIDs (see knowledge._extraction). Callers
+    # passing their own output_type own that concern themselves.
+    out_type: type[Paper] = output_type or PaperExtraction  # type: ignore[assignment]
 
     raw_md, source_meta = await _fetch_and_format(input)
 
@@ -98,7 +101,11 @@ async def paper_flow(
         ),
         "model": cfg.model,
         "tools": list(extra_tools or []),
-        "output_type": out_type,
+        # QuantMind's knowledge models (Paper, etc.) emit `additionalProperties`
+        # in their JSON schema, which the openai-agents SDK's strict-schema mode
+        # rejects. Wrap with strict_json_schema=False to use non-strict structured
+        # output (the SDK-recommended fix). Fixes the agent-setup crash on paper_flow.
+        "output_type": AgentOutputSchema(out_type, strict_json_schema=False),
         "input_guardrails": list(extra_input_guardrails or []),
         "output_guardrails": list(extra_output_guardrails or []),
     }
@@ -140,7 +147,7 @@ async def _fetch_and_format(
         md = await _format_by_content_type(raw)
         return md, {
             "source": "local",
-            "path": str(input.path),
+            "path": input.path.as_posix(),
             "content_type": raw.content_type,
         }
     if isinstance(input, RawText):

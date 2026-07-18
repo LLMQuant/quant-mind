@@ -24,7 +24,11 @@ from quantmind.knowledge._tree import TreeKnowledge, TreeNode
 from quantmind.knowledge.earnings import Earnings
 from quantmind.knowledge.factor import Factor
 from quantmind.knowledge.news import News
-from quantmind.knowledge.paper import Paper, PaperKnowledgeCard
+from quantmind.knowledge.paper import (
+    Paper,
+    PaperExtraction,
+    PaperKnowledgeCard,
+)
 from quantmind.knowledge.thesis import Thesis
 
 __all__ = [
@@ -43,6 +47,7 @@ __all__ = [
     "Factor",
     "News",
     "Paper",
+    "PaperExtraction",
     "PaperKnowledgeCard",
     "Thesis",
 ]

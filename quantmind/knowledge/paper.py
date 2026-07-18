@@ -8,11 +8,12 @@ items linked by ``PaperKnowledgeCard.paper_id == Paper.id``.
 summarisation), then a `PaperKnowledgeCard` derived from the root summary.
 """
 
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
+from quantmind.knowledge._extraction import canonicalize_tree_ids
 from quantmind.knowledge._flatten import FlattenKnowledge
 from quantmind.knowledge._tree import TreeKnowledge
 
@@ -29,6 +30,23 @@ class Paper(TreeKnowledge):
     arxiv_id: str | None = None
     authors: list[str] = Field(default_factory=list)
     asset_classes: list[str] = Field(default_factory=list)
+
+
+class PaperExtraction(Paper):
+    """``Paper`` variant for the LLM extraction boundary.
+
+    Same shape as ``Paper`` but tolerant of the slug ids the model emits under
+    ``strict_json_schema=False``. A ``mode="before"`` validator rewrites every
+    slug id slot to a ``UUID`` before the frozen ``Paper`` validation runs, so
+    the result is a fully-valid ``Paper`` (``PaperExtraction`` is a subclass).
+    Use this — not ``Paper`` — as ``paper_flow``'s ``output_type``.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _canonicalize_ids(cls, data: Any) -> Any:
+        """Rewrite slug ids to UUIDs before frozen ``Paper`` validation."""
+        return canonicalize_tree_ids(data)
 
 
 class PaperKnowledgeCard(FlattenKnowledge):

@@ -8,6 +8,7 @@ discriminated-union member; subclasses set a `Literal` discriminator field.
 
 from agents import ModelSettings
 from pydantic import BaseModel, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 
 
 class BaseFlowCfg(BaseModel):
@@ -17,7 +18,12 @@ class BaseFlowCfg(BaseModel):
 
     # Model & execution
     model: str = "gpt-4o"
-    model_settings: ModelSettings | None = None
+    # ``ModelSettings`` carries callable fields that cannot be rendered to JSON
+    # schema. It is an execution knob (set programmatically), never something the
+    # magic NL resolver should populate, so skip it during schema generation —
+    # otherwise the resolver's structured-output schema build raises
+    # PydanticInvalidForJsonSchema. The field still validates and round-trips.
+    model_settings: SkipJsonSchema[ModelSettings | None] = None
     max_turns: int = 10
     timeout_seconds: float = 300.0
 
