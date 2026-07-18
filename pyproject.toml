@@ -244,9 +244,11 @@ testpaths = ["tests"]
 addopts = [
     "--cov=quantmind",
     "--cov-report=term-missing",
-    "--cov-fail-under=75",
     "-ra",
 ]
+# Coverage floor is enforced by scripts/verify.sh (--cov-fail-under=75).
+# Keeping it out of addopts lets sub-package test suites (e.g. qm_mcp/) run
+# standalone without a false failure when quantmind code is not exercised.
 asyncio_mode = "auto"
 
 [tool.coverage.run]

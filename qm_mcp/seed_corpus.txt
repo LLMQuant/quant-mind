@@ -1,0 +1,25 @@
+# QuantMind initial corpus seed list — quant / market-making / microstructure.
+# One source per line. Lines are routed by qm_mcp.cli.seed:
+#   - bare token or arxiv: prefix or arxiv.org URL  -> arXiv ingestion
+#   - http(s) URL                                   -> web/PDF ingestion
+#   - existing filesystem path                      -> local PDF/HTML/MD ingestion
+# Comments (#) and blank lines are skipped.
+
+# ── Local references (trident-forge) ────────────────────────────────────
+/Users/thomasadair/projects/p1-growth/trident-forge/docs/references/avellaneda_stoikov_2008_HFT_limit_order_book.pdf
+
+# ── arXiv: market making / inventory ────────────────────────────────────
+1105.3115   # Gueant, Lehalle, Fernandez-Tapia — Dealing with inventory risk
+1605.01862  # Gueant — Optimal market making
+1405.4974   # Cartea, Jaimungal — Optimal execution with limit & market orders
+1610.00261  # Lehalle, Mounjid — Limit order strategic placement
+
+# ── arXiv: limit order book / microstructure ────────────────────────────
+0712.0332   # Cont, Stoikov, Talreja — A stochastic model for order book dynamics
+1210.1625   # Cont, Kukanov — Optimal order placement in limit order markets
+1705.00109  # Stoikov — The micro-price
+1105.1694   # Toth et al — Anomalous price impact / critical nature of liquidity
+
+# ── arXiv: volatility / point processes ─────────────────────────────────
+1410.3394   # Gatheral, Jaisson, Rosenbaum — Volatility is rough
+1502.04592  # Bacry, Mastromatteo, Muzy — Hawkes processes in finance
