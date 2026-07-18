@@ -53,11 +53,13 @@ The operation has a strict order:
 3. Build and validate `PaperSourceRevision`, including content-addressed asset references and blobs.
 4. Chunk each page with LlamaIndex while retaining page and character spans.
 5. Build and validate `PaperChunkSet` with code-owned IDs and membership.
-6. Give a coordinator agent the bounded chunk manifest and a research-agent tool.
-7. Require the coordinator to delegate complete chunk coverage to one or more bounded research subagents, with independent ranges eligible for parallel execution.
-8. Let the coordinator synthesize typed worker reports and make bounded overlapping follow-up calls when needed.
+6. Tile the chunk set into fixed-size research groups in code, so every chunk is covered exactly once.
+7. Fan out one bounded research agent per group (bounded concurrency), each returning typed findings for its own range only.
+8. Run one reducer agent over the collected findings to synthesize the summary draft.
 9. Resolve model-returned chunk/page coordinates into canonical citations in code.
 10. Build and validate `PaperGlobalSummary` and the cross-artifact `PaperFlowResult`.
+
+Steps 3, 5, 9, and 10 mint no IDs in the flow: the flow calls the knowledge-layer smart constructors `PaperSourceRevision.from_parsed`, `PaperChunkSet.from_parsed_chunks`, and `PaperGlobalSummary.from_draft`, which own every ID, content/producer hash, and citation resolution. The flow only fetches, parses, reads asset bytes, and maps those path-based artifacts into knowledge-native inputs. See [orchestration principles](../operations/orchestration.md).
 
 A summarization failure occurs after source and chunks exist in memory, but `paper_flow` returns no partial success value. Persistence is a separate explicit operation.
 
@@ -92,27 +94,25 @@ Code accepts the draft only when:
 - every chunk index exists;
 - every cited page is present in that chunk's source spans;
 - every supplied quote occurs verbatim in the cited chunk;
-- citation count meets `summary_min_citations`;
-- distinct cited-page count meets `summary_min_pages`.
+- citation count meets `min_summary_citations`;
+- distinct cited-page count meets `min_summary_pages`.
 
-Code then creates `PaperCitation` values and a `PaperGlobalSummary`. Its producer identity includes model, prompt version, input chunk-set ID, instructions hash, and maximum output tokens. Its lineage contains the exact input chunk-set locator. Summary citations must resolve through that chunk set to source pages.
+`PaperGlobalSummary.from_draft` performs this resolution and coverage check and then mints the artifact; the flow supplies only the draft and the coverage policy. Its producer identity includes model, prompt version, input chunk-set ID, instructions hash, maximum output tokens, and research group size. Its lineage contains the exact input chunk-set locator. Summary citations must resolve through that chunk set to source pages.
 
 ## Bounded Model Calls
 
-`PaperFlowCfg` makes coordinator and nested-research bounds explicit:
+Summarization is a deterministic map-reduce, not an autonomous coordinator. Code — not a model — decides the decomposition: it tiles the chunk set into `summary_research_group_size` groups and runs one research agent per group, so complete chunk coverage is guaranteed by construction and never needs to be reconciled afterward.
 
-- `max_summary_tool_calls` caps research-subagent invocations, including focused follow-ups;
-- `max_summary_concurrency` bounds simultaneous research-subagent runs;
-- `max_summary_worker_turns` caps each nested agent run;
-- `max_summary_worker_output_tokens` caps each structured worker report;
-- `max_summary_input_tokens` caps the manifest, worker chunk inputs, and worker reports returned to the coordinator;
-- `max_summary_output_tokens` caps the coordinator's final structured response;
-- `max_summary_total_output_tokens` caps worker reports and final output together;
-- `max_turns` caps coordinator turns and defaults to 16;
-- `timeout_seconds` bounds the complete summarization operation;
+`PaperFlowCfg` exposes only structural bounds:
+
+- `summary_research_group_size` sets how many consecutive chunks each research agent receives;
+- `summary_concurrency` bounds simultaneous research-agent runs;
+- `max_summary_output_tokens` caps each agent's output through `ModelSettings.max_tokens`;
+- `timeout_seconds` bounds the reducer call via `asyncio.wait_for`;
+- `min_summary_citations` and `min_summary_pages` set the accepted-summary coverage policy;
 - `summary_prompt_version` and `summary_instructions` version the semantic producer.
 
-The coordinator uses the Agents SDK manager-style pattern: `paper_chunk_researcher` is exposed through `Agent.as_tool()`, so the coordinator retains responsibility for the final summary while each specialist receives only its requested range. The manifest provides code-generated groups of at most eight consecutive chunks. Independent calls may run in parallel, and the coordinator may request bounded overlapping follow-up research. Code rejects missing full-chunk coverage, out-of-scope worker citations, invalid pages or quotes, and any call, concurrency, token, or runtime excess.
+Bounding is delegated to the Agents SDK (per-agent `max_tokens`, structured `output_type`) and to `asyncio` (a `Semaphore` for concurrency, `wait_for` for the timeout). There is no hand-rolled token accountant, no coordinator agent, and no `Agent.as_tool()` research tool. The removed manager/worker design paid for an autonomous coordinator and then suppressed its nondeterminism with a concurrency-safe budget — exactly the runtime the SDK already provides. [Orchestration principles](../operations/orchestration.md) records when the agentic pattern is warranted instead.
 
 ## Failure Semantics
 
@@ -121,7 +121,7 @@ The coordinator uses the Agents SDK manager-style pattern: `paper_chunk_research
 - Fetching, parsing, or missing parser assets raise their source error and produce no result.
 - Empty chunk output is invalid.
 - Invalid or insufficient summary citations raise `PaperCitationValidationError`.
-- Missing worker coverage, invalid worker evidence, and call, token, output, concurrency, or timeout violations fail the summary operation.
+- A research finding that cites outside its assigned group is rejected in code; a reducer timeout raises `PaperSummaryError`.
 - Any canonical identity, content hash, membership, lineage, or cross-artifact mismatch fails Pydantic validation.
 
 No failure is converted into a partially valid `PaperFlowResult`. Callers may retry with the same source and producer settings; stable IDs make successful repeated runs idempotent.

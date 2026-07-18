@@ -55,21 +55,25 @@ PaperInput = Annotated[
 
 
 class PaperFlowCfg(BaseFlowCfg):
-    """Chunking, summarization, and hard-budget controls for ``paper_flow``."""
+    """Chunking and summarization controls for ``paper_flow``.
+
+    Summarization is a deterministic map-reduce: code tiles the chunk set into
+    ``summary_research_group_size`` groups (so coverage is guaranteed by
+    construction), fans out one research agent per group with
+    ``summary_concurrency`` parallelism, then runs one reducer. Per-agent output
+    is bounded by ``max_summary_output_tokens`` through ``ModelSettings``; there
+    is no hand-rolled token accountant.
+    """
 
     model: str = "gpt-4o-mini"
     max_turns: int = Field(default=16, ge=1)
     chunk_size: int = Field(default=512, gt=0)
     chunk_overlap: int = Field(default=64, ge=0)
-    summary_prompt_version: str = "paper-summary-v2"
+    summary_prompt_version: str = "paper-summary-v3"
     summary_instructions: str | None = None
-    max_summary_tool_calls: int = Field(default=12, ge=1)
-    max_summary_concurrency: int = Field(default=2, ge=1)
-    max_summary_worker_turns: int = Field(default=4, ge=1)
-    max_summary_worker_output_tokens: int = Field(default=1_536, ge=1)
-    max_summary_input_tokens: int = Field(default=120_000, ge=1)
-    max_summary_output_tokens: int = Field(default=4_096, ge=1)
-    max_summary_total_output_tokens: int = Field(default=20_000, ge=1)
+    summary_research_group_size: int = Field(default=8, ge=1)
+    summary_concurrency: int = Field(default=4, ge=1)
+    max_summary_output_tokens: int = Field(default=4_096, gt=0)
     min_summary_citations: int = Field(default=3, ge=1)
     min_summary_pages: int = Field(default=2, ge=1)
 
@@ -80,18 +84,5 @@ class PaperFlowCfg(BaseFlowCfg):
         if self.min_summary_pages > self.min_summary_citations:
             raise ValueError(
                 "min_summary_pages cannot exceed min_summary_citations"
-            )
-        if self.max_summary_concurrency > self.max_summary_tool_calls:
-            raise ValueError(
-                "max_summary_concurrency cannot exceed max_summary_tool_calls"
-            )
-        minimum_output_budget = (
-            self.max_summary_output_tokens
-            + self.max_summary_worker_output_tokens
-        )
-        if self.max_summary_total_output_tokens < minimum_output_budget:
-            raise ValueError(
-                "max_summary_total_output_tokens must reserve one worker "
-                "report and the final summary"
             )
         return self

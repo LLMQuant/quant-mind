@@ -1,6 +1,7 @@
 """Offline tests for source-first ``paper_flow`` behavior."""
 
 import asyncio
+import json
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,23 +21,22 @@ from quantmind.flows._paper_summary import (
     PaperResearchCitationDraft,
     PaperResearchDraft,
     PaperResearchFindingDraft,
-    PaperResearchRequest,
-    PaperSummaryBudgetExceeded,
     PaperSummaryCitationDraft,
     PaperSummaryDraft,
+    PaperSummaryError,
     _AgentsPaperSummaryProvider,
-    _bounded_model_settings,
-    _bounded_research_model_settings,
-    _build_research_agent_tool,
-    _SummaryBudget,
+    _chunk_groups,
+    _ChunkGroup,
+    _summary_model_settings,
+    _validate_research_draft,
 )
 from quantmind.flows.paper import (
-    PaperCitationValidationError,
     UnsupportedContentTypeError,
-    _build_global_summary,
+    _build_summary,
     _fetch_paper_source,
     paper_flow,
 )
+from quantmind.knowledge import PaperCitationValidationError
 from quantmind.preprocess.fetch import Fetched, RawPaper
 from tests.paper_helpers import build_paper_result
 
@@ -267,8 +267,7 @@ class CitationValidationTests(unittest.TestCase):
         for draft in invalid_drafts:
             with self.subTest(draft=draft):
                 with self.assertRaises(PaperCitationValidationError):
-                    _build_global_summary(
-                        result.source_revision,
+                    _build_summary(
                         result.chunk_set,
                         draft,
                         cfg,
@@ -287,190 +286,165 @@ class CitationValidationTests(unittest.TestCase):
             PaperCitationValidationError,
             "fewer citations",
         ):
-            _build_global_summary(
-                result.source_revision,
+            _build_summary(
                 result.chunk_set,
                 draft,
                 PaperFlowCfg(),
             )
 
 
-class SummaryBudgetTests(unittest.IsolatedAsyncioTestCase):
-    @staticmethod
-    def _research_draft(
-        result,
-        request: PaperResearchRequest,
-    ) -> PaperResearchDraft:
-        chunk = result.chunk_set.chunks[request.start]
-        page = chunk.source_spans[0].page_number
-        return PaperResearchDraft(
-            scope_summary=f"Reviewed chunk {request.start}.",
-            findings=(
-                PaperResearchFindingDraft(
-                    kind="method",
-                    claim=f"Finding from chunk {request.start}.",
-                    citation=PaperResearchCitationDraft(
-                        chunk_index=request.start,
-                        page_number=page,
-                    ),
+def _fake_research_run(cfg, source_pages):
+    """A run_with_observability stub: real worker drafts, one reducer draft."""
+
+    async def fake_run(agent, payload, *, cfg, memory, extra_run_hooks):
+        data = json.loads(payload)
+        if agent.name == "paper_chunk_researcher":
+            return PaperResearchDraft(
+                scope_summary="reviewed the assigned chunk group",
+                findings=tuple(
+                    PaperResearchFindingDraft(
+                        kind="method",
+                        claim=f"finding for chunk {chunk['chunk_index']}",
+                        citation=PaperResearchCitationDraft(
+                            chunk_index=chunk["chunk_index"],
+                            page_number=chunk["pages"][0],
+                        ),
+                    )
+                    for chunk in data["chunks"]
                 ),
-            ),
-        )
-
-    async def test_tool_call_and_input_budgets_are_enforced(self) -> None:
-        result = build_paper_result()
-        cfg = PaperFlowCfg(
-            max_summary_tool_calls=1,
-            max_summary_concurrency=1,
-            max_summary_input_tokens=10_000,
-        )
-        budget = _SummaryBudget(
-            cfg,
-            "manifest",
-            chunk_count=len(result.chunk_set.chunks),
-        )
-        first = PaperResearchRequest(start=0, count=1, focus="method")
-
-        async def first_operation():
-            return self._research_draft(result, first)
-
-        await budget.invoke_research(
-            result.source_revision,
-            result.chunk_set,
-            first,
-            first_operation,
-        )
-        second = PaperResearchRequest(start=1, count=1, focus="result")
-        with self.assertRaisesRegex(
-            PaperSummaryBudgetExceeded,
-            "tool_calls",
-        ):
-            await budget.invoke_research(
-                result.source_revision,
-                result.chunk_set,
-                second,
-                first_operation,
             )
-
-    async def test_concurrent_subagents_cover_every_chunk(self) -> None:
-        result = build_paper_result()
-        cfg = PaperFlowCfg(
-            max_summary_tool_calls=3,
-            max_summary_concurrency=2,
-            max_summary_input_tokens=10_000,
-        )
-        budget = _SummaryBudget(
-            cfg,
-            "manifest",
-            chunk_count=len(result.chunk_set.chunks),
-        )
-
-        async def run(index: int) -> str:
-            request = PaperResearchRequest(
-                start=index,
-                count=1,
-                focus=f"chunk {index}",
-            )
-
-            async def operation():
-                await asyncio.sleep(0)
-                return self._research_draft(result, request)
-
-            return await budget.invoke_research(
-                result.source_revision,
-                result.chunk_set,
-                request,
-                operation,
-            )
-
-        values = await asyncio.gather(
-            *(run(index) for index in range(len(result.chunk_set.chunks)))
-        )
-        self.assertEqual(len(values), 3)
-        self.assertEqual(budget.research_calls, 3)
-        self.assertEqual(budget.covered_chunks, frozenset({0, 1, 2}))
-        budget.require_complete_coverage(len(result.chunk_set.chunks))
-
-    async def test_missing_subagent_coverage_is_rejected(self) -> None:
-        result = build_paper_result()
-        cfg = PaperFlowCfg(max_summary_input_tokens=10_000)
-        budget = _SummaryBudget(
-            cfg,
-            "manifest",
-            chunk_count=len(result.chunk_set.chunks),
-        )
-
-        with self.assertRaisesRegex(
-            PaperSummaryBudgetExceeded,
-            "did not cover every chunk",
-        ):
-            budget.require_complete_coverage(len(result.chunk_set.chunks))
-
-    async def test_coordinator_without_delegation_is_rejected(self) -> None:
-        result = build_paper_result()
-        provider = _AgentsPaperSummaryProvider()
-        draft = PaperSummaryDraft(
-            summary="A summary that skipped its research workers.",
+        return PaperSummaryDraft(
+            summary="synthesized global summary across physical pages",
             citations=(
                 PaperSummaryCitationDraft(chunk_index=0, page_number=1),
             ),
         )
+
+    return fake_run
+
+
+class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
+    def test_chunk_groups_tile_every_chunk_exactly_once(self) -> None:
+        groups = _chunk_groups(7, 3)
+        self.assertEqual(
+            [(group.start, group.count) for group in groups],
+            [(0, 3), (3, 3), (6, 1)],
+        )
+        covered = [
+            index
+            for group in groups
+            for index in range(group.start, group.start + group.count)
+        ]
+        self.assertEqual(covered, list(range(7)))
+
+    def test_research_finding_outside_its_group_is_rejected(self) -> None:
+        result = build_paper_result()
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk only",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="method",
+                    claim="a finding pointing outside the assigned group",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=2,
+                        page_number=2,
+                    ),
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "outside its group"):
+            _validate_research_draft(
+                result.chunk_set,
+                _ChunkGroup(start=0, count=1),
+                draft,
+            )
+
+    def test_worker_and_reducer_output_is_capped(self) -> None:
+        capped = _summary_model_settings(
+            PaperFlowCfg(
+                max_summary_output_tokens=256,
+                model_settings=ModelSettings(max_tokens=1024),
+            )
+        )
+        self.assertEqual(capped.max_tokens, 256)
+        lower = _summary_model_settings(
+            PaperFlowCfg(
+                max_summary_output_tokens=256,
+                model_settings=ModelSettings(max_tokens=128),
+            )
+        )
+        self.assertEqual(lower.max_tokens, 128)
+
+    async def test_map_reduce_fans_out_one_worker_per_group(self) -> None:
+        result = build_paper_result()
         cfg = PaperFlowCfg(
+            summary_research_group_size=1,
+            summary_concurrency=2,
+            min_summary_citations=1,
+            min_summary_pages=1,
+        )
+        run_mock = AsyncMock(
+            side_effect=_fake_research_run(
+                cfg, result.source_revision.parsed.pages
+            )
+        )
+        with patch(
+            "quantmind.flows._paper_summary.run_with_observability",
+            new=run_mock,
+        ):
+            draft = await _AgentsPaperSummaryProvider().summarize(
+                result.source_revision,
+                result.chunk_set,
+                cfg=cfg,
+            )
+
+        self.assertIsInstance(draft, PaperSummaryDraft)
+        worker_calls = [
+            call.args[0].name
+            for call in run_mock.await_args_list
+            if call.args[0].name == "paper_chunk_researcher"
+        ]
+        self.assertEqual(len(worker_calls), len(result.chunk_set.chunks))
+        self.assertEqual(run_mock.await_count, len(result.chunk_set.chunks) + 1)
+
+    async def test_summary_timeout_raises(self) -> None:
+        result = build_paper_result()
+        cfg = PaperFlowCfg(
+            summary_research_group_size=8,
+            timeout_seconds=0.01,
             min_summary_citations=1,
             min_summary_pages=1,
         )
 
+        async def fake_run(agent, payload, *, cfg, memory, extra_run_hooks):
+            data = json.loads(payload)
+            if agent.name == "paper_chunk_researcher":
+                return PaperResearchDraft(
+                    scope_summary="reviewed the assigned chunk group",
+                    findings=tuple(
+                        PaperResearchFindingDraft(
+                            kind="method",
+                            claim=f"finding for chunk {chunk['chunk_index']}",
+                            citation=PaperResearchCitationDraft(
+                                chunk_index=chunk["chunk_index"],
+                                page_number=chunk["pages"][0],
+                            ),
+                        )
+                        for chunk in data["chunks"]
+                    ),
+                )
+            await asyncio.sleep(10)
+
         with patch(
             "quantmind.flows._paper_summary.run_with_observability",
-            new=AsyncMock(return_value=draft),
+            new=AsyncMock(side_effect=fake_run),
         ):
-            with self.assertRaisesRegex(
-                PaperSummaryBudgetExceeded,
-                "did not cover every chunk",
-            ):
-                await provider.summarize(
+            with self.assertRaises(PaperSummaryError):
+                await _AgentsPaperSummaryProvider().summarize(
                     result.source_revision,
                     result.chunk_set,
                     cfg=cfg,
                 )
-
-    def test_researcher_is_an_agents_sdk_agent_tool(self) -> None:
-        result = build_paper_result()
-        cfg = PaperFlowCfg()
-        budget = _SummaryBudget(
-            cfg,
-            "manifest",
-            chunk_count=len(result.chunk_set.chunks),
-        )
-
-        tool = _build_research_agent_tool(
-            result.source_revision,
-            result.chunk_set,
-            cfg,
-            budget,
-        )
-
-        self.assertEqual(tool.name, "research_chunk_group")
-        self.assertTrue(tool._is_agent_tool)
-        self.assertEqual(
-            set(tool.params_json_schema["properties"]),
-            {"start", "count", "focus"},
-        )
-
-    def test_model_output_tokens_are_capped(self) -> None:
-        cfg = PaperFlowCfg(
-            max_summary_output_tokens=256,
-            max_summary_worker_output_tokens=128,
-            model_settings=ModelSettings(max_tokens=1024),
-        )
-
-        settings = _bounded_model_settings(cfg)
-        research_settings = _bounded_research_model_settings(cfg)
-
-        self.assertEqual(settings.max_tokens, 256)
-        self.assertTrue(settings.parallel_tool_calls)
-        self.assertEqual(research_settings.max_tokens, 128)
-        self.assertFalse(research_settings.parallel_tool_calls)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,15 @@
-"""Source-first paper flow that returns chunks before a cited summary."""
+"""Source-first paper flow that returns chunks before a cited summary.
 
-import hashlib
+The flow is deliberately thin. It owns only what genuinely needs both the
+preprocess/rag value objects and IO: fetching bytes, parsing the PDF, reading
+page-asset bytes off disk, and mapping those ephemeral, path-based artifacts
+into knowledge-native inputs. All identity (IDs, content and producer hashes,
+citation resolution) lives on the knowledge models' ``from_*`` constructors,
+so this module imports no private ID helpers and computes no paper ID itself.
+"""
+
 import mimetypes
-from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
@@ -24,32 +31,19 @@ from quantmind.flows._paper_summary import (
     _summary_instructions_hash,
 )
 from quantmind.knowledge import (
-    ArtifactLocator,
-    PaperAssetRef,
+    PaperAssetInput,
     PaperBoundingBox,
-    PaperChunk,
     PaperChunkingConfig,
+    PaperChunkInput,
     PaperChunkSet,
-    PaperCitation,
+    PaperCitationDraft,
     PaperFlowResult,
     PaperGlobalSummary,
+    PaperPageInput,
     PaperParsedBlock,
-    PaperParsedManifest,
-    PaperParsedPage,
+    PaperSourceFacts,
     PaperSourceRevision,
-    PaperSourceSpan,
     PaperSummaryProducer,
-    SourceRef,
-)
-from quantmind.knowledge.paper import (
-    _paper_artifact_id,
-    _paper_asset_id,
-    _paper_chunk_id,
-    _paper_chunk_set_content_hash,
-    _paper_source_id,
-    _paper_summary_content_hash,
-    _stable_hash,
-    _text_hash,
 )
 from quantmind.preprocess.fetch import (
     Fetched,
@@ -59,31 +53,15 @@ from quantmind.preprocess.fetch import (
     read_local_file,
 )
 from quantmind.preprocess.format import ParsedDocument, parse_pdf
-from quantmind.rag import SentenceSplitterConfig, chunk_parsed_document
+from quantmind.rag import (
+    ParsedChunk,
+    SentenceSplitterConfig,
+    chunk_parsed_document,
+)
 
 
 class UnsupportedContentTypeError(ValueError):
     """The source is not a page-aware PDF supported by Paper Flow V1."""
-
-
-class PaperCitationValidationError(ValueError):
-    """A generated summary did not provide valid source coverage."""
-
-
-@dataclass(frozen=True)
-class _FetchedPaperSource:
-    """Exact fetched bytes and code-owned source facts before parsing."""
-
-    bytes: bytes
-    media_type: str
-    kind: Literal["arxiv", "http", "local"]
-    uri: str
-    fetched_at: datetime
-    available_at: datetime
-    published_at: datetime | None = None
-    arxiv_id: str | None = None
-    title: str | None = None
-    authors: tuple[str, ...] = ()
 
 
 async def paper_flow(
@@ -95,12 +73,12 @@ async def paper_flow(
     """Build a page-aware chunk set and one cited global summary.
 
     IDs, source metadata, artifact membership, lineage, and citation links are
-    created and validated by code. The model returns only summary prose and
-    chunk/page coordinates through a bounded summarization seam.
+    minted and validated by the knowledge-layer constructors. The model returns
+    only summary prose and chunk/page coordinates through a bounded seam.
 
     Args:
         input: Typed paper source. V1 requires a PDF-backed input.
-        cfg: Splitter, summary model, and explicit usage/runtime limits.
+        cfg: Splitter, summary model, and usage/runtime limits.
 
     Returns:
         The exact source revision, one chunk-set artifact, and one cited
@@ -108,17 +86,21 @@ async def paper_flow(
 
     Raises:
         UnsupportedContentTypeError: If the resolved content is not a PDF.
-        PaperCitationValidationError: If generated citations are invalid or
-            do not meet configured source-coverage requirements.
+        PaperCitationValidationError: If generated citations are invalid or do
+            not meet the configured source-coverage policy.
         NotImplementedError: If a DOI input has no exact open PDF resolver.
     """
     cfg = cfg or PaperFlowCfg()
-    fetched = await _fetch_paper_source(input)
-    parsed = await parse_pdf(
-        fetched.bytes,
-        artifact_dir=cfg.output_dir,
+    facts = await _fetch_paper_source(input)
+    parsed = await parse_pdf(facts.raw_bytes, artifact_dir=cfg.output_dir)
+    source = PaperSourceRevision.from_parsed(
+        facts=facts,
+        source_hash=parsed.source_hash,
+        parser_name=parsed.parser_name,
+        parser_version=parsed.parser_version,
+        cleanup_version=parsed.cleanup_version,
+        pages=_adapt_pages(parsed),
     )
-    source = _build_source_revision(fetched, parsed)
     parsed_chunks = chunk_parsed_document(
         parsed,
         config=SentenceSplitterConfig(
@@ -126,10 +108,19 @@ async def paper_flow(
             chunk_overlap=cfg.chunk_overlap,
         ),
     )
-    chunk_set = _build_chunk_set(source, parsed_chunks, cfg)
+    producer = PaperChunkingConfig(
+        splitter_version=version("llama-index-core"),
+        chunk_size=cfg.chunk_size,
+        chunk_overlap=cfg.chunk_overlap,
+    )
+    chunk_set = PaperChunkSet.from_parsed_chunks(
+        source,
+        _adapt_chunks(parsed_chunks, source),
+        producer=producer,
+    )
     provider = _summary_provider or _AgentsPaperSummaryProvider()
     draft = await provider.summarize(source, chunk_set, cfg=cfg)
-    summary = _build_global_summary(source, chunk_set, draft, cfg)
+    summary = _build_summary(chunk_set, draft, cfg)
     return PaperFlowResult(
         source_revision=source,
         chunk_set=chunk_set,
@@ -154,7 +145,8 @@ def _require_pdf(raw: Fetched) -> None:
         )
 
 
-async def _fetch_paper_source(input: PaperInput) -> _FetchedPaperSource:
+async def _fetch_paper_source(input: PaperInput) -> PaperSourceFacts:
+    """Fetch and normalize one input into code-owned source facts (IO)."""
     if isinstance(input, ArxivIdentifier):
         raw_paper: RawPaper = await fetch_arxiv(input.id)
         _require_pdf(raw_paper)
@@ -165,11 +157,11 @@ async def _fetch_paper_source(input: PaperInput) -> _FetchedPaperSource:
         uri = raw_paper.resolved_url or raw_paper.source_url
         if uri is None:
             raise ValueError("resolved arXiv paper is missing its source URL")
-        return _FetchedPaperSource(
-            bytes=raw_paper.bytes,
-            media_type="application/pdf",
+        return PaperSourceFacts(
             kind="arxiv",
             uri=uri,
+            media_type="application/pdf",
+            raw_bytes=raw_paper.bytes,
             fetched_at=fetched_at,
             available_at=available_at,
             published_at=raw_paper.published_at,
@@ -181,11 +173,11 @@ async def _fetch_paper_source(input: PaperInput) -> _FetchedPaperSource:
         raw_http = await fetch_url(input.url)
         _require_pdf(raw_http)
         fetched_at = _aware_or_now(raw_http.fetched_at)
-        return _FetchedPaperSource(
-            bytes=raw_http.bytes,
-            media_type="application/pdf",
+        return PaperSourceFacts(
             kind="http",
             uri=raw_http.resolved_url or raw_http.source_url or input.url,
+            media_type="application/pdf",
+            raw_bytes=raw_http.bytes,
             fetched_at=fetched_at,
             available_at=fetched_at,
         )
@@ -194,11 +186,11 @@ async def _fetch_paper_source(input: PaperInput) -> _FetchedPaperSource:
         _require_pdf(raw_local)
         observed_at = _aware_or_now(raw_local.fetched_at)
         path = Path(input.path).expanduser().resolve()
-        return _FetchedPaperSource(
-            bytes=raw_local.bytes,
-            media_type="application/pdf",
+        return PaperSourceFacts(
             kind="local",
             uri=raw_local.source_url or path.as_uri(),
+            media_type="application/pdf",
+            raw_bytes=raw_local.bytes,
             fetched_at=observed_at,
             available_at=observed_at,
         )
@@ -215,15 +207,13 @@ async def _fetch_paper_source(input: PaperInput) -> _FetchedPaperSource:
     raise TypeError(f"Unsupported PaperInput variant: {type(input)!r}")
 
 
-def _asset_from_path(
+def _read_page_asset(
     path_value: str,
     *,
-    source_revision_id,
     kind: Literal["screenshot", "image"],
     page_number: int,
-    assets: dict,
-    blobs: dict[str, bytes],
-) -> PaperAssetRef:
+) -> PaperAssetInput:
+    """Read one parser-written page asset off disk into knowledge input (IO)."""
     path = Path(path_value)
     try:
         content = path.read_bytes()
@@ -231,286 +221,114 @@ def _asset_from_path(
         raise RuntimeError(
             f"Parser asset for page {page_number} is missing: {path}"
         ) from exc
-    content_hash = hashlib.sha256(content).hexdigest()
     media_type = (
         mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     )
-    asset = PaperAssetRef(
-        asset_id=_paper_asset_id(
-            source_revision_id,
-            kind=kind,
-            page_number=page_number,
-            content_hash=content_hash,
-        ),
-        kind=kind,
-        media_type=media_type,
-        content_hash=content_hash,
-        size_bytes=len(content),
-        page_number=page_number,
-    )
-    assets[asset.asset_id] = asset
-    blobs[content_hash] = content
-    return asset
+    return PaperAssetInput(kind=kind, content=content, media_type=media_type)
 
 
-def _build_source_revision(
-    fetched: _FetchedPaperSource,
-    parsed: ParsedDocument,
-) -> PaperSourceRevision:
-    source_id = _paper_source_id(parsed.source_hash)
-    blobs = {parsed.source_hash: fetched.bytes}
-    raw = PaperAssetRef(
-        asset_id=_paper_asset_id(
-            source_id,
-            kind="raw",
-            page_number=None,
-            content_hash=parsed.source_hash,
-        ),
-        kind="raw",
-        media_type=fetched.media_type,
-        content_hash=parsed.source_hash,
-        size_bytes=len(fetched.bytes),
-    )
-    assets = {raw.asset_id: raw}
-    pages: list[PaperParsedPage] = []
+def _adapt_pages(parsed: ParsedDocument) -> list[PaperPageInput]:
+    """Map path-based parsed pages into knowledge-native page inputs."""
+    pages: list[PaperPageInput] = []
     for page in parsed.pages:
+        blocks = tuple(
+            PaperParsedBlock(
+                text=block.text,
+                bbox=PaperBoundingBox(
+                    x0=block.bbox.x0,
+                    y0=block.bbox.y0,
+                    x1=block.bbox.x1,
+                    y1=block.bbox.y1,
+                ),
+                font_name=block.font_name,
+                font_size=block.font_size,
+                confidence=block.confidence,
+            )
+            for block in page.blocks
+        )
         screenshot = (
-            _asset_from_path(
+            _read_page_asset(
                 page.screenshot_path,
-                source_revision_id=source_id,
                 kind="screenshot",
                 page_number=page.page_number,
-                assets=assets,
-                blobs=blobs,
             )
             if page.screenshot_path is not None
             else None
         )
         images = tuple(
-            _asset_from_path(
+            _read_page_asset(
                 image_path,
-                source_revision_id=source_id,
                 kind="image",
                 page_number=page.page_number,
-                assets=assets,
-                blobs=blobs,
             )
             for image_path in page.image_paths
         )
         pages.append(
-            PaperParsedPage(
+            PaperPageInput(
                 page_number=page.page_number,
                 width=page.width,
                 height=page.height,
                 text=page.text,
-                blocks=tuple(
-                    PaperParsedBlock(
-                        text=block.text,
-                        bbox=PaperBoundingBox(
-                            x0=block.bbox.x0,
-                            y0=block.bbox.y0,
-                            x1=block.bbox.x1,
-                            y1=block.bbox.y1,
-                        ),
-                        font_name=block.font_name,
-                        font_size=block.font_size,
-                        confidence=block.confidence,
-                    )
-                    for block in page.blocks
-                ),
-                screenshot_asset_id=(
-                    screenshot.asset_id if screenshot is not None else None
-                ),
-                image_asset_ids=tuple(image.asset_id for image in images),
+                blocks=blocks,
+                screenshot=screenshot,
+                images=images,
             )
         )
-    source_ref = SourceRef(
-        kind=fetched.kind,
-        uri=fetched.uri,
-        fetched_at=fetched.fetched_at,
-        content_hash=parsed.source_hash,
-    )
-    return PaperSourceRevision(
-        id=source_id,
-        source=source_ref,
-        as_of=fetched.published_at or fetched.available_at,
-        available_at=fetched.available_at,
-        published_at=fetched.published_at,
-        arxiv_id=fetched.arxiv_id,
-        title=fetched.title,
-        authors=fetched.authors,
-        parsed=PaperParsedManifest(
-            source_hash=parsed.source_hash,
-            parser_name=parsed.parser_name,
-            parser_version=parsed.parser_version,
-            cleanup_version=parsed.cleanup_version,
-            pages=tuple(pages),
-        ),
-        raw_asset_id=raw.asset_id,
-        assets=tuple(assets.values()),
-        blobs=blobs,
-    )
+    return pages
 
 
-def _build_chunk_set(
+def _adapt_chunks(
+    parsed_chunks: Sequence[ParsedChunk],
     source: PaperSourceRevision,
-    parsed_chunks,
-    cfg: PaperFlowCfg,
-) -> PaperChunkSet:
-    producer = PaperChunkingConfig(
-        splitter_version=version("llama-index-core"),
-        chunk_size=cfg.chunk_size,
-        chunk_overlap=cfg.chunk_overlap,
-    )
-    producer_hash = _stable_hash(producer.model_dump(mode="json"))
-    artifact_id = _paper_artifact_id(
-        source.id,
-        "paper_chunk_set",
-        producer_hash,
-    )
-    page_assets = {
-        page.page_number: tuple(
-            asset_id
-            for asset_id in (
-                (page.screenshot_asset_id,)
-                if page.screenshot_asset_id is not None
-                else ()
-            )
-            + page.image_asset_ids
-        )
-        for page in source.parsed.pages
-    }
-    chunks: list[PaperChunk] = []
-    for position, parsed_chunk in enumerate(parsed_chunks):
-        if parsed_chunk.source_hash != source.source.content_hash:
+) -> list[PaperChunkInput]:
+    """Map splitter chunks into knowledge-native chunk inputs."""
+    content_hash = source.source.content_hash
+    chunks: list[PaperChunkInput] = []
+    for parsed_chunk in parsed_chunks:
+        if parsed_chunk.source_hash != content_hash:
             raise ValueError("parsed chunk belongs to another source revision")
-        span = PaperSourceSpan(
-            page_number=parsed_chunk.page_number,
-            start_char=parsed_chunk.start_char,
-            end_char=parsed_chunk.end_char,
-            block_boxes=tuple(
-                PaperBoundingBox(
-                    x0=box.x0,
-                    y0=box.y0,
-                    x1=box.x1,
-                    y1=box.y1,
-                )
-                for box in parsed_chunk.block_boxes
-            ),
-            asset_ids=page_assets.get(parsed_chunk.page_number, ()),
-        )
-        content_hash = _text_hash(parsed_chunk.text)
         chunks.append(
-            PaperChunk(
-                chunk_id=_paper_chunk_id(
-                    artifact_id,
-                    position=position,
-                    content_hash=content_hash,
-                    spans=(span,),
+            PaperChunkInput(
+                page_number=parsed_chunk.page_number,
+                start_char=parsed_chunk.start_char,
+                end_char=parsed_chunk.end_char,
+                block_boxes=tuple(
+                    PaperBoundingBox(x0=box.x0, y0=box.y0, x1=box.x1, y1=box.y1)
+                    for box in parsed_chunk.block_boxes
                 ),
-                chunk_set_id=artifact_id,
-                source_revision_id=source.id,
-                position=position,
                 text=parsed_chunk.text,
-                content_hash=content_hash,
-                source_spans=(span,),
             )
         )
-    if not chunks:
-        raise ValueError("paper source produced no non-empty chunks")
-    chunk_tuple = tuple(chunks)
-    return PaperChunkSet(
-        id=artifact_id,
-        source_revision_id=source.id,
-        producer=producer,
-        producer_config_hash=producer_hash,
-        content_hash=_paper_chunk_set_content_hash(chunk_tuple),
-        chunks=chunk_tuple,
-    )
+    return chunks
 
 
-def _build_global_summary(
-    source: PaperSourceRevision,
+def _build_summary(
     chunk_set: PaperChunkSet,
     draft: PaperSummaryDraft,
     cfg: PaperFlowCfg,
 ) -> PaperGlobalSummary:
-    citations: list[PaperCitation] = []
-    seen: set[tuple[int, int, str | None]] = set()
-    for draft_citation in draft.citations:
-        try:
-            chunk = chunk_set.chunks[draft_citation.chunk_index]
-        except IndexError as exc:
-            raise PaperCitationValidationError(
-                "paper summary cites an unknown chunk index"
-            ) from exc
-        pages = {span.page_number for span in chunk.source_spans}
-        if draft_citation.page_number not in pages:
-            raise PaperCitationValidationError(
-                "paper summary citation page is not owned by its chunk"
-            )
-        quote = draft_citation.quote
-        if quote is not None and quote not in chunk.text:
-            raise PaperCitationValidationError(
-                "paper summary citation quote is not present in its chunk"
-            )
-        key = (draft_citation.chunk_index, draft_citation.page_number, quote)
-        if key in seen:
-            continue
-        seen.add(key)
-        citations.append(
-            PaperCitation(
-                chunk_set_id=chunk_set.id,
-                chunk_id=chunk.chunk_id,
-                page_number=draft_citation.page_number,
-                quote=quote,
-            )
-        )
-    cited_pages = {citation.page_number for citation in citations}
-    if len(citations) < cfg.min_summary_citations:
-        raise PaperCitationValidationError(
-            "paper summary has fewer citations than min_summary_citations"
-        )
-    if len(cited_pages) < cfg.min_summary_pages:
-        raise PaperCitationValidationError(
-            "paper summary has fewer source pages than min_summary_pages"
-        )
-
+    """Assemble the summary producer and delegate identity to the model."""
     producer = PaperSummaryProducer(
         model=cfg.model,
         prompt_version=cfg.summary_prompt_version,
         input_chunk_set_id=chunk_set.id,
         instructions_hash=_summary_instructions_hash(cfg),
         max_output_tokens=cfg.max_summary_output_tokens,
-        max_research_calls=cfg.max_summary_tool_calls,
-        max_research_concurrency=cfg.max_summary_concurrency,
-        research_max_turns=cfg.max_summary_worker_turns,
-        research_max_output_tokens=cfg.max_summary_worker_output_tokens,
+        research_group_size=cfg.summary_research_group_size,
     )
-    producer_hash = _stable_hash(producer.model_dump(mode="json"))
-    artifact_id = _paper_artifact_id(
-        source.id,
-        "paper_summary",
-        producer_hash,
+    citations = tuple(
+        PaperCitationDraft(
+            chunk_index=citation.chunk_index,
+            page_number=citation.page_number,
+            quote=citation.quote,
+        )
+        for citation in draft.citations
     )
-    citation_tuple = tuple(citations)
-    summary_text = draft.summary.strip()
-    return PaperGlobalSummary(
-        id=artifact_id,
-        source_revision_id=source.id,
+    return PaperGlobalSummary.from_draft(
+        chunk_set,
         producer=producer,
-        producer_config_hash=producer_hash,
-        content_hash=_paper_summary_content_hash(
-            summary_text,
-            citation_tuple,
-        ),
-        summary=summary_text,
-        citations=citation_tuple,
-        derived_from=(
-            ArtifactLocator(
-                source_revision_id=source.id,
-                artifact_id=chunk_set.id,
-                artifact_kind="paper_chunk_set",
-            ),
-        ),
+        summary=draft.summary,
+        citations=citations,
+        min_citations=cfg.min_summary_citations,
+        min_pages=cfg.min_summary_pages,
     )

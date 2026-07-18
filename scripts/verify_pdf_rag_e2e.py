@@ -58,13 +58,9 @@ async def _run_vertical_slice() -> dict[str, Any]:
                 model="gpt-4o-mini",
                 output_dir=str(root / "assets"),
                 timeout_seconds=240,
-                max_summary_tool_calls=12,
-                max_summary_concurrency=2,
-                max_summary_worker_turns=4,
-                max_summary_worker_output_tokens=1_536,
-                max_summary_input_tokens=120_000,
+                summary_research_group_size=8,
+                summary_concurrency=2,
                 max_summary_output_tokens=4_096,
-                max_summary_total_output_tokens=20_000,
                 min_summary_citations=3,
                 min_summary_pages=2,
             ),
@@ -207,7 +203,7 @@ def _passed(snapshot: dict[str, Any]) -> bool:
         and snapshot["chunk_asset_reference_count"] > 0
         and snapshot["chunk_count"] > 0
         and snapshot["summary"]
-        and snapshot["summary_orchestration"] == "manager-research-agents-v1"
+        and snapshot["summary_orchestration"] == "map-reduce-v1"
         and snapshot["citation_count"] >= 3
         and len(snapshot["citation_pages"]) >= 2
         and snapshot["first_summary_scores"]

@@ -3,6 +3,8 @@
 import hashlib
 import json
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Literal
@@ -72,6 +74,40 @@ def _paper_asset_id(
     )
 
 
+class PaperCitationValidationError(ValueError):
+    """A generated summary did not provide valid source coverage."""
+
+
+@dataclass(frozen=True)
+class PaperSourceFacts:
+    """Code-owned source facts normalized by the flow before construction.
+
+    Everything here comes from fetching and IO rather than the parser or the
+    model, so identity construction can stay inside the knowledge layer while
+    fetching stays in the flow.
+    """
+
+    kind: Literal["arxiv", "http", "local"]
+    uri: str
+    media_type: str
+    raw_bytes: bytes
+    fetched_at: datetime
+    available_at: datetime
+    published_at: datetime | None = None
+    arxiv_id: str | None = None
+    title: str | None = None
+    authors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PaperAssetInput:
+    """Raw bytes for one page-level visual asset, pre-read by the flow."""
+
+    kind: Literal["screenshot", "image"]
+    content: bytes
+    media_type: str
+
+
 class PaperBoundingBox(BaseModel):
     """One source rectangle in top-left-origin page coordinates."""
 
@@ -87,6 +123,17 @@ class PaperBoundingBox(BaseModel):
         if self.x1 < self.x0 or self.y1 < self.y0:
             raise ValueError("bounding-box coordinates must be ordered")
         return self
+
+
+@dataclass(frozen=True)
+class PaperChunkInput:
+    """One splitter-produced chunk in knowledge-native form."""
+
+    page_number: int
+    start_char: int
+    end_char: int
+    block_boxes: tuple[PaperBoundingBox, ...]
+    text: str
 
 
 class PaperAssetRef(BaseModel):
@@ -112,6 +159,19 @@ class PaperParsedBlock(BaseModel):
     font_name: str | None = None
     font_size: float | None = None
     confidence: float | None = None
+
+
+@dataclass(frozen=True)
+class PaperPageInput:
+    """One parsed page plus pre-read visual-asset bytes for construction."""
+
+    page_number: int
+    width: float
+    height: float
+    text: str
+    blocks: tuple[PaperParsedBlock, ...] = ()
+    screenshot: PaperAssetInput | None = None
+    images: tuple[PaperAssetInput, ...] = ()
 
 
 class PaperParsedPage(BaseModel):
@@ -250,6 +310,114 @@ class PaperSourceRevision(BaseModel):
             raise RuntimeError(
                 f"Paper asset '{asset_id}' bytes are not loaded"
             ) from exc
+
+    @classmethod
+    def from_parsed(
+        cls,
+        *,
+        facts: PaperSourceFacts,
+        source_hash: str,
+        parser_name: str,
+        parser_version: str,
+        cleanup_version: str,
+        pages: Sequence[PaperPageInput],
+    ) -> "PaperSourceRevision":
+        """Build a source revision, minting every content-addressed ID.
+
+        The flow supplies normalized ``facts`` and pre-read page bytes; this
+        constructor owns all identity (source ID, asset IDs) so callers never
+        compute a paper ID themselves.
+        """
+        source_id = _paper_source_id(source_hash)
+        blobs: dict[str, bytes] = {source_hash: facts.raw_bytes}
+        raw = PaperAssetRef(
+            asset_id=_paper_asset_id(
+                source_id,
+                kind="raw",
+                page_number=None,
+                content_hash=source_hash,
+            ),
+            kind="raw",
+            media_type=facts.media_type,
+            content_hash=source_hash,
+            size_bytes=len(facts.raw_bytes),
+        )
+        assets: dict[UUID, PaperAssetRef] = {raw.asset_id: raw}
+        parsed_pages: list[PaperParsedPage] = []
+        for page in pages:
+            screenshot_id: UUID | None = None
+            if page.screenshot is not None:
+                screenshot_id = cls._register_asset(
+                    source_id, page.page_number, page.screenshot, assets, blobs
+                ).asset_id
+            image_ids = tuple(
+                cls._register_asset(
+                    source_id, page.page_number, image, assets, blobs
+                ).asset_id
+                for image in page.images
+            )
+            parsed_pages.append(
+                PaperParsedPage(
+                    page_number=page.page_number,
+                    width=page.width,
+                    height=page.height,
+                    text=page.text,
+                    blocks=page.blocks,
+                    screenshot_asset_id=screenshot_id,
+                    image_asset_ids=image_ids,
+                )
+            )
+        return cls(
+            id=source_id,
+            source=SourceRef(
+                kind=facts.kind,
+                uri=facts.uri,
+                fetched_at=facts.fetched_at,
+                content_hash=source_hash,
+            ),
+            as_of=facts.published_at or facts.available_at,
+            available_at=facts.available_at,
+            published_at=facts.published_at,
+            arxiv_id=facts.arxiv_id,
+            title=facts.title,
+            authors=facts.authors,
+            parsed=PaperParsedManifest(
+                source_hash=source_hash,
+                parser_name=parser_name,
+                parser_version=parser_version,
+                cleanup_version=cleanup_version,
+                pages=tuple(parsed_pages),
+            ),
+            raw_asset_id=raw.asset_id,
+            assets=tuple(assets.values()),
+            blobs=blobs,
+        )
+
+    @staticmethod
+    def _register_asset(
+        source_id: UUID,
+        page_number: int,
+        asset: PaperAssetInput,
+        assets: dict[UUID, PaperAssetRef],
+        blobs: dict[str, bytes],
+    ) -> PaperAssetRef:
+        content_hash = hashlib.sha256(asset.content).hexdigest()
+        ref = PaperAssetRef(
+            asset_id=_paper_asset_id(
+                source_id,
+                kind=asset.kind,
+                page_number=page_number,
+                content_hash=content_hash,
+            ),
+            kind=asset.kind,
+            media_type=asset.media_type,
+            content_hash=content_hash,
+            size_bytes=len(asset.content),
+            page_number=page_number,
+        )
+        assets[ref.asset_id] = ref
+        blobs[content_hash] = asset.content
+        return ref
 
 
 class PaperSourceSpan(BaseModel):
@@ -399,6 +567,73 @@ class PaperChunkSet(BaseModel):
             raise ValueError("paper chunk-set content hash mismatch")
         return self
 
+    @classmethod
+    def from_parsed_chunks(
+        cls,
+        source: PaperSourceRevision,
+        chunks: Sequence[PaperChunkInput],
+        *,
+        producer: PaperChunkingConfig,
+    ) -> "PaperChunkSet":
+        """Build a chunk-set artifact, minting the artifact and chunk IDs.
+
+        The flow supplies knowledge-native chunk inputs; this constructor owns
+        the artifact ID, per-chunk content hashes, chunk IDs, and the set
+        content hash.
+        """
+        producer_hash = _stable_hash(producer.model_dump(mode="json"))
+        artifact_id = _paper_artifact_id(
+            source.id, PaperArtifactKind.CHUNK_SET, producer_hash
+        )
+        page_assets = {
+            page.page_number: (
+                (
+                    (page.screenshot_asset_id,)
+                    if page.screenshot_asset_id is not None
+                    else ()
+                )
+                + page.image_asset_ids
+            )
+            for page in source.parsed.pages
+        }
+        built: list[PaperChunk] = []
+        for position, chunk in enumerate(chunks):
+            span = PaperSourceSpan(
+                page_number=chunk.page_number,
+                start_char=chunk.start_char,
+                end_char=chunk.end_char,
+                block_boxes=chunk.block_boxes,
+                asset_ids=page_assets.get(chunk.page_number, ()),
+            )
+            content_hash = _text_hash(chunk.text)
+            built.append(
+                PaperChunk(
+                    chunk_id=_paper_chunk_id(
+                        artifact_id,
+                        position=position,
+                        content_hash=content_hash,
+                        spans=(span,),
+                    ),
+                    chunk_set_id=artifact_id,
+                    source_revision_id=source.id,
+                    position=position,
+                    text=chunk.text,
+                    content_hash=content_hash,
+                    source_spans=(span,),
+                )
+            )
+        if not built:
+            raise ValueError("paper source produced no non-empty chunks")
+        chunk_tuple = tuple(built)
+        return cls(
+            id=artifact_id,
+            source_revision_id=source.id,
+            producer=producer,
+            producer_config_hash=producer_hash,
+            content_hash=_paper_chunk_set_content_hash(chunk_tuple),
+            chunks=chunk_tuple,
+        )
+
 
 def _validate_chunk_set_source(
     source: PaperSourceRevision,
@@ -450,6 +685,15 @@ class PaperCitation(BaseModel):
     quote: str | None = Field(default=None, max_length=500)
 
 
+@dataclass(frozen=True)
+class PaperCitationDraft:
+    """Model-proposed citation coordinates before code resolves canonical IDs."""
+
+    chunk_index: int
+    page_number: int
+    quote: str | None = None
+
+
 class PaperSummaryProducer(BaseModel):
     """Exact model, prompt, and output-bound identity for a summary."""
 
@@ -457,16 +701,11 @@ class PaperSummaryProducer(BaseModel):
 
     model: str
     prompt_version: str
-    orchestration: Literal["manager-research-agents-v1"] = (
-        "manager-research-agents-v1"
-    )
+    orchestration: Literal["map-reduce-v1"] = "map-reduce-v1"
     input_chunk_set_id: UUID
     instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     max_output_tokens: int = Field(gt=0)
-    max_research_calls: int = Field(default=12, ge=1)
-    max_research_concurrency: int = Field(default=2, ge=1)
-    research_max_turns: int = Field(default=4, ge=1)
-    research_max_output_tokens: int = Field(default=1_536, ge=1)
+    research_group_size: int = Field(ge=1)
 
 
 def _paper_summary_content_hash(
@@ -542,6 +781,91 @@ class PaperGlobalSummary(BaseModel):
                 "paper summary producer input is missing from lineage"
             )
         return self
+
+    @classmethod
+    def from_draft(
+        cls,
+        chunk_set: PaperChunkSet,
+        *,
+        producer: PaperSummaryProducer,
+        summary: str,
+        citations: Sequence[PaperCitationDraft],
+        min_citations: int,
+        min_pages: int,
+    ) -> "PaperGlobalSummary":
+        """Resolve model-proposed citations and mint the summary artifact.
+
+        The model returns only prose and ``(chunk_index, page, quote)``
+        coordinates. This constructor resolves canonical chunk IDs, validates
+        every citation against the chunk set, enforces the configured coverage
+        policy, and mints the artifact identity and lineage.
+        """
+        if producer.input_chunk_set_id != chunk_set.id:
+            raise ValueError("summary producer input does not match chunk set")
+        resolved: list[PaperCitation] = []
+        seen: set[tuple[int, int, str | None]] = set()
+        for draft in citations:
+            try:
+                chunk = chunk_set.chunks[draft.chunk_index]
+            except IndexError as exc:
+                raise PaperCitationValidationError(
+                    "paper summary cites an unknown chunk index"
+                ) from exc
+            pages = {span.page_number for span in chunk.source_spans}
+            if draft.page_number not in pages:
+                raise PaperCitationValidationError(
+                    "paper summary citation page is not owned by its chunk"
+                )
+            if draft.quote is not None and draft.quote not in chunk.text:
+                raise PaperCitationValidationError(
+                    "paper summary citation quote is not present in its chunk"
+                )
+            key = (draft.chunk_index, draft.page_number, draft.quote)
+            if key in seen:
+                continue
+            seen.add(key)
+            resolved.append(
+                PaperCitation(
+                    chunk_set_id=chunk_set.id,
+                    chunk_id=chunk.chunk_id,
+                    page_number=draft.page_number,
+                    quote=draft.quote,
+                )
+            )
+        if len(resolved) < min_citations:
+            raise PaperCitationValidationError(
+                "paper summary has fewer citations than min_summary_citations"
+            )
+        if len({citation.page_number for citation in resolved}) < min_pages:
+            raise PaperCitationValidationError(
+                "paper summary has fewer source pages than min_summary_pages"
+            )
+        producer_hash = _stable_hash(producer.model_dump(mode="json"))
+        artifact_id = _paper_artifact_id(
+            chunk_set.source_revision_id,
+            PaperArtifactKind.GLOBAL_SUMMARY,
+            producer_hash,
+        )
+        summary_text = summary.strip()
+        citation_tuple = tuple(resolved)
+        return cls(
+            id=artifact_id,
+            source_revision_id=chunk_set.source_revision_id,
+            producer=producer,
+            producer_config_hash=producer_hash,
+            content_hash=_paper_summary_content_hash(
+                summary_text, citation_tuple
+            ),
+            summary=summary_text,
+            citations=citation_tuple,
+            derived_from=(
+                ArtifactLocator(
+                    source_revision_id=chunk_set.source_revision_id,
+                    artifact_id=chunk_set.id,
+                    artifact_kind="paper_chunk_set",
+                ),
+            ),
+        )
 
 
 class PaperFlowResult(BaseModel):

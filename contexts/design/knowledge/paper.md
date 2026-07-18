@@ -62,11 +62,11 @@ Every chunk span is also checked against that manifest: its page must exist, its
 
 - model identity;
 - prompt version;
-- manager/research-agent orchestration version;
+- map-reduce orchestration version;
 - exact input chunk-set ID;
-- coordinator/research instructions hash;
-- coordinator output limit;
-- research call, concurrency, turn, and per-worker output limits.
+- reducer/research instructions hash;
+- per-agent output limit;
+- research group size.
 
 Changing any producer field creates a distinct artifact ID. Multiple chunk sets and summaries may coexist for one source revision. Loading a complete `PaperFlowResult` without explicit artifact IDs is allowed only when one unambiguous linked pair exists.
 

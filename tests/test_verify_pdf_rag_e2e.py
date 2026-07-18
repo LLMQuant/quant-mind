@@ -20,7 +20,7 @@ def _snapshot(**overrides):
             "convolution, uses multi-head attention, and improves translation "
             "with greater training efficiency."
         ),
-        "summary_orchestration": "manager-research-agents-v1",
+        "summary_orchestration": "map-reduce-v1",
         "citation_count": 3,
         "citation_pages": [2, 4],
         "first_summary_scores": [0.9],

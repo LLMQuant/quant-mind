@@ -23,28 +23,17 @@ class PaperFlowCfgTests(unittest.TestCase):
         self.assertEqual(cfg.max_turns, 16)
         self.assertEqual(cfg.chunk_size, 512)
         self.assertEqual(cfg.chunk_overlap, 64)
-        self.assertEqual(cfg.max_summary_tool_calls, 12)
-        self.assertEqual(cfg.max_summary_worker_turns, 4)
-        self.assertEqual(cfg.max_summary_worker_output_tokens, 1_536)
-        self.assertEqual(cfg.max_summary_total_output_tokens, 20_000)
+        self.assertEqual(cfg.summary_research_group_size, 8)
+        self.assertEqual(cfg.summary_concurrency, 4)
+        self.assertEqual(cfg.max_summary_output_tokens, 4_096)
         self.assertEqual(cfg.min_summary_citations, 3)
+        self.assertEqual(cfg.min_summary_pages, 2)
 
     def test_invalid_overlap_or_coverage_bounds_are_rejected(self):
         with self.assertRaises(ValidationError):
             PaperFlowCfg(chunk_size=64, chunk_overlap=64)
         with self.assertRaises(ValidationError):
             PaperFlowCfg(min_summary_citations=1, min_summary_pages=2)
-        with self.assertRaises(ValidationError):
-            PaperFlowCfg(
-                max_summary_tool_calls=1,
-                max_summary_concurrency=2,
-            )
-        with self.assertRaises(ValidationError):
-            PaperFlowCfg(
-                max_summary_output_tokens=4_096,
-                max_summary_worker_output_tokens=1_536,
-                max_summary_total_output_tokens=5_000,
-            )
 
 
 class PaperInputDiscriminatedTests(unittest.TestCase):

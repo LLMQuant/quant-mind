@@ -31,6 +31,7 @@ implementation must preserve.
 | RAG | [Page-aware document chunking and retrieval](rag/document.md) |
 | Library | [Local knowledge storage and meaning-based search](library/local.md) |
 | Operations | [Public operation naming](operations/naming.md) |
+| Operations | [Orchestration and construction altitude](operations/orchestration.md) |
 
 ## Organization Rules
 
