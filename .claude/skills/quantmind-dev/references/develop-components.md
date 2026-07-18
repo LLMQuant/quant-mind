@@ -35,6 +35,7 @@ apply throughout.
 | `quantmind/knowledge/` | nothing (leaf) |
 | `quantmind/configs/` | `knowledge` only |
 | `quantmind/preprocess/` | `utils` only |
+| `quantmind/rag/` | `preprocess` only |
 | `quantmind/flows/`, `quantmind/magic.py` | apex — may import all of the above |
 
 ### `quantmind/knowledge/` — data standard
@@ -59,6 +60,16 @@ apply throughout.
 - Return frozen dataclasses (`Fetched`, `RawPaper`, ...), not dicts.
 - Surface the common path at the package root (`from quantmind.preprocess
   import fetch_arxiv`), keep explicit submodule paths working.
+
+### `quantmind/rag/` — opinionated document RAG
+
+- Use LlamaIndex for chunking, indexing, retrieval, and ranking; add only the
+  source/page/provenance conversion that QuantMind owns.
+- Import deterministic inputs from `quantmind.preprocess`; preprocessing must
+  never import RAG.
+- Keep LlamaIndex types private. Return frozen QuantMind evidence values.
+- Do not add a public retriever, vector-store, provider, backend registry, or
+  generic query-engine hierarchy.
 
 ### `quantmind/flows/` and `quantmind/magic.py` — apex layer
 

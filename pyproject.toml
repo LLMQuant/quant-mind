@@ -121,8 +121,8 @@ reportIncompatibleVariableOverride = "none"
 # import-linter: architectural boundary contracts
 # ----------------------------------------------------------------------------
 # Encodes the target architecture: utils, knowledge, and preprocess are
-# leaves; configs depends only on knowledge; library depends only on
-# knowledge; flows + magic is the apex layer. The transitional packages
+# leaves; configs and library depend only on knowledge; rag depends only on
+# preprocess; flows + magic is the apex layer. The transitional packages
 # (config/, flow/, llm/, models/) remain forbidden as a tripwire.
 
 [tool.importlinter]
@@ -139,6 +139,7 @@ forbidden_modules = [
     "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
+    "quantmind.rag",
 ]
 
 [[tool.importlinter.contracts]]
@@ -151,6 +152,7 @@ forbidden_modules = [
     "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
+    "quantmind.rag",
     "quantmind.utils",
 ]
 
@@ -163,6 +165,7 @@ forbidden_modules = [
     "quantmind.library",
     "quantmind.magic",
     "quantmind.preprocess",
+    "quantmind.rag",
 ]
 
 [[tool.importlinter.contracts]]
@@ -175,6 +178,7 @@ forbidden_modules = [
     "quantmind.knowledge",
     "quantmind.library",
     "quantmind.magic",
+    "quantmind.rag",
 ]
 
 [[tool.importlinter.contracts]]
@@ -191,6 +195,25 @@ forbidden_modules = [
     "quantmind.mind",
     "quantmind.models",
     "quantmind.preprocess",
+    "quantmind.rag",
+    "quantmind.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "rag only depends on preprocess"
+type = "forbidden"
+source_modules = ["quantmind.rag"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.configs",
+    "quantmind.flow",
+    "quantmind.flows",
+    "quantmind.knowledge",
+    "quantmind.library",
+    "quantmind.llm",
+    "quantmind.magic",
+    "quantmind.mind",
+    "quantmind.models",
     "quantmind.utils",
 ]
 

@@ -42,6 +42,7 @@ implementation proves which behavior is truly shared.
 |---|---|
 | `quantmind.knowledge` | Define immutable knowledge models and the text used for embeddings; perform no I/O |
 | `quantmind.library` | Store validated knowledge, maintain rebuildable search records, and return `SemanticHit` results |
+| [`quantmind.rag`](../rag/document.md) | Chunk and retrieve evidence within one parsed document without storing canonical knowledge |
 | `quantmind.flows` | Produce validated knowledge and optionally pass it to a library |
 | `quantmind.mind` or an agent application | Search the library and use matches to write answers |
 | Caller or source-specific pipeline | Retain raw PDF, HTML, media, and operational files |
@@ -127,7 +128,8 @@ retrieval capabilities; it is not defined as a vector database. A future
 PageIndex path can select a paper through collection-wide semantic retrieval,
 then navigate that selected document's tree through a separate operation and
 separately rebuildable state. PageIndex does not have to be served through
-`search()` or LlamaIndex ranking.
+`search()` or LlamaIndex ranking. Opinionated document retrieval, including a
+future PageIndex adapter, belongs under [`quantmind.rag`](../rag/document.md).
 
 ## Out of Scope
 

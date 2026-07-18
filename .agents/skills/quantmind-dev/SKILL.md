@@ -1,6 +1,6 @@
 ---
 name: quantmind-dev
-description: Contributor workflow for the QuantMind codebase. Covers commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, flows, mind, utils) with tests, examples, and verification. Use when committing, opening a PR, or implementing/refactoring QuantMind code.
+description: Contributor workflow for the QuantMind codebase. Covers commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, rag, flows, mind, utils) with tests, examples, and verification. Use when committing, opening a PR, or implementing/refactoring QuantMind code.
 ---
 
 # QuantMind Dev
