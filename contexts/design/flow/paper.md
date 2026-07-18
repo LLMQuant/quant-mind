@@ -4,7 +4,7 @@
 
 - **Purpose**: Define how a paper input becomes a validated `Paper`.
 - **Read when**: Changing paper inputs, parsing, section trees, source tracking, page ranges, or future PageIndex support.
-- **Status**: Mixed. Page-aware PDF parsing and LlamaIndex ingestion are implemented; [Current Gaps](#current-gaps) lists the remaining paper assembly work.
+- **Status**: Mixed. Page-aware PDF parsing and document RAG are implemented; [Current Gaps](#current-gaps) lists the remaining paper assembly work.
 - **Core rule**: A model or PageIndex may suggest a section tree. Code creates the final IDs, links, order, page ranges, citations, and source-backed text.
 - **Page numbering**: PDF page ranges start at 1 and include both the first and last page.
 
@@ -57,6 +57,7 @@ across them, or write answers.
 | Work | Owner |
 |---|---|
 | Resolve identifiers, fetch bytes, parse pages, and hash source content | `quantmind.preprocess` |
+| Chunk or retrieve page-aware document evidence when requested | `quantmind.rag` |
 | Configure the operation and select the input variant | `quantmind.configs` |
 | Suggest a section tree and build the final `Paper` | `quantmind.flows` |
 | Define the `Paper`, `TreeKnowledge`, `TreeNode`, source, citation, and extraction models | `quantmind.knowledge` |
@@ -309,6 +310,10 @@ Future integration must preserve these decisions:
 6. Sibling page ranges may overlap, and a child range does not need to fit
    completely inside its parent range.
 
+A PageIndex adapter belongs with other opinionated document retrieval in
+[`quantmind.rag`](../rag/document.md). It still returns the limited draft above;
+it does not become the canonical tree or a generic retrieval backend.
+
 ## Fixed Paper Test Data
 
 The fixed test files live at:
@@ -336,8 +341,8 @@ The repository does not yet guarantee the target pipeline above:
 
 - `pdf_to_markdown()` remains a compatibility view, while the primary
   `parse_pdf()` path now preserves pages, blocks, coordinates, and artifacts.
-- `paper_flow()` has not yet adopted `ParsedDocument`; it still consumes the
-  compatibility Markdown view.
+- `paper_flow()` has not yet adopted `ParsedDocument` or the document RAG
+  boundary; it still consumes the compatibility Markdown view.
 - `paper_flow()` sends the flattened document to one extraction agent and asks
   it to return the final `Paper` directly.
 - The model currently controls IDs, edges, citations, source fields, and

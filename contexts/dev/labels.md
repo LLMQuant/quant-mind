@@ -62,6 +62,7 @@ unclear, clarify the work before labeling it.
 | `area: knowledge` | Knowledge models, stored formats, serialization, and representation under `quantmind/knowledge/`. |
 | `area: configs` | Typed inputs and configuration models under `quantmind/configs/`. |
 | `area: preprocess` | Fetching, parsing, cleaning, formatting, and source handling under `quantmind/preprocess/`. |
+| `area: rag` | Opinionated document chunking, indexing, and retrieval under `quantmind/rag/`. |
 | `area: flows` | Public operation implementations under `quantmind/flows/`. It is not a generic synonym for pipeline or orchestration. |
 | `area: mind` | Memory, tools, MCP integration, and agent reasoning under `quantmind/mind/`. |
 | `area: utils` | The narrowly owned utilities surface under `quantmind/utils/`. |

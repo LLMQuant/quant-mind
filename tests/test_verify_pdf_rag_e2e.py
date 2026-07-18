@@ -4,11 +4,10 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from quantmind.preprocess.format import (
+from quantmind.preprocess.format import ParsedDocument, ParsedPage
+from quantmind.rag import (
     ParsedChunk,
-    ParsedDocument,
     ParsedDocumentHit,
-    ParsedPage,
 )
 from scripts import verify_pdf_rag_e2e
 

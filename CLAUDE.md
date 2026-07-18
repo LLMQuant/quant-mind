@@ -37,6 +37,7 @@ handoff all come from `openai-agents`.
 | `quantmind/library/` | Local persistence and semantic retrieval for canonical knowledge — depends only on `knowledge` |
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
 | `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
+| `quantmind/rag/` | Opinionated LlamaIndex document chunking and retrieval — depends only on `preprocess` |
 | `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
 | `quantmind/mind/` | Cognitive layer (memory protocol); landing via the Agents SDK migration (#71) |
@@ -76,19 +77,22 @@ the user explicitly authorizes it — fix the underlying issue instead.
 
 1. **Library, not framework** — functions over classes, `Protocol` over ABC,
    no plugin registries, no hook discovery, no CLI.
-2. **Do not rebuild the agent runtime** — use `openai-agents` directly; no
+2. **RAG data plane, not framework** — use LlamaIndex directly inside
+   `quantmind.rag`; keep upstream types private and do not add retriever,
+   vector-store, provider, or backend registries.
+3. **Do not rebuild the agent runtime** — use `openai-agents` directly; no
    QuantMind-side facades over `from agents import ...`.
-3. **Schema models vs runtime evidence** — user/LLM inputs and configs use
+4. **Schema models vs runtime evidence** — user/LLM inputs and configs use
    extra-forbid Pydantic models; knowledge adds `frozen=True`; deterministic
    fetch, preprocessing, and collection values use frozen dataclasses when
    they do not need validation or JSON Schema (`Fetched`, `NewsBatch`).
-4. **Import boundaries are contracts** — `import-linter` (configured in
+5. **Import boundaries are contracts** — `import-linter` (configured in
    `pyproject.toml`) pins the dependency graph; never work around a failing
    contract.
-5. **Absolute imports** across module boundaries.
-6. **No meaningless wrappers** — a method must add logic, abstraction, or a
+6. **Absolute imports** across module boundaries.
+7. **No meaningless wrappers** — a method must add logic, abstraction, or a
    side effect beyond the call it wraps; otherwise inline it.
-7. **Name public operations by intent** — follow
+8. **Name public operations by intent** — follow
    `contexts/design/operations/naming.md`; use stage verbs, and reserve
    `pipeline` for deliberate multi-stage composition.
 

@@ -150,6 +150,7 @@ class TestContextEntryPoints(unittest.TestCase):
                 "area: knowledge",
                 "area: configs",
                 "area: preprocess",
+                "area: rag",
                 "area: flows",
                 "area: mind",
                 "area: utils",

@@ -1,13 +1,10 @@
-"""Parse and retrieve evidence from a local PDF with page provenance."""
+"""Parse a local PDF and retrieve page-aware evidence."""
 
 import asyncio
 from pathlib import Path
 
-from quantmind.preprocess.format import (
-    chunk_parsed_document,
-    parse_pdf,
-    retrieve_parsed_document,
-)
+from quantmind.preprocess.format import parse_pdf
+from quantmind.rag import chunk_parsed_document, retrieve_parsed_document
 
 
 async def main() -> None:

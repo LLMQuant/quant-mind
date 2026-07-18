@@ -1,4 +1,4 @@
-"""Tests for page-aware PDF parsing and LlamaIndex ingestion."""
+"""Tests for page-aware PDF parsing."""
 
 import hashlib
 import unittest
@@ -9,11 +9,8 @@ import pymupdf
 
 from quantmind.preprocess.format.pdf import (
     PdfParseError,
-    SentenceSplitterConfig,
-    chunk_parsed_document,
     parse_pdf,
     pdf_to_markdown,
-    retrieve_parsed_document,
 )
 
 _FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "tiny.pdf"
@@ -88,29 +85,6 @@ class PdfToMarkdownTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_llamaindex_chunks_and_bm25_hits_keep_page_evidence(self):
-        document = await parse_pdf(_GOLDEN.read_bytes())
-        chunks = chunk_parsed_document(
-            document,
-            config=SentenceSplitterConfig(chunk_size=256, chunk_overlap=32),
-        )
-
-        self.assertTrue(chunks)
-        self.assertEqual({chunk.page_number for chunk in chunks}, {1, 2, 3, 4})
-        self.assertTrue(
-            all(chunk.source_hash == document.source_hash for chunk in chunks)
-        )
-        self.assertTrue(all(chunk.block_boxes for chunk in chunks))
-
-        hits = retrieve_parsed_document(
-            chunks,
-            "equal-weighted quintiles long-short portfolio",
-            top_k=2,
-        )
-        self.assertEqual(len(hits), 2)
-        self.assertIn(hits[0].chunk.page_number, {3, 4})
-        self.assertEqual(hits[0].chunk.source_hash, document.source_hash)
-
     async def test_empty_physical_page_is_not_dropped_or_renumbered(self):
         source = pymupdf.open()
         try:
@@ -127,11 +101,3 @@ class PdfToMarkdownTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(document.pages[1].text, "")
         self.assertEqual(document.pages[1].blocks, ())
         self.assertIn("third page", document.pages[2].text)
-
-    async def test_retrieval_rejects_invalid_query_arguments(self):
-        document = await parse_pdf(_FIXTURE.read_bytes())
-        chunks = chunk_parsed_document(document)
-        with self.assertRaisesRegex(ValueError, "query"):
-            retrieve_parsed_document(chunks, "   ")
-        with self.assertRaisesRegex(ValueError, "top_k"):
-            retrieve_parsed_document(chunks, "fixture", top_k=0)

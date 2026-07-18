@@ -2,17 +2,16 @@
 
 ## Quick Summary
 
-- **Purpose**: Define the deterministic PDF value shared by paper extraction, collection-wide RAG, and a future PageIndex adapter.
-- **Read when**: Changing PDF parsing, page artifacts, LlamaIndex ingestion, or multimodal evidence.
-- **Status**: Implemented by `quantmind.preprocess.parse_pdf` and the private LlamaIndex conversion helpers.
+- **Purpose**: Define the deterministic PDF value shared by paper extraction, document RAG, and a future PageIndex adapter.
+- **Read when**: Changing PDF parsing, page artifacts, or multimodal source evidence.
+- **Status**: Implemented by `quantmind.preprocess.format.parse_pdf`.
 - **Core rule**: Parsing preserves every physical page and its source coordinates before any chunker or tree builder runs.
 
 ## Contents
 
 - [Parsed document boundary](#parsed-document-boundary)
 - [Artifacts and ownership](#artifacts-and-ownership)
-- [LlamaIndex conversion](#llamaindex-conversion)
-- [PageIndex compatibility](#pageindex-compatibility)
+- [Downstream consumers](#downstream-consumers)
 
 ## Parsed document boundary
 
@@ -24,14 +23,12 @@ Each `TextBlock` keeps its page ownership, text, bounding box, and parser-provid
 
 The caller chooses an artifact directory. When supplied, parsing renders one PNG screenshot per page and stores a stable path reference on the page. The library does not copy screenshots or PDF bytes into canonical SQLite knowledge. Without an artifact directory, pages remain valid and `screenshot_path` is absent.
 
-## LlamaIndex conversion
+## Downstream consumers
 
-LlamaIndex is the required RAG data plane. QuantMind converts pages to private LlamaIndex documents, retaining source hash, page number, block coordinates, and screenshot references as metadata. `chunk_parsed_document()` applies LlamaIndex `SentenceSplitter`; supported splitter arguments pass through `SentenceSplitterConfig`.
+Preprocessing ends after producing `ParsedDocument`. It does not chunk, index, rank, or answer a query.
 
-`retrieve_parsed_document()` performs a bounded BM25 retrieval over those chunks and converts results back to `ParsedDocumentHit`. Public QuantMind values never expose LlamaIndex `Document`, node, index, or retriever types.
+- [`quantmind.rag`](../rag/document.md) converts the parsed value into LlamaIndex-backed chunks and page-aware retrieval evidence.
+- [`paper_flow`](../flow/paper.md) uses the preserved source pages when assembling a canonical `Paper`.
+- A future PageIndex adapter may consume the same ordered pages to propose and navigate a document tree.
 
 Flattened Markdown remains a compatibility view produced from the preserved pages. It is not the primary parsing result.
-
-## PageIndex compatibility
-
-PageIndex may later consume the same ordered `ParsedDocument` to propose a document tree and navigate within a selected long document. It remains independent of collection-wide LlamaIndex ranking and is not forced through `LocalKnowledgeLibrary.search()`.

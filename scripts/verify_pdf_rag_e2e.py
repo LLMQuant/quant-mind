@@ -4,10 +4,10 @@
 import asyncio
 
 from quantmind.preprocess.fetch import fetch_arxiv
-from quantmind.preprocess.format import (
+from quantmind.preprocess.format import parse_pdf
+from quantmind.rag import (
     SentenceSplitterConfig,
     chunk_parsed_document,
-    parse_pdf,
     retrieve_parsed_document,
 )
 

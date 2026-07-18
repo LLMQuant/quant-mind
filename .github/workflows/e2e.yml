@@ -18,6 +18,7 @@ on:
       - 'quantmind/preprocess/fetch/rss.py'
       - 'quantmind/preprocess/fetch/arxiv.py'
       - 'quantmind/preprocess/format/pdf.py'
+      - 'quantmind/rag/**'
       - 'scripts/verify_pdf_rag_e2e.py'
       - 'pyproject.toml'
   schedule:
@@ -64,6 +65,7 @@ jobs:
               - 'scripts/verify_pdf_rag_e2e.py'
               - 'quantmind/preprocess/fetch/arxiv.py'
               - 'quantmind/preprocess/format/pdf.py'
+              - 'quantmind/rag/**'
               - 'pyproject.toml'
 
   news:

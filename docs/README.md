@@ -18,7 +18,7 @@ harness.
 | News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](../contexts/design/flow/news.md) |
 | Bounded fan-out | `quantmind.flows.batch_run` | Operation inputs and shared config | `BatchResult` | [README usage](../README.md#-usage-examples) | API docstrings |
 | Local semantic search | `quantmind.library.LocalKnowledgeLibrary` | `BaseKnowledge`, `SemanticQuery` | `list[SemanticHit]` | [Library example](../examples/library/README.md) | [Library guide](library.md) |
-| Page-aware PDF RAG | `quantmind.preprocess.format.parse_pdf` | Exact PDF bytes and optional artifact directory | `ParsedDocument` | [Paper RAG](../examples/preprocess/paper_rag.py) | [PDF preprocessing design](../contexts/design/preprocess/pdf.md) |
+| Page-aware document RAG | `quantmind.rag.chunk_parsed_document`, `quantmind.rag.retrieve_parsed_document` | `ParsedDocument`, splitter config, and query | `tuple[ParsedDocumentHit, ...]` | [Paper RAG](../examples/rag/paper.py) | [Document RAG design](../contexts/design/rag/document.md) |
 
 Import public inputs and configs from `quantmind.configs` and current public
 operations from `quantmind.flows`. Import result contracts from the canonical
@@ -29,7 +29,7 @@ layer shown in the catalog.
 | Source | Source selection | Operation | Live-network component smoke test |
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
-| arXiv Transformer PDF | `fetch_arxiv("1706.03762v7")` | `parse_pdf` and LlamaIndex retrieval | `python scripts/verify_pdf_rag_e2e.py` |
+| arXiv Transformer PDF | `fetch_arxiv("1706.03762v7")` | `parse_pdf` and `quantmind.rag` retrieval | `python scripts/verify_pdf_rag_e2e.py` |
 
 The PR Newswire smoke test checks the public RSS feed, a complete preceding
 24-hour listing window, and ticker-hint recall on a bounded sample of up to 25
