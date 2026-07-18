@@ -21,9 +21,9 @@ class ThesisTests(unittest.TestCase):
         self.assertEqual(t.item_type, "thesis")
         self.assertEqual(t.claim, "USD weakens in H2 2026")
 
-    def test_embedding_text_returns_claim(self):
+    def test_retrieval_projection_is_not_a_domain_method(self):
         t = Thesis(as_of=_now(), source=_src(), claim="rates higher for longer")
-        self.assertEqual(t.embedding_text(), "rates higher for longer")
+        self.assertFalse(hasattr(t, "embedding_text"))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Page-aware document chunking and retrieval through LlamaIndex."""
 
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -32,6 +33,8 @@ class ParsedChunk:
     text: str
     source_hash: str
     page_number: int
+    start_char: int
+    end_char: int
     block_boxes: tuple[BoundingBox, ...]
     screenshot_path: str | None
     image_paths: tuple[str, ...]
@@ -83,14 +86,29 @@ def _to_llama_documents(document: ParsedDocument) -> list[Document]:
 
 def _node_to_chunk(node: BaseNode) -> ParsedChunk:
     metadata = node.metadata
+    text = node.get_content(metadata_mode=MetadataMode.NONE)
+    start_value = getattr(node, "start_char_idx", None)
+    end_value = getattr(node, "end_char_idx", None)
+    start_char = int(start_value) if start_value is not None else 0
+    end_char = (
+        int(end_value) if end_value is not None else start_char + len(text)
+    )
+    identity = hashlib.sha256(
+        (
+            f"{metadata['source_hash']}:{metadata['page_number']}:"
+            f"{start_char}:{end_char}:{text}"
+        ).encode("utf-8")
+    ).hexdigest()
     boxes = tuple(
         BoundingBox(*values) for values in json.loads(metadata["block_boxes"])
     )
     return ParsedChunk(
-        chunk_id=node.node_id,
-        text=node.get_content(metadata_mode=MetadataMode.NONE),
+        chunk_id=identity,
+        text=text,
         source_hash=str(metadata["source_hash"]),
         page_number=int(metadata["page_number"]),
+        start_char=start_char,
+        end_char=end_char,
         block_boxes=boxes,
         screenshot_path=str(metadata["screenshot_path"]) or None,
         image_paths=tuple(json.loads(metadata["image_paths"])),

@@ -1,10 +1,13 @@
 """Base types for the quantmind.knowledge data standard.
 
-Three shapes share `BaseKnowledge`:
+Three conventional shapes share `BaseKnowledge`:
 
-- `FlattenKnowledge` — atomic cards (`News`, `Earnings`, `PaperKnowledgeCard`, ...)
-- `TreeKnowledge` — hierarchical artifacts (`Paper`, `EarningsCallTranscript`, ...)
+- `FlattenKnowledge` — atomic cards (`News`, `Earnings`, `Factor`, ...)
+- `TreeKnowledge` — hierarchical conventional artifacts
 - `GraphKnowledge` — cross-item edges (placeholder, future PR)
+
+Source-first paper revisions and artifacts use separate immutable models rather
+than inheriting `BaseKnowledge`.
 
 The `as_of` field is mandatory by design: financial knowledge is only useful
 when its information cutoff is explicit. Optional `available_at` records when
@@ -12,10 +15,8 @@ the source became observable so research can prevent look-ahead independently
 from information time. `source` and `extraction` are typed references (not bare
 strings) so dedup, audit, and re-runs all have stable keys.
 
-Subclasses MUST override `embedding_text()` to declare what string the store
-layer should embed for them. The contract is enforced at runtime, not at
-type-check time, because `BaseKnowledge` itself can be referenced as a
-generic return type without forcing every consumer to know about embeddings.
+Canonical knowledge does not choose text or store vectors for a retrieval
+method. Search projections are rebuildable library-owned derived data.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -68,8 +69,8 @@ class BaseKnowledge(BaseModel):
     """Root of every quantmind knowledge type.
 
     All three shapes (Flatten / Tree / Graph) share this field set; subclasses
-    add domain-specific payload. Subclasses MUST override `embedding_text()`
-    to declare what string the store layer should embed.
+    add domain-specific payload. Retrieval-specific text selection belongs to
+    the library indexing boundary.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -100,17 +101,6 @@ class BaseKnowledge(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     disclaimers: list[str] = Field(default_factory=list)
-
-    def embedding_text(self) -> str:
-        """Return the canonical string the store should embed for this item.
-
-        Flatten subclasses: typically ``summary + key attrs``.
-        Tree subclasses: typically ``root.title + root.summary``.
-        Subclasses MUST override.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__}.embedding_text() must be overridden"
-        )
 
     # ── Convenience helpers ────────────────────────────────────────────
     # These are shared by every shape (Flatten / Tree / Graph) because they

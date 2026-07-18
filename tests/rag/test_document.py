@@ -31,6 +31,17 @@ class DocumentRagTests(unittest.IsolatedAsyncioTestCase):
             all(chunk.source_hash == document.source_hash for chunk in chunks)
         )
         self.assertTrue(all(chunk.block_boxes for chunk in chunks))
+        self.assertTrue(
+            all(0 <= chunk.start_char < chunk.end_char for chunk in chunks)
+        )
+        repeated = chunk_parsed_document(
+            document,
+            config=SentenceSplitterConfig(chunk_size=256, chunk_overlap=32),
+        )
+        self.assertEqual(
+            [chunk.chunk_id for chunk in chunks],
+            [chunk.chunk_id for chunk in repeated],
+        )
 
         hits = retrieve_parsed_document(
             chunks,

@@ -2,36 +2,62 @@
 
 ## Quick Summary
 
-- **Purpose**: Define how an ordered `ParsedDocument` becomes chunks and ranked evidence without leaking LlamaIndex types.
-- **Read when**: Changing document chunking, document-local retrieval, RAG evidence, or a future PageIndex adapter.
+- **Purpose**: Define how an ordered `ParsedDocument` becomes deterministic page-aware chunks and ranked document-local evidence.
+- **Read when**: Changing document chunking, source spans, document-local retrieval, Paper Flow chunk construction, or a future PageIndex adapter.
 - **Status**: Implemented by `quantmind.rag.document`.
-- **Core rule**: `quantmind.rag` is an opinionated LlamaIndex data-plane package, not a generic retriever or backend framework.
+- **Core rule**: LlamaIndex owns splitting and ranking mechanics; QuantMind owns stable identity and source/page provenance.
 
 ## Contents
 
-- [Package boundary](#package-boundary)
-- [Chunk and retrieval contract](#chunk-and-retrieval-contract)
-- [What this package does not abstract](#what-this-package-does-not-abstract)
-- [Collection search and PageIndex](#collection-search-and-pageindex)
+- [Package Boundary](#package-boundary)
+- [Chunk Contract](#chunk-contract)
+- [Document-Local Retrieval](#document-local-retrieval)
+- [Paper Flow Boundary](#paper-flow-boundary)
+- [Collection Search and PageIndex](#collection-search-and-pageindex)
+- [What This Package Does Not Abstract](#what-this-package-does-not-abstract)
 
-## Package boundary
+## Package Boundary
 
 `quantmind.preprocess` owns deterministic source parsing and returns a page-aware [`ParsedDocument`](../preprocess/pdf.md). `quantmind.rag` may import that value and apply LlamaIndex transformations and retrieval. Preprocessing never imports RAG, so parsing remains usable without a query or index.
 
-LlamaIndex is a required dependency and owns the chunker, nodes, indexes, retrievers, ranking mechanics, and their supported parameters. QuantMind adds only the work that LlamaIndex cannot own: stable source hashes, page ownership, block coordinates, screenshot/image references, and conversion back to typed QuantMind evidence.
+LlamaIndex is a required dependency and owns `SentenceSplitter`, BM25, nodes, indexes, retrievers, ranking mechanics, and upstream parameters. QuantMind adds stable source hashes, page ownership, page-local character spans, block coordinates, screenshot/image references, and conversion back to typed evidence.
 
-## Chunk and retrieval contract
+## Chunk Contract
 
-`chunk_parsed_document()` applies LlamaIndex `SentenceSplitter` to each non-empty page without erasing physical page boundaries. `SentenceSplitterConfig` exposes the selected upstream parameters by their upstream meaning rather than reimplementing the algorithm.
+`chunk_parsed_document()` applies LlamaIndex `SentenceSplitter` independently to each non-empty physical page. Splitting by page prevents a chunk from erasing page ownership or spanning an implicit page boundary.
 
-Each `ParsedChunk` retains the exact source hash, 1-based page number, available block bounding boxes, and screenshot/image references. `retrieve_parsed_document()` uses LlamaIndex BM25 and returns ranked `ParsedDocumentHit` values. LlamaIndex `Document`, node, retriever, index, and score wrapper types remain private implementation details.
+`SentenceSplitterConfig` exposes chunk size, overlap, separator, paragraph separator, and tokenizer behavior by their upstream meanings. It does not reimplement the splitter.
 
-## What this package does not abstract
+Each `ParsedChunk` records:
 
-The package does not define a public `Retriever`, `VectorStore`, backend registry, provider protocol, query engine, or answer-synthesis framework. Add another direct, opinionated operation only when a real pipeline needs it. Do not build an abstraction solely to hide an upstream LlamaIndex call.
+- deterministic SHA-256-derived chunk ID;
+- exact document source hash;
+- 1-based physical page number;
+- page-local `start_char` and `end_char` offsets;
+- exact chunk text;
+- overlapping parser block bounding boxes;
+- page screenshot and extracted-image paths.
 
-## Collection search and PageIndex
+Repeating chunking for the same parsed document and configuration produces the same ordered texts, spans, and IDs. Empty pages remain in `ParsedDocument` but produce no chunks.
 
-Document-local RAG and collection search have different responsibilities. [`LocalKnowledgeLibrary`](../library/local.md) stores canonical knowledge in SQLite and privately uses LlamaIndex for collection-wide semantic ranking. It does not own transient PDF parsing or document-local BM25 chunks.
+## Document-Local Retrieval
 
-A future PageIndex implementation may live under `quantmind.rag` as another opinionated document operation. It can consume `ParsedDocument` and return a limited tree draft or navigation evidence, while canonical IDs, links, citations, and source-backed text remain owned by QuantMind code. PageIndex does not have to run through `LocalKnowledgeLibrary.search()` or LlamaIndex vector ranking.
+`retrieve_parsed_document()` chunks one document, uses LlamaIndex BM25, and returns ranked `ParsedDocumentHit` values. Each hit wraps one `ParsedChunk` and a score. The operation is transient and requires no canonical library write.
+
+LlamaIndex `Document`, node, retriever, index, and score-wrapper types remain private. Public callers receive frozen QuantMind dataclasses with enough evidence to trace a hit back to physical pages and parser artifacts.
+
+## Paper Flow Boundary
+
+[`paper_flow`](../flow/paper.md) uses `chunk_parsed_document()` as the deterministic split stage. It converts `ParsedChunk` values into canonical `PaperChunk` members only after an exact `PaperSourceRevision` exists.
+
+The conversion replaces parser paths with canonical source asset IDs and validates character spans against page evidence. The resulting `PaperChunkSet` is a durable, independently versioned artifact. `quantmind.rag` itself does not import or construct canonical paper models.
+
+## Collection Search and PageIndex
+
+Document-local RAG and collection search have different responsibilities. [`LocalKnowledgeLibrary`](../library/local.md) stores canonical sources and artifacts in SQLite and privately uses LlamaIndex for collection-wide embedding ranking. It does not persist transient `ParsedDocumentHit` values.
+
+Paper Flow V1 defines no paper tree. A future PageIndex implementation may live under `quantmind.rag` as another opinionated document operation. It may consume `ParsedDocument` or an exact paper source and return a bounded draft or navigation evidence, while canonical IDs, links, citations, and source-backed text remain code-owned.
+
+## What This Package Does Not Abstract
+
+The package does not define a public `Retriever`, `VectorStore`, backend registry, provider protocol, generic query engine, answer-synthesis framework, or canonical paper tree. Add another direct opinionated operation only when a real pipeline needs it; do not add a wrapper solely to hide an upstream LlamaIndex call.

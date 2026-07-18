@@ -10,8 +10,8 @@ from uuid import UUID, uuid4
 from quantmind.knowledge import (
     Citation,
     FlattenKnowledge,
+    LegacyPaper,
     News,
-    Paper,
     SourceRef,
     TreeNode,
 )
@@ -63,9 +63,6 @@ class _FakeEmbeddingProvider:
 class _UnsupportedKnowledge(FlattenKnowledge):
     item_type: str = "unsupported"
 
-    def embedding_text(self) -> str:
-        return "unsupported canonical knowledge"
-
 
 def _time(day: int, hour: int = 0) -> datetime:
     return datetime(2026, 7, day, hour, tzinfo=timezone.utc)
@@ -102,7 +99,15 @@ def _news(
     )
 
 
-def _paper() -> tuple[Paper, UUID, UUID]:
+def _news_projection(item: News) -> str:
+    return f"{item.headline}\n{item.event_type}\n{', '.join(item.entities)}".strip()
+
+
+def _node_projection(node: TreeNode) -> str:
+    return f"{node.title}\n{node.summary}"
+
+
+def _paper() -> tuple[LegacyPaper, UUID, UUID]:
     root_id = uuid4()
     methods_id = uuid4()
     results_id = uuid4()
@@ -127,7 +132,7 @@ def _paper() -> tuple[Paper, UUID, UUID]:
         title="Results",
         summary="Capital expenditure is expected to rise",
     )
-    paper = Paper(
+    paper = LegacyPaper(
         as_of=_time(1),
         available_at=_time(2),
         source=SourceRef(kind="arxiv", content_hash="paper-v1"),
@@ -160,8 +165,8 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
         query_text = "management increases capital expenditure"
         provider = _FakeEmbeddingProvider(
             vectors={
-                alpha.embedding_text(): [1.0, 0.0],
-                beta.embedding_text(): [0.0, 1.0],
+                _news_projection(alpha): [1.0, 0.0],
+                _news_projection(beta): [0.0, 1.0],
                 query_text: [1.0, 0.0],
             }
         )
@@ -178,7 +183,10 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([hit.item_id for hit in hits], [alpha.id, beta.id])
             self.assertAlmostEqual(hits[0].score, 1.0)
             self.assertIsNone(hits[0].node_id)
-            self.assertEqual(hits[0].matched_text, alpha.embedding_text())
+            self.assertEqual(hits[0].matched_text, _news_projection(alpha))
+            self.assertEqual(hits[0].locator.artifact_id, alpha.id)
+            self.assertIsNone(hits[0].locator.source_revision_id)
+            self.assertEqual(hits[0].projection.model, "fake-2d")
             self.assertEqual(hits[0].source, alpha.source)
             self.assertEqual(hits[0].citations, alpha.citations)
             self.assertEqual(hits[0].available_at, alpha.available_at)
@@ -215,10 +223,10 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
         query_text = "capital expenditure outlook"
         provider = _FakeEmbeddingProvider(
             vectors={
-                paper.embedding_text(): [1.0, 0.0],
-                paper.nodes[methods_id].embedding_text(): [0.8, 0.2],
-                paper.nodes[results_id].embedding_text(): [0.9, 0.1],
-                unrelated.embedding_text(): [0.0, 1.0],
+                _node_projection(paper.root()): [1.0, 0.0],
+                _node_projection(paper.nodes[methods_id]): [0.8, 0.2],
+                _node_projection(paper.nodes[results_id]): [0.9, 0.1],
+                _news_projection(unrelated): [0.0, 1.0],
                 query_text: [1.0, 0.0],
             }
         )
@@ -270,20 +278,23 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 {methods_id, results_id},
             )
             root_hit = next(hit for hit in hits if hit.node_id is None)
-            self.assertEqual(root_hit.matched_text, paper.embedding_text())
+            self.assertEqual(
+                root_hit.matched_text,
+                _node_projection(paper.root()),
+            )
             self.assertEqual(root_hit.citations, paper.root().citations)
             methods_hit = next(hit for hit in hits if hit.node_id == methods_id)
             self.assertEqual(
                 methods_hit.matched_text,
-                paper.nodes[methods_id].embedding_text(),
+                _node_projection(paper.nodes[methods_id]),
             )
             self.assertEqual(
                 methods_hit.citations,
                 paper.nodes[methods_id].citations,
             )
             stored = await library.get(methods_hit.item_id)
-            self.assertIsInstance(stored, Paper)
-            assert isinstance(stored, Paper)
+            self.assertIsInstance(stored, LegacyPaper)
+            assert isinstance(stored, LegacyPaper)
             self.assertEqual(
                 stored.find_path(methods_id)[-1].node_id, methods_id
             )
@@ -372,7 +383,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             )
             await library.put(changed_text)
             self.assertEqual(
-                provider.calls[-1][2], (changed_text.embedding_text(),)
+                provider.calls[-1][2], (_news_projection(changed_text),)
             )
 
             changed_source = changed_text.model_copy(
@@ -413,7 +424,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
             changed_paper = paper.model_copy(update={"nodes": changed_nodes})
             await library.put(changed_paper)
             self.assertEqual(
-                provider.calls[-1][2], (changed_node.embedding_text(),)
+                provider.calls[-1][2], (_node_projection(changed_node),)
             )
 
             schema_change = changed_paper.model_copy(

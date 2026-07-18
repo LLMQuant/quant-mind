@@ -22,18 +22,14 @@ class FactorTests(unittest.TestCase):
         self.assertEqual(f.factor_name, "momentum_12_1")
         self.assertIsNone(f.universe)
 
-    def test_embedding_text(self):
+    def test_retrieval_projection_is_not_a_domain_method(self):
         f = Factor(
             as_of=_now(),
             source=_src(),
             factor_name="value",
             universe="us_equities",
         )
-        self.assertEqual(f.embedding_text(), "factor value on us_equities")
-
-    def test_embedding_text_default_universe(self):
-        f = Factor(as_of=_now(), source=_src(), factor_name="size")
-        self.assertEqual(f.embedding_text(), "factor size on unspecified")
+        self.assertFalse(hasattr(f, "embedding_text"))
 
 
 if __name__ == "__main__":

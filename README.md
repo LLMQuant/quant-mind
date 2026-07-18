@@ -156,7 +156,7 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 Component-specific guides and architecture notes live under [`docs/`](docs/).
 
-#### Run a single paper through `paper_flow`
+#### Build an exact paper source, chunks, and cited summary
 
 ```python
 import asyncio
@@ -167,11 +167,12 @@ from quantmind.flows import paper_flow
 
 
 async def main() -> None:
-    paper = await paper_flow(
-        ArxivIdentifier(id="2401.12345"),
+    result = await paper_flow(
+        ArxivIdentifier(id="1706.03762v7"),
         cfg=PaperFlowCfg(model="gpt-4o-mini"),
     )
-    print(paper.model_dump_json(indent=2))
+    print(result.global_summary.summary)
+    print(result.source_revision.id, result.chunk_set.id)
 
 
 asyncio.run(main())
@@ -219,17 +220,17 @@ async def main() -> None:
         "Pull arXiv 2401.12345 about cross-sectional momentum; use gpt-4o-mini.",
         target_flow=paper_flow,
     )
-    paper = await paper_flow(inp, cfg=cfg)
-    print(paper.model_dump_json(indent=2))
+    result = await paper_flow(inp, cfg=cfg)
+    print(result.global_summary.summary)
 
 
 asyncio.run(main())
 ```
 
-> **Note**: QuantMind is mid-migration to OpenAI Agents SDK
-> (see [#71](https://github.com/LLMQuant/quant-mind/issues/71)). PR5 lands the
-> apex layer (`flows/` + `magic.py`); the remaining work is the `mind/`
-> memory + store layer scheduled for PR6 and PR7.
+Paper Flow V1 is source-first: code preserves the exact PDF revision and
+page-aware chunks before accepting a bounded, cited model summary. See the
+[complete persist/reopen/search example](examples/flows/paper.py) and
+[design contract](contexts/design/flow/paper.md).
 
 ---
 
@@ -238,7 +239,7 @@ asyncio.run(main())
 - [x] Better `flow` design for user-friendly usage
 - [x] First production level example (Quant Paper Agent)
 - [ ] Migrate Agent layer to OpenAI Agents SDK
-- [ ] Standardize knowledge format with `knowledge/` (Pydantic-based)
+- [x] Standardize knowledge format with `knowledge/` (Pydantic-based)
 - [ ] Additional content sources (financial news, blogs, reports)
 - [ ] Cross-step working memory (`mind/memory`) for batch document processing
 
@@ -254,18 +255,10 @@ QuantMind is designed with a larger vision: to become a comprehensive intelligen
 The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
 
 > [!NOTE]
-> **Future Conceptual Example (PR6 brings `FilesystemMemory`):**
->
-> ```python
-> from quantmind.configs.paper import ArxivIdentifier
-> from quantmind.flows import paper_flow
-> from quantmind.knowledge import Paper
-> from quantmind.mind.memory import FilesystemMemory  # PR6
->
-> memory = FilesystemMemory("./mem/factor-research/")
-> for arxiv_id in arxiv_ids:
->     paper: Paper = await paper_flow(ArxivIdentifier(id=arxiv_id), memory=memory)
-> ```
+> The current source-first paper path produces independently versioned source,
+> chunk-set, and cited-summary artifacts. Future agent memory and cross-document
+> reasoning can build on `LocalKnowledgeLibrary.search()` without changing
+> those canonical artifacts.
 
 This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
 
