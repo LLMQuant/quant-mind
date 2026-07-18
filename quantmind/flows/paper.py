@@ -482,6 +482,10 @@ def _build_global_summary(
         input_chunk_set_id=chunk_set.id,
         instructions_hash=_summary_instructions_hash(cfg),
         max_output_tokens=cfg.max_summary_output_tokens,
+        max_research_calls=cfg.max_summary_tool_calls,
+        max_research_concurrency=cfg.max_summary_concurrency,
+        research_max_turns=cfg.max_summary_worker_turns,
+        research_max_output_tokens=cfg.max_summary_worker_output_tokens,
     )
     producer_hash = _stable_hash(producer.model_dump(mode="json"))
     artifact_id = _paper_artifact_id(

@@ -6,7 +6,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from quantmind.knowledge import ArtifactLocator, Citation, SourceRef
+from quantmind.knowledge import (
+    ArtifactLocator,
+    Citation,
+    PaperArtifactKind,
+    SourceRef,
+)
 
 
 class SemanticQuery(BaseModel):
@@ -15,7 +20,7 @@ class SemanticQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     text: str = Field(min_length=1)
-    artifact_kinds: list[str] | None = None
+    artifact_kinds: list[PaperArtifactKind] | None = None
     item_types: list[str] | None = None
     source_kinds: (
         list[

@@ -31,6 +31,8 @@ Putting the same result again is safe and reuses valid vectors. A changed splitt
 Opening a library performs no embedding or network request. Search embeds only the query when stored projections are reusable:
 
 ```python
+from quantmind.knowledge import PaperArtifactKind
+
 library = await LocalKnowledgeLibrary.open(
     ".quantmind/library.db",
     embedding_model="text-embedding-3-small",
@@ -39,14 +41,14 @@ try:
     summary_hits = await library.search(
         SemanticQuery(
             text="What is the paper's central contribution?",
-            artifact_kinds=["paper_summary"],
+            artifact_kinds=[PaperArtifactKind.GLOBAL_SUMMARY],
             top_k=3,
         )
     )
     chunk_hits = await library.search(
         SemanticQuery(
             text="How does multi-head attention work?",
-            artifact_kinds=["paper_chunk_set"],
+            artifact_kinds=[PaperArtifactKind.CHUNK_SET],
             top_k=5,
         )
     )

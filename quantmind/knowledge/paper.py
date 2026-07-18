@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -18,7 +19,12 @@ from pydantic import (
 from quantmind.knowledge._base import SourceRef
 from quantmind.knowledge._tree import TreeKnowledge
 
-PaperArtifactKind = Literal["paper_chunk_set", "paper_summary"]
+
+class PaperArtifactKind(str, Enum):
+    """Closed paper-artifact discriminator accepted by Pydantic and JSON."""
+
+    CHUNK_SET = "paper_chunk_set"
+    GLOBAL_SUMMARY = "paper_summary"
 
 
 def _stable_hash(value: object) -> str:
@@ -42,12 +48,13 @@ def _paper_source_id(content_hash: str) -> UUID:
 
 def _paper_artifact_id(
     source_revision_id: UUID,
-    artifact_kind: PaperArtifactKind,
+    artifact_kind: PaperArtifactKind | str,
     producer_config_hash: str,
 ) -> UUID:
+    kind = PaperArtifactKind(artifact_kind)
     return uuid5(
         source_revision_id,
-        f"quantmind:{artifact_kind}:{producer_config_hash}",
+        f"quantmind:{kind.value}:{producer_config_hash}",
     )
 
 
@@ -352,7 +359,9 @@ class PaperChunkSet(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: UUID
-    artifact_kind: Literal["paper_chunk_set"] = "paper_chunk_set"
+    artifact_kind: Literal[PaperArtifactKind.CHUNK_SET] = (
+        PaperArtifactKind.CHUNK_SET
+    )
     schema_version: Literal["1.0"] = "1.0"
     source_revision_id: UUID
     producer: PaperChunkingConfig
@@ -448,9 +457,16 @@ class PaperSummaryProducer(BaseModel):
 
     model: str
     prompt_version: str
+    orchestration: Literal["manager-research-agents-v1"] = (
+        "manager-research-agents-v1"
+    )
     input_chunk_set_id: UUID
     instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     max_output_tokens: int = Field(gt=0)
+    max_research_calls: int = Field(default=12, ge=1)
+    max_research_concurrency: int = Field(default=2, ge=1)
+    research_max_turns: int = Field(default=4, ge=1)
+    research_max_output_tokens: int = Field(default=1_536, ge=1)
 
 
 def _paper_summary_content_hash(
@@ -473,7 +489,9 @@ class PaperGlobalSummary(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: UUID
-    artifact_kind: Literal["paper_summary"] = "paper_summary"
+    artifact_kind: Literal[PaperArtifactKind.GLOBAL_SUMMARY] = (
+        PaperArtifactKind.GLOBAL_SUMMARY
+    )
     schema_version: Literal["1.0"] = "1.0"
     source_revision_id: UUID
     producer: PaperSummaryProducer

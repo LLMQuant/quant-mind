@@ -7,7 +7,11 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 
-from quantmind.knowledge import PaperChunk, PaperGlobalSummary
+from quantmind.knowledge import (
+    PaperArtifactKind,
+    PaperChunk,
+    PaperGlobalSummary,
+)
 from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
 from tests.paper_helpers import build_paper_result
 
@@ -181,7 +185,7 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
             summary_hits = await library.search(
                 SemanticQuery(
                     text=summary_query,
-                    artifact_kinds=["paper_summary"],
+                    artifact_kinds=[PaperArtifactKind.GLOBAL_SUMMARY],
                     top_k=3,
                 )
             )
@@ -197,7 +201,7 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
             chunk_hits = await library.search(
                 SemanticQuery(
                     text=chunk_query,
-                    artifact_kinds=["paper_chunk_set"],
+                    artifact_kinds=[PaperArtifactKind.CHUNK_SET],
                     top_k=5,
                 )
             )

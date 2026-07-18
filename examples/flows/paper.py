@@ -10,7 +10,11 @@ from dotenv import load_dotenv
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import ArxivIdentifier
 from quantmind.flows import paper_flow
-from quantmind.knowledge import PaperChunk, PaperGlobalSummary
+from quantmind.knowledge import (
+    PaperArtifactKind,
+    PaperChunk,
+    PaperGlobalSummary,
+)
 from quantmind.library import (
     LocalKnowledgeLibrary,
     SemanticHit,
@@ -32,14 +36,14 @@ async def _search_and_resolve(
     summary_hits = await library.search(
         SemanticQuery(
             text="What is the paper's central contribution?",
-            artifact_kinds=["paper_summary"],
+            artifact_kinds=[PaperArtifactKind.GLOBAL_SUMMARY],
             top_k=3,
         )
     )
     chunk_hits = await library.search(
         SemanticQuery(
             text="How does multi-head attention work?",
-            artifact_kinds=["paper_chunk_set"],
+            artifact_kinds=[PaperArtifactKind.CHUNK_SET],
             top_k=5,
         )
     )
@@ -98,6 +102,10 @@ async def main() -> None:
         ) = await _search_and_resolve(library)
 
         print(restored.global_summary.summary)
+        print(
+            "summary_orchestration="
+            f"{restored.global_summary.producer.orchestration}"
+        )
         print(
             f"chunks={len(restored.chunk_set.chunks)} "
             f"source_pages={len(restored.source_revision.parsed.pages)}"

@@ -94,7 +94,7 @@ Every stored projection records target identity, exact projection text and hash,
 
 ## Search and Resolution
 
-`SemanticQuery.artifact_kinds` filters artifact granularity, including `paper_summary` and `paper_chunk_set`. Existing `item_types`, source, confidence, tag, tree, `as_of`, and `available_at` filters continue to apply where meaningful. Filtering happens before ranking.
+`SemanticQuery.artifact_kinds` is a Pydantic-validated list of `PaperArtifactKind` values rather than an open string list. `PaperArtifactKind.GLOBAL_SUMMARY` selects summary aggregates and `PaperArtifactKind.CHUNK_SET` selects chunk members owned by chunk-set artifacts. JSON and YAML callers may still use the enum values `paper_summary` and `paper_chunk_set`; unknown values fail validation. Existing `item_types`, source, confidence, tag, tree, `as_of`, and `available_at` filters continue to apply where meaningful. Filtering happens before ranking.
 
 Each `SemanticHit` carries two complementary values:
 

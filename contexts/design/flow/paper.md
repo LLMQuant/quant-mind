@@ -53,9 +53,11 @@ The operation has a strict order:
 3. Build and validate `PaperSourceRevision`, including content-addressed asset references and blobs.
 4. Chunk each page with LlamaIndex while retaining page and character spans.
 5. Build and validate `PaperChunkSet` with code-owned IDs and membership.
-6. Invoke the bounded summarizer using only the validated chunk set.
-7. Resolve model-returned chunk/page coordinates into canonical citations in code.
-8. Build and validate `PaperGlobalSummary` and the cross-artifact `PaperFlowResult`.
+6. Give a coordinator agent the bounded chunk manifest and a research-agent tool.
+7. Require the coordinator to delegate complete chunk coverage to one or more bounded research subagents, with independent ranges eligible for parallel execution.
+8. Let the coordinator synthesize typed worker reports and make bounded overlapping follow-up calls when needed.
+9. Resolve model-returned chunk/page coordinates into canonical citations in code.
+10. Build and validate `PaperGlobalSummary` and the cross-artifact `PaperFlowResult`.
 
 A summarization failure occurs after source and chunks exist in memory, but `paper_flow` returns no partial success value. Persistence is a separate explicit operation.
 
@@ -97,17 +99,20 @@ Code then creates `PaperCitation` values and a `PaperGlobalSummary`. Its produce
 
 ## Bounded Model Calls
 
-`PaperFlowCfg` makes runtime and usage bounds explicit:
+`PaperFlowCfg` makes coordinator and nested-research bounds explicit:
 
-- `max_summary_tool_calls` caps adaptive chunk reads;
-- `max_summary_concurrency` bounds simultaneous chunk-read tools;
-- `max_summary_input_tokens` caps estimated manifest and chunk-read input;
-- `max_summary_output_tokens` caps the structured response and validated summary size;
-- `max_turns` caps Agents SDK turns and defaults to 16 for the paper summarizer;
+- `max_summary_tool_calls` caps research-subagent invocations, including focused follow-ups;
+- `max_summary_concurrency` bounds simultaneous research-subagent runs;
+- `max_summary_worker_turns` caps each nested agent run;
+- `max_summary_worker_output_tokens` caps each structured worker report;
+- `max_summary_input_tokens` caps the manifest, worker chunk inputs, and worker reports returned to the coordinator;
+- `max_summary_output_tokens` caps the coordinator's final structured response;
+- `max_summary_total_output_tokens` caps worker reports and final output together;
+- `max_turns` caps coordinator turns and defaults to 16;
 - `timeout_seconds` bounds the complete summarization operation;
 - `summary_prompt_version` and `summary_instructions` version the semantic producer.
 
-The summarizer receives a bounded manifest and may adaptively read up to eight consecutive chunks per tool call. A shared concurrency-safe budget is reserved before every read. The operation rejects work that would exceed a call or token limit rather than silently running without a bound.
+The coordinator uses the Agents SDK manager-style pattern: `paper_chunk_researcher` is exposed through `Agent.as_tool()`, so the coordinator retains responsibility for the final summary while each specialist receives only its requested range. The manifest provides code-generated groups of at most eight consecutive chunks. Independent calls may run in parallel, and the coordinator may request bounded overlapping follow-up research. Code rejects missing full-chunk coverage, out-of-scope worker citations, invalid pages or quotes, and any call, concurrency, token, or runtime excess.
 
 ## Failure Semantics
 
@@ -116,7 +121,7 @@ The summarizer receives a bounded manifest and may adaptively read up to eight c
 - Fetching, parsing, or missing parser assets raise their source error and produce no result.
 - Empty chunk output is invalid.
 - Invalid or insufficient summary citations raise `PaperCitationValidationError`.
-- Call, token, output, concurrency, and timeout violations fail the summary operation.
+- Missing worker coverage, invalid worker evidence, and call, token, output, concurrency, or timeout violations fail the summary operation.
 - Any canonical identity, content hash, membership, lineage, or cross-artifact mismatch fails Pydantic validation.
 
 No failure is converted into a partially valid `PaperFlowResult`. Callers may retry with the same source and producer settings; stable IDs make successful repeated runs idempotent.
@@ -137,7 +142,7 @@ The bounded live slice is:
 python scripts/verify_pdf_rag_e2e.py
 ```
 
-It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical pages, creates multiple page-aware chunks, generates a cited global summary with bounded `gpt-4o-mini` calls, persists with `text-embedding-3-small`, closes and reopens the database, runs summary and chunk searches, resolves every returned locator, and prints useful summary, page, citation, and score diagnostics. The dedicated `paper-flow` job in `.github/workflows/e2e.yml` owns this non-required public-network check.
+It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical pages, creates multiple page-aware chunks, delegates complete coverage to bounded `gpt-4o-mini` research subagents, synthesizes a cited global summary, persists with `text-embedding-3-small`, closes and reopens the database, runs summary and chunk searches, resolves every returned locator, and prints useful summary, page, citation, and score diagnostics. The dedicated `paper-flow` job in `.github/workflows/e2e.yml` owns this non-required public-network check.
 
 ## Out of Scope
 

@@ -12,7 +12,11 @@ from dotenv import load_dotenv
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import ArxivIdentifier
 from quantmind.flows import paper_flow
-from quantmind.knowledge import PaperChunk, PaperGlobalSummary
+from quantmind.knowledge import (
+    PaperArtifactKind,
+    PaperChunk,
+    PaperGlobalSummary,
+)
 from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
 
 _ARXIV_ID = "1706.03762v7"
@@ -27,14 +31,14 @@ async def _search_and_resolve(
     summary_hits = await library.search(
         SemanticQuery(
             text=_SUMMARY_QUERY,
-            artifact_kinds=["paper_summary"],
+            artifact_kinds=[PaperArtifactKind.GLOBAL_SUMMARY],
             top_k=3,
         )
     )
     chunk_hits = await library.search(
         SemanticQuery(
             text=_CHUNK_QUERY,
-            artifact_kinds=["paper_chunk_set"],
+            artifact_kinds=[PaperArtifactKind.CHUNK_SET],
             top_k=5,
         )
     )
@@ -56,8 +60,11 @@ async def _run_vertical_slice() -> dict[str, Any]:
                 timeout_seconds=240,
                 max_summary_tool_calls=12,
                 max_summary_concurrency=2,
+                max_summary_worker_turns=4,
+                max_summary_worker_output_tokens=1_536,
                 max_summary_input_tokens=120_000,
                 max_summary_output_tokens=4_096,
+                max_summary_total_output_tokens=20_000,
                 min_summary_citations=3,
                 min_summary_pages=2,
             ),
@@ -115,6 +122,7 @@ async def _run_vertical_slice() -> dict[str, Any]:
         ),
         "chunk_count": len(result.chunk_set.chunks),
         "summary": result.global_summary.summary,
+        "summary_orchestration": (result.global_summary.producer.orchestration),
         "citation_count": len(result.global_summary.citations),
         "citation_pages": sorted(
             {
@@ -199,6 +207,7 @@ def _passed(snapshot: dict[str, Any]) -> bool:
         and snapshot["chunk_asset_reference_count"] > 0
         and snapshot["chunk_count"] > 0
         and snapshot["summary"]
+        and snapshot["summary_orchestration"] == "manager-research-agents-v1"
         and snapshot["citation_count"] >= 3
         and len(snapshot["citation_pages"]) >= 2
         and snapshot["first_summary_scores"]
@@ -232,6 +241,7 @@ async def main() -> int:
         f"text_pages={snapshot['text_page_count']} "
         f"chunks={snapshot['chunk_count']} assets={snapshot['asset_count']} "
         f"chunk_asset_refs={snapshot['chunk_asset_reference_count']} "
+        f"orchestration={snapshot['summary_orchestration']} "
         f"asset_pages={snapshot['screenshot_pages']} "
         f"citation_pages={snapshot['citation_pages']} "
         f"summary_scores={snapshot['second_summary_scores']} "
