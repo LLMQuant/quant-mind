@@ -44,6 +44,9 @@ chunk projections with `text-embedding-3-small`, reopens the database, searches
 both artifact kinds, and resolves every hit. It runs daily, manually, and on
 pull requests that change its dependency paths, and it remains non-required
 because arXiv and model providers are public-network dependencies.
+When the repository `OPENAI_API_KEY` secret is unavailable, the job emits an
+explicit skip notice instead of reporting an implementation failure; the
+catalog command remains the direct way to run the same bounded slice locally.
 
 ## Verification
 

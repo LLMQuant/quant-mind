@@ -137,5 +137,17 @@ jobs:
       - name: Install project runtime dependencies
         run: uv pip install --python .venv/bin/python -e .
 
+      - name: Check OpenAI credential
+        id: openai
+        shell: bash
+        run: |
+          if [[ -n "${OPENAI_API_KEY}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Paper Flow V1 E2E because OPENAI_API_KEY is not configured."
+          fi
+
       - name: Run live Paper Flow V1 E2E
+        if: steps.openai.outputs.available == 'true'
         run: .venv/bin/python scripts/verify_pdf_rag_e2e.py
