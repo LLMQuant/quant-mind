@@ -19,10 +19,18 @@ from quantmind.configs.paper import (
 class PaperFlowCfgTests(unittest.TestCase):
     def test_defaults(self):
         cfg = PaperFlowCfg()
-        self.assertEqual(cfg.model, "gpt-4o")
-        self.assertTrue(cfg.extract_methodology)
-        self.assertTrue(cfg.extract_limitations)
-        self.assertIsNone(cfg.asset_class_hint)
+        self.assertEqual(cfg.model, "gpt-4o-mini")
+        self.assertEqual(cfg.max_turns, 16)
+        self.assertEqual(cfg.chunk_size, 512)
+        self.assertEqual(cfg.chunk_overlap, 64)
+        self.assertEqual(cfg.max_summary_tool_calls, 12)
+        self.assertEqual(cfg.min_summary_citations, 3)
+
+    def test_invalid_overlap_or_coverage_bounds_are_rejected(self):
+        with self.assertRaises(ValidationError):
+            PaperFlowCfg(chunk_size=64, chunk_overlap=64)
+        with self.assertRaises(ValidationError):
+            PaperFlowCfg(min_summary_citations=1, min_summary_pages=2)
 
 
 class PaperInputDiscriminatedTests(unittest.TestCase):

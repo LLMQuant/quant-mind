@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from quantmind.knowledge import BaseKnowledge, Earnings, News, Paper
+from quantmind.knowledge import BaseKnowledge, Earnings, LegacyPaper, News
 from quantmind.library import LocalKnowledgeLibrary
 
 _ROOT = Path(__file__).parents[2]
@@ -20,7 +20,7 @@ _EMBEDDING_DIMENSIONS = 1536
 _KNOWLEDGE_TYPES: dict[str, type[BaseKnowledge]] = {
     "earnings": Earnings,
     "news": News,
-    "paper": Paper,
+    "paper": LegacyPaper,
 }
 
 

@@ -42,7 +42,7 @@ class EarningsTests(unittest.TestCase):
         self.assertEqual(e.revenue, 120.0)
         self.assertEqual(e.surprise_flags, ["eps_beat", "revenue_beat"])
 
-    def test_embedding_text(self):
+    def test_retrieval_projection_is_not_a_domain_method(self):
         e = Earnings(
             as_of=_now(),
             source=_src(),
@@ -50,10 +50,7 @@ class EarningsTests(unittest.TestCase):
             period="2026Q1",
             guidance="Raised FY guide",
         )
-        self.assertEqual(
-            e.embedding_text(),
-            "AAPL 2026Q1 earnings\nRaised FY guide",
-        )
+        self.assertFalse(hasattr(e, "embedding_text"))
 
 
 if __name__ == "__main__":

@@ -11,7 +11,12 @@ class PublicTypeTests(unittest.TestCase):
     def test_package_exports_only_domain_retrieval_types(self):
         self.assertEqual(
             set(library.__all__),
-            {"LocalKnowledgeLibrary", "SemanticQuery", "SemanticHit"},
+            {
+                "LocalKnowledgeLibrary",
+                "SearchProjection",
+                "SemanticQuery",
+                "SemanticHit",
+            },
         )
 
     def test_query_rejects_blank_text(self):

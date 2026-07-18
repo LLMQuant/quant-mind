@@ -93,6 +93,10 @@ async def fetch_arxiv(id_or_url: str) -> RawPaper:
     arxiv_id = _extract_arxiv_id(id_or_url)
     result = await asyncio.to_thread(_fetch_metadata_sync, arxiv_id)
 
+    get_short_id = getattr(result, "get_short_id", None)
+    resolved_arxiv_id = (
+        str(get_short_id()) if callable(get_short_id) else arxiv_id
+    )
     pdf_url = result.pdf_url
     if not pdf_url:
         raise LookupError(f"arxiv result has no pdf_url for {arxiv_id!r}")
@@ -101,17 +105,21 @@ async def fetch_arxiv(id_or_url: str) -> RawPaper:
         response = await client.get(pdf_url, headers=headers)
         response.raise_for_status()
         pdf_bytes = response.content
+        fetched_at = datetime.now(timezone.utc)
 
     return RawPaper(
         bytes=pdf_bytes,
         content_type="application/pdf",
         source_url=pdf_url,
         headers={},
-        arxiv_id=arxiv_id,
+        resolved_url=str(response.url),
+        fetched_at=fetched_at,
+        arxiv_id=resolved_arxiv_id,
         title=result.title,
         authors=tuple(str(a) for a in result.authors),
         abstract=result.summary,
         published_at=_to_utc(result.published),
+        updated_at=_to_utc(getattr(result, "updated", None)),
         primary_category=result.primary_category,
         categories=tuple(str(c) for c in result.categories),
     )

@@ -20,9 +20,16 @@ class _IndexRecord:
     """Durable metadata and vector bytes for one searchable target."""
 
     target_id: str
+    owner_kind: str
     item_id: UUID
     node_id: UUID | None
     item_type: str
+    source_revision_id: UUID | None
+    artifact_kind: str
+    projection_kind: str
+    projection_version: str
+    embedding_model: str
+    projection_hash: str
     matched_text: str
     as_of: float
     available_at: float | None
@@ -154,10 +161,18 @@ class _LlamaIndexRetriever:
             else None
         )
         item_types = set(query.item_types) if query.item_types else None
+        artifact_kinds = (
+            set(query.artifact_kinds) if query.artifact_kinds else None
+        )
         source_kinds = set(query.source_kinds) if query.source_kinds else None
         required_tags = set(query.tags) if query.tags else None
         selected: list[_IndexRecord] = []
         for record in self._records:
+            if (
+                artifact_kinds is not None
+                and record.artifact_kind not in artifact_kinds
+            ):
+                continue
             if item_types is not None and record.item_type not in item_types:
                 continue
             if (

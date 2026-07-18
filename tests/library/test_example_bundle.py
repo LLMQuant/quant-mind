@@ -9,8 +9,8 @@ from uuid import UUID
 from quantmind.knowledge import (
     BaseKnowledge,
     Earnings,
+    LegacyPaper,
     News,
-    Paper,
     TreeKnowledge,
 )
 from quantmind.library import LocalKnowledgeLibrary, SemanticQuery
@@ -26,7 +26,7 @@ _DATABASE_PATH = _BUNDLE_PATH.with_suffix(".db")
 _KNOWLEDGE_TYPES: dict[str, type[BaseKnowledge]] = {
     "earnings": Earnings,
     "news": News,
-    "paper": Paper,
+    "paper": LegacyPaper,
 }
 
 
@@ -65,7 +65,7 @@ class ExampleBundleTests(unittest.TestCase):
         self.assertIn("AI", self.scenario)
         self.assertEqual(
             {type(item) for item in self.items},
-            {News, Earnings, Paper},
+            {News, Earnings, LegacyPaper},
         )
         self.assertTrue(
             all("ai-infrastructure" in item.tags for item in self.items)
@@ -83,7 +83,9 @@ class ExampleBundleTests(unittest.TestCase):
             self.assertTrue(item.citations)
 
     def test_paper_tree_has_stable_valid_navigation(self):
-        paper = next(item for item in self.items if isinstance(item, Paper))
+        paper = next(
+            item for item in self.items if isinstance(item, LegacyPaper)
+        )
         self.assertEqual(len(paper.nodes), 4)
         self.assertEqual(
             [node.position for node in paper.children_of(paper.root_node_id)],

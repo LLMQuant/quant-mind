@@ -24,7 +24,8 @@ implementation must preserve.
 
 | Domain | Design |
 |---|---|
-| Flow | [Paper extraction from input to validated result](flow/paper.md) |
+| Flow | [Source-first paper flow](flow/paper.md) |
+| Knowledge | [Paper sources, artifacts, citations, and locators](knowledge/paper.md) |
 | Flow | [News collection](flow/news.md) |
 | Preprocess | [Page-aware multimodal PDF parsing](preprocess/pdf.md) |
 | RAG | [Page-aware document chunking and retrieval](rag/document.md) |

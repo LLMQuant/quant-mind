@@ -48,7 +48,7 @@ use `*_pipeline` when the function combines multiple public operations.
   `PaperInput`.
 - Config types name the domain and stage, such as `NewsCollectionCfg` or a
   future `PaperExtractionCfg`.
-- Result types describe returned data, such as `NewsBatch`, `Paper`, or
+- Result types describe returned data, such as `NewsBatch`, `PaperFlowResult`, or
   `PageIndex`.
 - Keep provider names out of public function names unless callers are choosing
   provider-specific behavior.

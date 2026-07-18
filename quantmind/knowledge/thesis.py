@@ -16,6 +16,3 @@ class Thesis(FlattenKnowledge):
     item_type: Literal["thesis"] = "thesis"
 
     claim: str
-
-    def embedding_text(self) -> str:
-        return self.claim

@@ -14,13 +14,15 @@ from quantmind.knowledge import (
     Earnings,
     ExtractionRef,
     Factor,
+    LegacyPaper,
     News,
-    Paper,
-    PaperKnowledgeCard,
+    PaperChunkSet,
+    PaperGlobalSummary,
     SourceRef,
     Thesis,
     TreeNode,
 )
+from tests.paper_helpers import build_paper_result
 
 
 def _now() -> datetime:
@@ -62,19 +64,6 @@ class FlattenRoundTripTests(unittest.TestCase):
         revived = Earnings.model_validate_json(e.model_dump_json())
         self.assertEqual(e, revived)
 
-    def test_paper_knowledge_card(self):
-        card = PaperKnowledgeCard(
-            as_of=_now(),
-            source=_src("arxiv"),
-            paper_id=uuid4(),
-            summary="momentum study",
-            methodology="cross-sectional",
-            key_findings=["beats SPX"],
-            asset_classes=["equities"],
-        )
-        revived = PaperKnowledgeCard.model_validate_json(card.model_dump_json())
-        self.assertEqual(card, revived)
-
     def test_factor(self):
         f = Factor(
             as_of=_now(),
@@ -92,7 +81,7 @@ class FlattenRoundTripTests(unittest.TestCase):
 
 
 class TreeRoundTripTests(unittest.TestCase):
-    def _build_paper(self) -> Paper:
+    def _build_paper(self) -> LegacyPaper:
         leaf_id = uuid4()
         root_id = uuid4()
         leaf = TreeNode(
@@ -111,7 +100,7 @@ class TreeRoundTripTests(unittest.TestCase):
             summary="paper-level summary",
             children_ids=[leaf_id],
         )
-        return Paper(
+        return LegacyPaper(
             as_of=_now(),
             source=_src("arxiv"),
             extraction=_ext(),
@@ -124,7 +113,7 @@ class TreeRoundTripTests(unittest.TestCase):
 
     def test_paper_dict_uuid_keys_round_trip(self):
         p = self._build_paper()
-        revived = Paper.model_validate_json(p.model_dump_json())
+        revived = LegacyPaper.model_validate_json(p.model_dump_json())
         self.assertEqual(p, revived)
         # UUID keys are preserved through the JSON detour.
         self.assertEqual(set(revived.nodes.keys()), set(p.nodes.keys()))
@@ -133,9 +122,24 @@ class TreeRoundTripTests(unittest.TestCase):
 
     def test_paper_walk_dfs_after_round_trip(self):
         p = self._build_paper()
-        revived = Paper.model_validate_json(p.model_dump_json())
+        revived = LegacyPaper.model_validate_json(p.model_dump_json())
         titles = [n.title for n in revived.walk_dfs()]
         self.assertEqual(titles, ["Cross-Sectional Momentum", "Methodology"])
+
+
+class PaperArtifactRoundTripTests(unittest.TestCase):
+    def test_chunk_set_and_summary_round_trip_independently(self) -> None:
+        result = build_paper_result()
+
+        chunk_set = PaperChunkSet.model_validate_json(
+            result.chunk_set.model_dump_json()
+        )
+        summary = PaperGlobalSummary.model_validate_json(
+            result.global_summary.model_dump_json()
+        )
+
+        self.assertEqual(chunk_set, result.chunk_set)
+        self.assertEqual(summary, result.global_summary)
 
 
 if __name__ == "__main__":

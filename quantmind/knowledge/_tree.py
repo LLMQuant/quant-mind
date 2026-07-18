@@ -1,9 +1,9 @@
 """TreeKnowledge — hierarchical-artifact shape.
 
 A tree's structure carries information: nodes derive meaning from their
-position under a parent. `TreeKnowledge` is the right shape for whole
-research papers (sections / subsections), regulatory filings (10-K parts),
-and earnings-call transcripts (intro / Q&A / per-question).
+position under a parent. `TreeKnowledge` is the right shape for regulatory
+filings (10-K parts), earnings-call transcripts (intro / Q&A / per-question),
+and a future paper-navigation artifact.
 
 Retrieval over a tree is reasoning-driven (PageIndex-style): an agent reads
 the root summary plus children summaries, picks the most likely branch,
@@ -38,10 +38,6 @@ class TreeNode(BaseModel):
     content: str | None = None
     citations: list[Citation] = Field(default_factory=list)
     children_ids: list[UUID] = Field(default_factory=list)
-
-    def embedding_text(self) -> str:
-        """Default: title + summary. Override per domain if needed."""
-        return f"{self.title}\n{self.summary}"
 
 
 class TreeKnowledge(BaseKnowledge):
@@ -85,7 +81,3 @@ class TreeKnowledge(BaseKnowledge):
             cursor = node.parent_id
         path.reverse()
         return path
-
-    def embedding_text(self) -> str:
-        """Default: root node's embedding text. Override per domain if needed."""
-        return self.root().embedding_text()

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from quantmind.knowledge import Citation, SourceRef
+from quantmind.knowledge import ArtifactLocator, Citation, SourceRef
 
 
 class SemanticQuery(BaseModel):
@@ -15,6 +15,7 @@ class SemanticQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     text: str = Field(min_length=1)
+    artifact_kinds: list[str] | None = None
     item_types: list[str] | None = None
     source_kinds: (
         list[
@@ -55,11 +56,26 @@ class SemanticQuery(BaseModel):
         return value
 
 
+class SearchProjection(BaseModel):
+    """Rebuildable projection details used to rank one semantic hit."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["text_embedding"] = "text_embedding"
+    version: str
+    modality: Literal["text"] = "text"
+    model: str
+    dimensions: int = Field(ge=1)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class SemanticHit(BaseModel):
     """Auditable evidence returned by semantic ranking."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    locator: ArtifactLocator
+    projection: SearchProjection
     item_id: UUID
     node_id: UUID | None
     item_type: str

@@ -52,5 +52,6 @@ class RawPaper(Fetched):
     authors: tuple[str, ...] = ()
     abstract: str | None = None
     published_at: datetime | None = None
+    updated_at: datetime | None = None
     primary_category: str | None = None
     categories: tuple[str, ...] = ()

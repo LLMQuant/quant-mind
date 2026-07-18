@@ -43,11 +43,13 @@ apply throughout.
 - Pydantic models, `frozen=True`, `extra="forbid"`.
 - Every `BaseKnowledge` subclass **must** require `as_of: datetime`
   (financial time-sensitivity is mandatory) and a typed `source: SourceRef`
-  (no bare strings), and **must** override `embedding_text()`.
+  (no bare strings).
+- Canonical models do not select retrieval text or store vectors. Put
+  rebuildable text projections in `quantmind.library`.
 - Pick one shape: `FlattenKnowledge` (atomic card), `TreeKnowledge`
-  (hierarchical artifact), or `GraphKnowledge` (placeholder). Whole-document
-  objects are `TreeKnowledge` even when a flatten card exists alongside
-  (e.g. `Paper` vs `PaperKnowledgeCard`).
+  (hierarchical artifact), or `GraphKnowledge` (placeholder) for conventional
+  knowledge. Source-first paper revisions and independently versioned paper
+  artifacts use their dedicated frozen models instead of `BaseKnowledge`.
 
 ### `quantmind/configs/` — operation cfg + typed inputs
 
