@@ -23,6 +23,7 @@
 ## Contents
 
 - [Motivation](#motivation)
+- [Design at a Glance](#design-at-a-glance)
 - [Ownership](#ownership)
 - [Navigation Tree Base and Paper Binding](#navigation-tree-base-and-paper-binding)
 - [Build Pipeline](#build-pipeline)
@@ -49,6 +50,44 @@ page provenance. `quantmind.knowledge` already records this as the purpose of
 `TreeKnowledge`, and embeddings there "act as a coarse pre-filter, never as a
 replacement for that reasoning."
 
+## Design at a Glance
+
+The build spine is solid; the dotted branch is the later hybrid path that adds
+embeddings. Each package owns one stage, and every deterministic or code-owned
+stage carries no model call.
+
+```mermaid
+flowchart TD
+    PD["ParsedDocument (page-aware)"]
+    subgraph PRE["preprocess — deterministic"]
+        OUT["outline signals: TOC / headings / page offset"]
+    end
+    subgraph FLW["flows"]
+        DRAFT["draft structuring agent (model, private draft)"]
+    end
+    subgraph KNW["knowledge"]
+        FD["PaperNavigationTree.from_draft() (code): mint ids, links, citations + validate() gate"]
+    end
+    subgraph LIB["library"]
+        PUT["put artifact: paper_artifacts (no embeddings)"]
+        PROJ["per-node projections (embeddings)"]
+        SRCH["search(SemanticQuery)"]
+        RES["resolve(locator): page-cited content"]
+    end
+    subgraph MND["mind"]
+        NAV["navigate(tree, question): single-pass / agentic"]
+    end
+    PD --> OUT
+    OUT --> DRAFT
+    DRAFT --> FD
+    FD --> PUT
+    PUT --> NAV
+    NAV -->|get_node_content| RES
+    PUT -.->|P2 projections| PROJ
+    PROJ -.->|candidates| SRCH
+    SRCH -.->|seed_locators| NAV
+```
+
 ## Ownership
 
 Each existing package keeps its responsibility; only agentic traversal introduces
@@ -69,6 +108,53 @@ LLM dependency and hosts no PageIndex draft producer.
 
 The tree structure is shared across document types; the identity binding is not.
 The design factors the two apart so the codebase keeps exactly one tree, not two.
+
+```mermaid
+classDiagram
+    class NavigationTree {
+        <<structural base>>
+        +UUID root_node_id
+        +Map nodes
+        +root()
+        +children_of()
+        +walk_dfs()
+        +find_path()
+        +validate()
+    }
+    class TreeNode {
+        +UUID node_id
+        +UUID parent_id
+        +str title
+        +str summary
+    }
+    class Citation {
+        +int page
+        +UUID node_id
+    }
+    class BaseKnowledge {
+        <<canonical identity>>
+    }
+    class TreeKnowledge
+    class PaperNavigationTree {
+        +PaperArtifactKind artifact_kind
+        +UUID source_revision_id
+        +str producer_config_hash
+        +str content_hash
+        +from_draft()
+    }
+    class PaperSourceRevision {
+        <<source-first anchor>>
+    }
+    class PaperChunkSet
+
+    NavigationTree <|-- TreeKnowledge
+    BaseKnowledge <|-- TreeKnowledge
+    NavigationTree <|-- PaperNavigationTree
+    NavigationTree *-- TreeNode : nodes
+    TreeNode *-- Citation : citations
+    PaperNavigationTree ..> PaperSourceRevision : source_revision_id
+    PaperNavigationTree ..> PaperChunkSet : lineage
+```
 
 `NavigationTree` is a structural base — a plain `BaseModel` with no
 `BaseKnowledge` identity: `root_node_id: UUID`, `nodes: dict[UUID, TreeNode]`, the
