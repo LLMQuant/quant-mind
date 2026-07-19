@@ -1,17 +1,17 @@
-# Build and navigate a page-preserving paper tree
+# Build and navigate a page-preserving structure tree
 
 ## Quick Summary
 
-- **Purpose**: Define how a source-first paper gains a validated navigation tree
+- **Purpose**: Define how a source-first paper gains a validated structure tree
   and how a reasoning agent traverses it, without embeddings replacing reasoning.
 - **Read when**: Designing or changing PageIndex-style tree construction, the
   `mind` navigation package, or hybrid semantic-plus-agentic retrieval.
 - **Status**: Planned. No implementation exists on `master`. This page records
   the accepted design and refines issue #95 for the source-first Paper Flow V1
   model shipped in #120; the `quantmind.mind` package does not exist yet.
-- **Core rule**: One tree implementation. A shared `NavigationTree` base carries
+- **Core rule**: One tree implementation. A shared `StructureTree` base carries
   structure, navigation, and the integrity gate; each document type subclasses it
-  for identity. The paper tree is a derived, source-linked artifact whose model
+  for identity. The paper structure tree is a derived, source-linked artifact whose model
   returns only a draft while code validates every node. Navigation reasons over
   titles and summaries; embeddings are a coarse pre-filter added later, never a
   replacement.
@@ -25,7 +25,7 @@
 - [Motivation](#motivation)
 - [Design at a Glance](#design-at-a-glance)
 - [Ownership](#ownership)
-- [Navigation Tree Base and Paper Binding](#navigation-tree-base-and-paper-binding)
+- [Structure Tree Base and Paper Binding](#structure-tree-base-and-paper-binding)
 - [Build Pipeline](#build-pipeline)
 - [Navigation Retrieval](#navigation-retrieval)
 - [Multi-Model Compatibility](#multi-model-compatibility)
@@ -66,7 +66,7 @@ flowchart TD
         DRAFT["draft structuring agent (model, private draft)"]
     end
     subgraph KNW["knowledge"]
-        FD["PaperNavigationTree.from_draft() (code): mint ids, links, citations + validate() gate"]
+        FD["PaperStructureTree.from_draft() (code): mint ids, links, citations + validate() gate"]
     end
     subgraph LIB["library"]
         PUT["put artifact: paper_artifacts (no embeddings)"]
@@ -75,7 +75,7 @@ flowchart TD
         RES["resolve(locator): page-cited content"]
     end
     subgraph MND["mind"]
-        NAV["navigate(tree, question): single-pass / agentic"]
+        NAV["navigate(structure, question): single-pass / agentic"]
     end
     PD --> OUT
     OUT --> DRAFT
@@ -96,7 +96,7 @@ a new owner, `mind`. No shared runtime is moved and no second store is added.
 | Owner | Responsibility |
 |---|---|
 | `quantmind.preprocess` | Emit deterministic outline signals (heading candidates, table-of-contents pages, printed-to-physical page offset) from a parsed document. No LLM calls. |
-| `quantmind.knowledge` | Add the `NavigationTree` structural base (reused by a refactored `TreeKnowledge`) plus a `PaperNavigationTree(NavigationTree)` artifact whose `from_draft` constructor mints identity and runs the shared integrity gate. |
+| `quantmind.knowledge` | Add the `StructureTree` structural base (reused by a refactored `TreeKnowledge`) plus a `PaperStructureTree(StructureTree)` artifact whose `from_draft` constructor mints identity and runs the shared integrity gate. |
 | `quantmind.flows` | Run one draft-structuring agent and call the knowledge constructor. Reuses `flows._runner` unchanged. Persistence stays explicit. |
 | `quantmind.library` | Persist the artifact through the existing paper artifact tables and extend `resolve()` to the new kind. Per-node projections are a separate later step. |
 | `quantmind.mind` | Traverse the tree with the Agents SDK and return node evidence. May request a semantic shortlist from `library`. |
@@ -104,14 +104,14 @@ a new owner, `mind`. No shared runtime is moved and no second store is added.
 `quantmind.rag` is unchanged: it stays deterministic chunking and BM25 with no
 LLM dependency and hosts no PageIndex draft producer.
 
-## Navigation Tree Base and Paper Binding
+## Structure Tree Base and Paper Binding
 
 The tree structure is shared across document types; the identity binding is not.
 The design factors the two apart so the codebase keeps exactly one tree, not two.
 
 ```mermaid
 classDiagram
-    class NavigationTree {
+    class StructureTree {
         <<structural base>>
         +UUID root_node_id
         +Map nodes
@@ -135,7 +135,7 @@ classDiagram
         <<canonical identity>>
     }
     class TreeKnowledge
-    class PaperNavigationTree {
+    class PaperStructureTree {
         +PaperArtifactKind artifact_kind
         +UUID source_revision_id
         +str producer_config_hash
@@ -147,30 +147,30 @@ classDiagram
     }
     class PaperChunkSet
 
-    NavigationTree <|-- TreeKnowledge
+    StructureTree <|-- TreeKnowledge
     BaseKnowledge <|-- TreeKnowledge
-    NavigationTree <|-- PaperNavigationTree
-    NavigationTree *-- TreeNode : nodes
+    StructureTree <|-- PaperStructureTree
+    StructureTree *-- TreeNode : nodes
     TreeNode *-- Citation : citations
-    PaperNavigationTree ..> PaperSourceRevision : source_revision_id
-    PaperNavigationTree ..> PaperChunkSet : lineage
+    PaperStructureTree ..> PaperSourceRevision : source_revision_id
+    PaperStructureTree ..> PaperChunkSet : lineage
 ```
 
-`NavigationTree` is a structural base — a plain `BaseModel` with no
+`StructureTree` is a structural base — a plain `BaseModel` with no
 `BaseKnowledge` identity: `root_node_id: UUID`, `nodes: dict[UUID, TreeNode]`, the
 navigation surface (`root()`, `children_of()`, `walk_dfs()`, `find_path()`), and
 the `validate()` integrity gate. It carries no `id`, `as_of`, or `source`, so a
 subclass adds whatever identity its storage model needs without a second
 competing identity. The existing `TreeKnowledge` is refactored to
-`TreeKnowledge(BaseKnowledge, NavigationTree)` and reuses the same nodes,
+`TreeKnowledge(BaseKnowledge, StructureTree)` and reuses the same nodes,
 helpers, and gate instead of defining its own.
 
-A navigation tree is a derived artifact — rebuildable from a source plus a
+A structure tree is a derived artifact — rebuildable from a source plus a
 producer configuration, like `PaperChunkSet` — not canonical knowledge, so the
 paper binding is a paper artifact rather than a `TreeKnowledge` stored as a
-knowledge item. `PaperNavigationTree(NavigationTree)` adds:
+knowledge item. `PaperStructureTree(StructureTree)` adds:
 
-- `artifact_kind = PaperArtifactKind.NAVIGATION_TREE` and `schema_version`;
+- `artifact_kind = PaperArtifactKind.STRUCTURE_TREE` and `schema_version`;
 - `source_revision_id` binding it to an exact `PaperSourceRevision`;
 - a `producer` config (model, prompt version, input chunk-set id, instructions
   hash, structuring bounds) and its `producer_config_hash`;
@@ -179,7 +179,7 @@ knowledge item. `PaperNavigationTree(NavigationTree)` adds:
 
 A stable, source-and-producer-derived id makes an unchanged re-run idempotent and
 versions a changed configuration rather than overwriting it, exactly as the other
-paper artifacts behave. A future document type adds its own `NavigationTree`
+paper artifacts behave. A future document type adds its own `StructureTree`
 subclass with its own source binding; nothing paper-specific leaks into the base.
 
 Page ranges reuse `Citation`: a node spanning pages 5-8 carries four
@@ -202,9 +202,9 @@ call for the draft, and code-owned identity and validation.
    draft summaries, and candidate chunk indices per node. The draft chooses no
    ids, links, or canonical citations, exactly like the summary draft.
 3. **Canonicalization and integrity gate (`knowledge`).**
-   `PaperNavigationTree.from_draft(chunk_set, *, producer, draft)` mints node
+   `PaperStructureTree.from_draft(chunk_set, *, producer, draft)` mints node
    ids, builds parent/child links, and resolves each node's `Citation` entries
-   from the chunk set, then runs the shared `NavigationTree.validate()` gate. The
+   from the chunk set, then runs the shared `StructureTree.validate()` gate. The
    gate rejects any tree that is not single-rooted and acyclic with every node
    reachable, bidirectional parent/child consistency, unique sibling positions,
    no orphan, every cited page within the source, and every child's cited pages
@@ -221,11 +221,11 @@ Navigation lives in `quantmind.mind.navigation` and returns node evidence, never
 a synthesized answer:
 
 ```text
-navigate(tree, question, *, library, cfg, seed_locators=None)
+navigate(structure, question, *, library, cfg, seed_locators=None)
   -> list[NavigationEvidence]
 ```
 
-`tree` is any `NavigationTree` — a `PaperNavigationTree` today. Navigation is
+`structure` is any `StructureTree` — a `PaperStructureTree` today. Navigation is
 written against the base, so a future document type reuses it unchanged. Leaf
 content is resolved through the existing `LocalKnowledgeLibrary.resolve()`,
 extended to the new artifact kind, so no parallel page-resolver concept is added.
@@ -297,7 +297,7 @@ orphaned, and out-of-page-range trees; stable ids and idempotent re-runs; citati
 resolution to correct pages; reopen behavior; and, once projections exist, seeded
 hybrid navigation with locator validation.
 
-A bounded live slice builds a navigation tree over one exact arXiv revision with a
+A bounded live slice builds a structure tree over one exact arXiv revision with a
 real model, traverses it single-pass and agentically, and prints the selected
 titles, resolved page-cited content, and citation pages. It runs at least one
 non-OpenAI model to exercise the capability requirement.
