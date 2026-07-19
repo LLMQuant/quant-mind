@@ -127,7 +127,7 @@ Reads fail closed when canonical hashes, counts, IDs, membership, lineage, sourc
 
 ## PageIndex Boundary
 
-The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. A future PageIndex path may first select candidate nodes through `search()` and then navigate a separate, independently versioned tree artifact. That agentic, library-backed navigation is owned by `quantmind.mind`, not `quantmind.rag`; only a stateless document-local draft helper may live under `rag`. See [Build and navigate page-preserving knowledge trees](../mind/navigation.md).
+The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. A future PageIndex path may first select candidate nodes through `search()` and then navigate a separate paper navigation-tree artifact. That agentic, library-backed navigation is owned by `quantmind.mind`, and `resolve()` is extended to the navigation-tree kind. See [Build and navigate a page-preserving paper tree](../mind/navigation.md).
 
 PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 deliberately stores chunks and a cited summary without defining a paper tree. A navigation tree is stored as a source-linked paper artifact whose canonical persistence needs no embeddings; building per-node projections is an explicit later step that then enables hybrid semantic-plus-agentic navigation without a second index.
 

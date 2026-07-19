@@ -30,7 +30,7 @@ implementation must preserve.
 | Preprocess | [Page-aware multimodal PDF parsing](preprocess/pdf.md) |
 | RAG | [Page-aware document chunking and retrieval](rag/document.md) |
 | Library | [Local knowledge storage and meaning-based search](library/local.md) |
-| Mind | [Build and navigate page-preserving knowledge trees](mind/navigation.md) |
+| Mind | [Build and navigate a page-preserving paper tree](mind/navigation.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 | Operations | [Orchestration and construction altitude](operations/orchestration.md) |
 
