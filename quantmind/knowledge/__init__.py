@@ -20,7 +20,12 @@ from quantmind.knowledge._base import (
 )
 from quantmind.knowledge._flatten import FlattenKnowledge
 from quantmind.knowledge._graph import GraphKnowledge
-from quantmind.knowledge._tree import TreeKnowledge, TreeNode
+from quantmind.knowledge._tree import (
+    StructureTree,
+    StructureTreeValidationError,
+    TreeKnowledge,
+    TreeNode,
+)
 from quantmind.knowledge.earnings import Earnings
 from quantmind.knowledge.factor import Factor
 from quantmind.knowledge.news import News
@@ -48,6 +53,10 @@ from quantmind.knowledge.paper import (
     PaperSourceFacts,
     PaperSourceRevision,
     PaperSourceSpan,
+    PaperStructureNodeDraft,
+    PaperStructureProducer,
+    PaperStructureTree,
+    PaperStructureTreeDraft,
     PaperSummaryProducer,
     ResolvedPaperArtifact,
 )
@@ -62,6 +71,8 @@ __all__ = [
     # Shapes
     "FlattenKnowledge",
     "GraphKnowledge",
+    "StructureTree",
+    "StructureTreeValidationError",
     "TreeKnowledge",
     "TreeNode",
     # Concrete
@@ -91,6 +102,10 @@ __all__ = [
     "PaperSourceFacts",
     "PaperSourceRevision",
     "PaperSourceSpan",
+    "PaperStructureNodeDraft",
+    "PaperStructureProducer",
+    "PaperStructureTree",
+    "PaperStructureTreeDraft",
     "PaperSummaryProducer",
     "ResolvedPaperArtifact",
     "Thesis",

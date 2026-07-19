@@ -196,6 +196,10 @@ def _canonical_paper_artifact(
             canonical_hash=canonical_hash,
             members=(),
         )
+    if not isinstance(artifact, PaperChunkSet):
+        raise TypeError(
+            "Paper structure-tree persistence is not initialized yet"
+        )
     members = tuple(
         _CanonicalPaperMember(
             member_id=chunk.chunk_id,

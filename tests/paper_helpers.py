@@ -7,6 +7,7 @@ re-deriving IDs and hashes with the private helpers.
 
 import hashlib
 from datetime import datetime, timezone
+from typing import Literal
 
 from quantmind.knowledge import (
     PaperChunkingConfig,
@@ -18,6 +19,10 @@ from quantmind.knowledge import (
     PaperPageInput,
     PaperSourceFacts,
     PaperSourceRevision,
+    PaperStructureNodeDraft,
+    PaperStructureProducer,
+    PaperStructureTree,
+    PaperStructureTreeDraft,
     PaperSummaryProducer,
 )
 
@@ -122,4 +127,49 @@ def build_paper_result(
         source_revision=source,
         chunk_set=chunk_set,
         global_summary=summary,
+    )
+
+
+def build_paper_structure_tree(
+    *,
+    model: str = "fake-structure",
+    quality: Literal["low", "medium", "high"] = "high",
+) -> PaperStructureTree:
+    """Build one valid cited structure tree through its smart constructor."""
+    result = build_paper_result()
+    producer = PaperStructureProducer(
+        model=model,
+        prompt_version="test-v1",
+        input_chunk_set_id=result.chunk_set.id,
+        instructions_hash=hashlib.sha256(
+            b"test structure instructions"
+        ).hexdigest(),
+        max_output_tokens=512,
+        max_depth=4,
+        max_nodes=16,
+    )
+    draft = PaperStructureTreeDraft(
+        quality=quality,
+        root=PaperStructureNodeDraft(
+            title="Attention Is All You Need",
+            summary="The complete paper structure.",
+            chunk_indices=(0, 1, 2),
+            children=(
+                PaperStructureNodeDraft(
+                    title="Architecture",
+                    summary="The recurrence-free architecture.",
+                    chunk_indices=(0,),
+                ),
+                PaperStructureNodeDraft(
+                    title="Attention and results",
+                    summary="Multi-head attention and reported results.",
+                    chunk_indices=(1, 2),
+                ),
+            ),
+        ),
+    )
+    return PaperStructureTree.from_draft(
+        result.chunk_set,
+        producer=producer,
+        draft=draft,
     )

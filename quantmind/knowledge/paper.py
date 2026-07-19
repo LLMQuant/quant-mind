@@ -18,8 +18,13 @@ from pydantic import (
     model_validator,
 )
 
-from quantmind.knowledge._base import SourceRef
-from quantmind.knowledge._tree import TreeKnowledge
+from quantmind.knowledge._base import Citation, SourceRef
+from quantmind.knowledge._tree import (
+    StructureTree,
+    StructureTreeValidationError,
+    TreeKnowledge,
+    TreeNode,
+)
 
 
 class PaperArtifactKind(str, Enum):
@@ -27,6 +32,7 @@ class PaperArtifactKind(str, Enum):
 
     CHUNK_SET = "paper_chunk_set"
     GLOBAL_SUMMARY = "paper_summary"
+    STRUCTURE_TREE = "paper_structure_tree"
 
 
 def _stable_hash(value: object) -> str:
@@ -663,6 +669,49 @@ def _validate_chunk_set_source(
                     )
 
 
+class PaperStructureNodeDraft(BaseModel):
+    """Model-proposed hierarchy node without canonical identity or links."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    title: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    chunk_indices: tuple[int, ...] = Field(min_length=1)
+    children: tuple["PaperStructureNodeDraft", ...] = ()
+
+    @field_validator("title", "summary")
+    @classmethod
+    def _text_is_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("paper structure draft text must not be blank")
+        return stripped
+
+
+class PaperStructureTreeDraft(BaseModel):
+    """Bounded model output consumed by code-owned tree construction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    root: PaperStructureNodeDraft
+    quality: Literal["low", "medium", "high"] = "high"
+
+
+class PaperStructureProducer(BaseModel):
+    """Exact model, prompt, input, and bounds used to structure a paper."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str
+    prompt_version: str
+    orchestration: Literal["single-pass-v1"] = "single-pass-v1"
+    input_chunk_set_id: UUID
+    instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    max_output_tokens: int = Field(gt=0)
+    max_depth: int = Field(ge=1)
+    max_nodes: int = Field(ge=1)
+
+
 class ArtifactLocator(BaseModel):
     """Stable address for a paper artifact or one of its members."""
 
@@ -672,6 +721,250 @@ class ArtifactLocator(BaseModel):
     artifact_id: UUID
     artifact_kind: str = Field(min_length=1)
     member_id: UUID | None = None
+
+
+def _paper_structure_content_hash(
+    root_node_id: UUID,
+    nodes: dict[UUID, TreeNode],
+) -> str:
+    return _stable_hash(
+        {
+            "root_node_id": str(root_node_id),
+            "nodes": {
+                str(node_id): node.model_dump(mode="json")
+                for node_id, node in sorted(
+                    nodes.items(), key=lambda pair: str(pair[0])
+                )
+            },
+        }
+    )
+
+
+class PaperStructureTree(StructureTree):
+    """Page-preserving structure derived from one exact paper chunk set."""
+
+    id: UUID
+    artifact_kind: Literal[PaperArtifactKind.STRUCTURE_TREE] = (
+        PaperArtifactKind.STRUCTURE_TREE
+    )
+    schema_version: Literal["1.0"] = "1.0"
+    source_revision_id: UUID
+    producer: PaperStructureProducer
+    producer_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    derived_from: tuple[ArtifactLocator, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_artifact(self) -> "PaperStructureTree":
+        expected_config_hash = _stable_hash(
+            self.producer.model_dump(mode="json")
+        )
+        if self.producer_config_hash != expected_config_hash:
+            raise ValueError("paper structure-tree producer hash mismatch")
+        expected_id = _paper_artifact_id(
+            self.source_revision_id,
+            self.artifact_kind,
+            self.producer_config_hash,
+        )
+        if self.id != expected_id:
+            raise ValueError(
+                "paper structure-tree ID does not match its producer"
+            )
+        if self.content_hash != _paper_structure_content_hash(
+            self.root_node_id,
+            self.nodes,
+        ):
+            raise ValueError("paper structure-tree content hash mismatch")
+        if any(node.content is not None for node in self.nodes.values()):
+            raise ValueError("paper structure-tree nodes must not copy content")
+        if any(not node.citations for node in self.nodes.values()):
+            raise ValueError("paper structure-tree nodes require citations")
+        if any(
+            locator.source_revision_id != self.source_revision_id
+            or locator.member_id is not None
+            for locator in self.derived_from
+        ):
+            raise ValueError(
+                "paper structure-tree lineage has an invalid locator"
+            )
+        if not any(
+            locator.artifact_kind == PaperArtifactKind.CHUNK_SET
+            and locator.artifact_id == self.producer.input_chunk_set_id
+            for locator in self.derived_from
+        ):
+            raise ValueError(
+                "paper structure-tree producer input is missing from lineage"
+            )
+        self.validate()
+        return self
+
+    @classmethod
+    def from_draft(
+        cls,
+        chunk_set: PaperChunkSet,
+        *,
+        producer: PaperStructureProducer,
+        draft: PaperStructureTreeDraft,
+    ) -> "PaperStructureTree":
+        """Mint canonical identity, links, and citations from a model draft.
+
+        A low-quality draft is replaced with a deterministic flat tree over
+        the ordered chunks. Otherwise draft positions and chunk coordinates are
+        retained, while every UUID, link, and citation is owned by code.
+        """
+        if producer.input_chunk_set_id != chunk_set.id:
+            raise ValueError(
+                "structure-tree producer input does not match chunk set"
+            )
+        producer_hash = _stable_hash(producer.model_dump(mode="json"))
+        artifact_id = _paper_artifact_id(
+            chunk_set.source_revision_id,
+            PaperArtifactKind.STRUCTURE_TREE,
+            producer_hash,
+        )
+        root_draft = (
+            cls._flat_fallback(chunk_set, draft.root)
+            if draft.quality == "low"
+            else draft.root
+        )
+        nodes: dict[UUID, TreeNode] = {}
+        node_count = 0
+
+        def build(
+            value: PaperStructureNodeDraft,
+            *,
+            parent_id: UUID | None,
+            position: int,
+            path: tuple[int, ...],
+            depth: int,
+        ) -> UUID:
+            nonlocal node_count
+            if depth > producer.max_depth:
+                raise StructureTreeValidationError(
+                    "paper structure draft exceeds max_depth"
+                )
+            if node_count >= producer.max_nodes:
+                raise StructureTreeValidationError(
+                    "paper structure draft exceeds max_nodes"
+                )
+            node_count += 1
+            node_id = uuid5(
+                artifact_id,
+                "quantmind:paper-structure-node:"
+                + ".".join(str(part) for part in path),
+            )
+            children_ids = [
+                build(
+                    child,
+                    parent_id=node_id,
+                    position=child_position,
+                    path=(*path, child_position),
+                    depth=depth + 1,
+                )
+                for child_position, child in enumerate(value.children)
+            ]
+            citations = cls._resolve_structure_citations(
+                chunk_set,
+                value.chunk_indices,
+            )
+            nodes[node_id] = TreeNode(
+                node_id=node_id,
+                parent_id=parent_id,
+                position=position,
+                title=value.title,
+                summary=value.summary,
+                content=None,
+                citations=citations,
+                children_ids=children_ids,
+            )
+            return node_id
+
+        root_node_id = build(
+            root_draft,
+            parent_id=None,
+            position=0,
+            path=(0,),
+            depth=1,
+        )
+        tree = cls(
+            id=artifact_id,
+            source_revision_id=chunk_set.source_revision_id,
+            producer=producer,
+            producer_config_hash=producer_hash,
+            content_hash=_paper_structure_content_hash(root_node_id, nodes),
+            derived_from=(
+                ArtifactLocator(
+                    source_revision_id=chunk_set.source_revision_id,
+                    artifact_id=chunk_set.id,
+                    artifact_kind=PaperArtifactKind.CHUNK_SET,
+                ),
+            ),
+            root_node_id=root_node_id,
+            nodes=nodes,
+        )
+        tree.validate(
+            source_pages={
+                span.page_number
+                for chunk in chunk_set.chunks
+                for span in chunk.source_spans
+            }
+        )
+        return tree
+
+    @staticmethod
+    def _resolve_structure_citations(
+        chunk_set: PaperChunkSet,
+        chunk_indices: Sequence[int],
+    ) -> list[Citation]:
+        citations: list[Citation] = []
+        seen: set[tuple[UUID, int]] = set()
+        for index in chunk_indices:
+            if index < 0 or index >= len(chunk_set.chunks):
+                raise StructureTreeValidationError(
+                    "paper structure draft cites an unknown chunk index"
+                )
+            chunk = chunk_set.chunks[index]
+            for page in sorted(
+                {span.page_number for span in chunk.source_spans}
+            ):
+                key = (chunk.chunk_id, page)
+                if key in seen:
+                    continue
+                seen.add(key)
+                citations.append(
+                    Citation(
+                        source_id=str(chunk_set.source_revision_id),
+                        page=page,
+                        tree_id=chunk_set.id,
+                        node_id=chunk.chunk_id,
+                    )
+                )
+        return citations
+
+    @staticmethod
+    def _flat_fallback(
+        chunk_set: PaperChunkSet,
+        proposed_root: PaperStructureNodeDraft,
+    ) -> PaperStructureNodeDraft:
+        return PaperStructureNodeDraft(
+            title=proposed_root.title,
+            summary=(
+                "Flat source-order structure used because hierarchy quality "
+                "was low."
+            ),
+            chunk_indices=tuple(range(len(chunk_set.chunks))),
+            children=tuple(
+                PaperStructureNodeDraft(
+                    title=(
+                        f"Page {chunk.source_spans[0].page_number}, "
+                        f"chunk {chunk.position + 1}"
+                    ),
+                    summary="Source content retained in canonical chunk storage.",
+                    chunk_indices=(chunk.position,),
+                )
+                for chunk in chunk_set.chunks
+            ),
+        )
 
 
 class PaperCitation(BaseModel):
@@ -926,5 +1219,5 @@ class LegacyPaper(TreeKnowledge):
     asset_classes: list[str] = Field(default_factory=list)
 
 
-PaperArtifact = PaperChunkSet | PaperGlobalSummary
-ResolvedPaperArtifact = PaperArtifact | PaperChunk
+PaperArtifact = PaperChunkSet | PaperGlobalSummary | PaperStructureTree
+ResolvedPaperArtifact = PaperArtifact | PaperChunk | TreeNode

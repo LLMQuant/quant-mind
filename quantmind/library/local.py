@@ -10,6 +10,7 @@ from quantmind.knowledge import (
     ArtifactLocator,
     BaseKnowledge,
     Citation,
+    PaperArtifact,
     PaperChunkSet,
     PaperFlowResult,
     PaperGlobalSummary,
@@ -255,9 +256,7 @@ class LocalKnowledgeLibrary:
                 summary_id=summary_id,
             )
 
-    async def get_artifact(
-        self, artifact_id: UUID
-    ) -> PaperChunkSet | PaperGlobalSummary:
+    async def get_artifact(self, artifact_id: UUID) -> PaperArtifact:
         """Return one validated canonical paper artifact aggregate."""
         async with self._lock:
             store = self._store
@@ -321,7 +320,7 @@ class LocalKnowledgeLibrary:
             )
 
             canonical: dict[UUID, BaseKnowledge] = {}
-            paper_artifacts: dict[UUID, PaperChunkSet | PaperGlobalSummary] = {}
+            paper_artifacts: dict[UUID, PaperArtifact] = {}
             paper_sources: dict[UUID, PaperSourceRevision] = {}
             hits: list[SemanticHit] = []
             for result in ranked:
