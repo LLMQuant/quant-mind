@@ -15,6 +15,7 @@ from quantmind.knowledge import (
     PaperFlowResult,
     PaperGlobalSummary,
     PaperSourceRevision,
+    PaperStructureTree,
     ResolvedPaperArtifact,
     TreeKnowledge,
     TreeNode,
@@ -228,6 +229,19 @@ class LocalKnowledgeLibrary:
                 vectors,
                 embedding_model=self._embedding_model,
             )
+            self._index = None
+
+    async def put_paper_structure_tree(
+        self,
+        tree: PaperStructureTree,
+    ) -> None:
+        """Persist a validated paper structure tree without embeddings."""
+        async with self._lock:
+            store = self._store
+            if store is None:
+                raise RuntimeError("LocalKnowledgeLibrary is closed")
+            prepared = store.prepare_put_paper_structure_tree(tree)
+            store.put_paper_structure_tree(prepared)
             self._index = None
 
     async def get(self, item_id: UUID) -> BaseKnowledge:

@@ -967,6 +967,42 @@ class PaperStructureTree(StructureTree):
         )
 
 
+def _validate_structure_tree_chunk_set(
+    tree: PaperStructureTree,
+    chunk_set: PaperChunkSet,
+) -> None:
+    """Validate tree citations and lineage against an exact chunk set."""
+    if (
+        tree.source_revision_id != chunk_set.source_revision_id
+        or tree.producer.input_chunk_set_id != chunk_set.id
+    ):
+        raise ValueError("paper structure tree belongs to another chunk set")
+    chunks = {chunk.chunk_id: chunk for chunk in chunk_set.chunks}
+    source_pages = {
+        span.page_number
+        for chunk in chunk_set.chunks
+        for span in chunk.source_spans
+    }
+    tree.validate(source_pages=source_pages)
+    for node in tree.nodes.values():
+        for citation in node.citations:
+            if citation.node_id is None or citation.page is None:
+                raise ValueError(
+                    "paper structure-tree citation is missing chunk coordinates"
+                )
+            chunk = chunks.get(citation.node_id)
+            if (
+                citation.source_id != str(chunk_set.source_revision_id)
+                or citation.tree_id != chunk_set.id
+                or chunk is None
+                or citation.page
+                not in {span.page_number for span in chunk.source_spans}
+            ):
+                raise ValueError(
+                    "paper structure-tree citation does not resolve to its chunk"
+                )
+
+
 class PaperCitation(BaseModel):
     """Code-resolved citation from a summary to one chunk and source page."""
 
