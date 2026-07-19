@@ -57,6 +57,11 @@ from quantmind.preprocess.news import (
     preprocess_news_document,
     preprocess_news_url,
 )
+from quantmind.preprocess.outline import (
+    HeadingCandidate,
+    OutlineSignals,
+    extract_outline_signals,
+)
 from quantmind.preprocess.time import (
     business_days_between,
     parse_filing_date,
@@ -74,6 +79,7 @@ __all__ = [
     "FetchPolicy",
     "Fetched",
     "HttpFetcher",
+    "HeadingCandidate",
     "NewsArtifact",
     "NewsBatch",
     "NewsCandidate",
@@ -81,6 +87,7 @@ __all__ = [
     "NewsFailure",
     "NewsFailureStage",
     "NewsTickerHint",
+    "OutlineSignals",
     "ParsedDocument",
     "ParsedPage",
     "PdfParseError",
@@ -95,6 +102,7 @@ __all__ = [
     "collapse_whitespace",
     "dedupe_lines",
     "extract_exchange_ticker_hints",
+    "extract_outline_signals",
     "feed_item_to_news_document",
     "fetch_arxiv",
     "fetch_news_document",

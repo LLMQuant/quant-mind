@@ -76,6 +76,12 @@ class PaperFlowCfg(BaseFlowCfg):
     max_summary_output_tokens: int = Field(default=4_096, gt=0)
     min_summary_citations: int = Field(default=3, ge=1)
     min_summary_pages: int = Field(default=2, ge=1)
+    structure_prompt_version: str = "paper-structure-v1"
+    structure_instructions: str | None = None
+    structure_chunk_summary_chars: int = Field(default=800, ge=80)
+    max_structure_output_tokens: int = Field(default=4_096, gt=0)
+    structure_max_depth: int = Field(default=6, ge=1)
+    structure_max_nodes: int = Field(default=128, ge=1)
 
     @model_validator(mode="after")
     def _validate_paper_bounds(self) -> "PaperFlowCfg":

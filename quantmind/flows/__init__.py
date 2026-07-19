@@ -14,13 +14,19 @@ Deterministic operations such as ``collect_news`` return source-faithful
 from quantmind.flows.batch import BatchResult, batch_run
 from quantmind.flows.news import collect_news
 from quantmind.flows.paper import UnsupportedContentTypeError, paper_flow
+from quantmind.flows.structure import (
+    PaperStructureError,
+    build_paper_structure_tree,
+)
 from quantmind.knowledge import PaperCitationValidationError
 
 __all__ = [
     "BatchResult",
     "PaperCitationValidationError",
+    "PaperStructureError",
     "UnsupportedContentTypeError",
     "batch_run",
+    "build_paper_structure_tree",
     "collect_news",
     "paper_flow",
 ]
