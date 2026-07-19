@@ -9,10 +9,12 @@
 - **Status**: Planned. No implementation exists on `master`. This page records
   the accepted design and refines issue #95 for the source-first Paper Flow V1
   model shipped in #120; the `quantmind.mind` package does not exist yet.
-- **Core rule**: The tree is one more source-linked paper artifact with
-  code-owned identity and citations; the model returns only a draft, and code
-  validates every node. Navigation reasons over titles and summaries; embeddings
-  are a coarse pre-filter added later, never a replacement.
+- **Core rule**: One tree implementation. A shared `NavigationTree` base carries
+  structure, navigation, and the integrity gate; each document type subclasses it
+  for identity. The paper tree is a derived, source-linked artifact whose model
+  returns only a draft while code validates every node. Navigation reasons over
+  titles and summaries; embeddings are a coarse pre-filter added later, never a
+  replacement.
 - **Canonical models**: [Paper source and artifact design](../knowledge/paper.md).
 - **Related work**: issues #122 (context), #95 (feature request), #71 (`mind`
   scaffold), #120 (source-first Paper Flow V1); prior art `VectifyAI/PageIndex`
@@ -22,7 +24,7 @@
 
 - [Motivation](#motivation)
 - [Ownership](#ownership)
-- [Navigation Tree Artifact](#navigation-tree-artifact)
+- [Navigation Tree Base and Paper Binding](#navigation-tree-base-and-paper-binding)
 - [Build Pipeline](#build-pipeline)
 - [Navigation Retrieval](#navigation-retrieval)
 - [Multi-Model Compatibility](#multi-model-compatibility)
@@ -55,7 +57,7 @@ a new owner, `mind`. No shared runtime is moved and no second store is added.
 | Owner | Responsibility |
 |---|---|
 | `quantmind.preprocess` | Emit deterministic outline signals (heading candidates, table-of-contents pages, printed-to-physical page offset) from a parsed document. No LLM calls. |
-| `quantmind.knowledge` | Add one flat `PaperNavigationTree` artifact reusing `TreeNode` / `Citation`, with a `from_draft` constructor that mints identity and validates integrity. |
+| `quantmind.knowledge` | Add the `NavigationTree` structural base (reused by a refactored `TreeKnowledge`) plus a `PaperNavigationTree(NavigationTree)` artifact whose `from_draft` constructor mints identity and runs the shared integrity gate. |
 | `quantmind.flows` | Run one draft-structuring agent and call the knowledge constructor. Reuses `flows._runner` unchanged. Persistence stays explicit. |
 | `quantmind.library` | Persist the artifact through the existing paper artifact tables and extend `resolve()` to the new kind. Per-node projections are a separate later step. |
 | `quantmind.mind` | Traverse the tree with the Agents SDK and return node evidence. May request a semantic shortlist from `library`. |
@@ -63,27 +65,36 @@ a new owner, `mind`. No shared runtime is moved and no second store is added.
 `quantmind.rag` is unchanged: it stays deterministic chunking and BM25 with no
 LLM dependency and hosts no PageIndex draft producer.
 
-## Navigation Tree Artifact
+## Navigation Tree Base and Paper Binding
 
-The tree is a flat paper artifact, a sibling of `PaperChunkSet` and
-`PaperGlobalSummary`, not a nested `TreeKnowledge`. Nesting a `TreeKnowledge`
-would create two competing identities (the paper-artifact identity plus the
-inner model's own random `id`, mandatory `as_of`, and `source`), so the design
-carries the tree payload directly instead.
+The tree structure is shared across document types; the identity binding is not.
+The design factors the two apart so the codebase keeps exactly one tree, not two.
 
-`PaperNavigationTree` records:
+`NavigationTree` is a structural base — a plain `BaseModel` with no
+`BaseKnowledge` identity: `root_node_id: UUID`, `nodes: dict[UUID, TreeNode]`, the
+navigation surface (`root()`, `children_of()`, `walk_dfs()`, `find_path()`), and
+the `validate()` integrity gate. It carries no `id`, `as_of`, or `source`, so a
+subclass adds whatever identity its storage model needs without a second
+competing identity. The existing `TreeKnowledge` is refactored to
+`TreeKnowledge(BaseKnowledge, NavigationTree)` and reuses the same nodes,
+helpers, and gate instead of defining its own.
+
+A navigation tree is a derived artifact — rebuildable from a source plus a
+producer configuration, like `PaperChunkSet` — not canonical knowledge, so the
+paper binding is a paper artifact rather than a `TreeKnowledge` stored as a
+knowledge item. `PaperNavigationTree(NavigationTree)` adds:
 
 - `artifact_kind = PaperArtifactKind.NAVIGATION_TREE` and `schema_version`;
 - `source_revision_id` binding it to an exact `PaperSourceRevision`;
 - a `producer` config (model, prompt version, input chunk-set id, instructions
   hash, structuring bounds) and its `producer_config_hash`;
 - a `content_hash` over the canonical tree and lineage to the input
-  `PaperChunkSet` via `paper_artifact_lineage`;
-- `root_node_id: UUID` and `nodes: dict[UUID, TreeNode]` as its own fields.
+  `PaperChunkSet` via `paper_artifact_lineage`.
 
 A stable, source-and-producer-derived id makes an unchanged re-run idempotent and
 versions a changed configuration rather than overwriting it, exactly as the other
-paper artifacts behave.
+paper artifacts behave. A future document type adds its own `NavigationTree`
+subclass with its own source binding; nothing paper-specific leaks into the base.
 
 Page ranges reuse `Citation`: a node spanning pages 5-8 carries four
 `Citation(page=5..8)` entries on `TreeNode.citations`. No `end_page` field or new
@@ -106,12 +117,13 @@ call for the draft, and code-owned identity and validation.
    ids, links, or canonical citations, exactly like the summary draft.
 3. **Canonicalization and integrity gate (`knowledge`).**
    `PaperNavigationTree.from_draft(chunk_set, *, producer, draft)` mints node
-   ids, builds parent/child links, resolves each node's `Citation` entries from
-   the chunk set, and rejects any tree that is not single-rooted and acyclic with
-   every node reachable, bidirectional parent/child consistency, unique sibling
-   positions, no orphan, every cited page within the source, and every child's
-   cited pages contained in its parent's. A low structuring-quality signal falls
-   back to a flat single-level tree rather than an unverified hierarchy.
+   ids, builds parent/child links, and resolves each node's `Citation` entries
+   from the chunk set, then runs the shared `NavigationTree.validate()` gate. The
+   gate rejects any tree that is not single-rooted and acyclic with every node
+   reachable, bidirectional parent/child consistency, unique sibling positions,
+   no orphan, every cited page within the source, and every child's cited pages
+   contained in its parent's. A low structuring-quality signal falls back to a
+   flat single-level tree rather than an unverified hierarchy.
 4. **Persistence (`library`).** Store the artifact through the paper artifact
    tables. Persistence needs no embeddings.
 
@@ -123,11 +135,13 @@ Navigation lives in `quantmind.mind.navigation` and returns node evidence, never
 a synthesized answer:
 
 ```text
-navigate(artifact, question, *, library, cfg, seed_locators=None)
+navigate(tree, question, *, library, cfg, seed_locators=None)
   -> list[NavigationEvidence]
 ```
 
-Leaf content is resolved through the existing `LocalKnowledgeLibrary.resolve()`,
+`tree` is any `NavigationTree` — a `PaperNavigationTree` today. Navigation is
+written against the base, so a future document type reuses it unchanged. Leaf
+content is resolved through the existing `LocalKnowledgeLibrary.resolve()`,
 extended to the new artifact kind, so no parallel page-resolver concept is added.
 Two grains are supported:
 
@@ -204,8 +218,8 @@ non-OpenAI model to exercise the capability requirement.
 
 ## Out of Scope
 
-- a nested `TreeKnowledge`, a second tree or node schema, or a `PaperTree` on
-  `Paper`;
+- a nested `TreeKnowledge` inside an artifact, a second parallel tree
+  implementation, or a `PaperTree` on `Paper`;
 - a `Citation.end_page` field or a separate page-resolver concept;
 - a shared runtime module or moving `flows._runner`;
 - a public retriever, vector-store, provider registry, or query-engine hierarchy;
