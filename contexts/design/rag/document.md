@@ -56,7 +56,7 @@ The conversion replaces parser paths with canonical source asset IDs and validat
 
 Document-local RAG and collection search have different responsibilities. [`LocalKnowledgeLibrary`](../library/local.md) stores canonical sources and artifacts in SQLite and privately uses LlamaIndex for collection-wide embedding ranking. It does not persist transient `ParsedDocumentHit` values.
 
-Paper Flow V1 defines no paper tree. A PageIndex-style structure tree is not a RAG operation: deterministic outline signals live in `quantmind.preprocess`, building the persisted canonical tree lives in `quantmind.flows`, and library-backed agentic navigation lives in `quantmind.mind`. `quantmind.rag` stays deterministic chunking and BM25 with no LLM dependency and hosts no draft producer. See [Build and navigate a page-preserving structure tree](../mind/navigation.md). Canonical IDs, links, citations, and source-backed text remain code-owned throughout.
+Paper Flow V1 defines no paper tree. A PageIndex-style structure tree is not a RAG operation: deterministic outline signals live in `quantmind.preprocess`, building the persisted canonical tree lives in `quantmind.flows`, and library-backed agentic retrieval lives in `quantmind.mind`. `quantmind.rag` stays deterministic chunking and BM25 with no LLM dependency and hosts no draft producer. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md). Canonical IDs, links, citations, and source-backed text remain code-owned throughout.
 
 ## What This Package Does Not Abstract
 

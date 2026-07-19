@@ -127,9 +127,9 @@ Reads fail closed when canonical hashes, counts, IDs, membership, lineage, sourc
 
 ## PageIndex Boundary
 
-The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. A future PageIndex path may first select candidate nodes through `search()` and then navigate a separate paper structure-tree artifact. That agentic, library-backed navigation is owned by `quantmind.mind`, and `resolve()` is extended to the structure-tree kind. See [Build and navigate a page-preserving structure tree](../mind/navigation.md).
+The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. A future PageIndex path may first select candidate nodes through `search()` and then retrieve over a separate paper structure-tree artifact. That agentic, library-backed retrieval is owned by `quantmind.mind`, and `resolve()` is extended to the structure-tree kind. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
 
-PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 deliberately stores chunks and a cited summary without defining a paper tree. A structure tree is stored as a source-linked paper artifact whose canonical persistence needs no embeddings; building per-node projections is an explicit later step that then enables hybrid semantic-plus-agentic navigation without a second index.
+PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 deliberately stores chunks and a cited summary without defining a paper tree. A structure tree is stored as a source-linked paper artifact whose canonical persistence needs no embeddings; building per-node projections is an explicit later step that then enables hybrid semantic-plus-agentic retrieval without a second index.
 
 ## Out of Scope
 
@@ -137,5 +137,5 @@ PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private Lla
 - implicit persistence inside flows;
 - answer synthesis or agent memory;
 - merging distinct canonical identities;
-- a V1 paper tree or PageIndex navigation API;
+- a V1 paper tree or PageIndex retrieval API;
 - treating rebuildable projections as canonical knowledge.

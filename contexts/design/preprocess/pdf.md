@@ -31,6 +31,6 @@ Preprocessing ends after producing `ParsedDocument`. It does not chunk, index, r
 
 - [`quantmind.rag`](../rag/document.md) converts the parsed value into LlamaIndex-backed chunks and page-aware retrieval evidence.
 - [`paper_flow`](../flow/paper.md) uses the preserved source pages to build an exact source revision and a canonical chunk set before generating a cited summary.
-- A future PageIndex adapter may consume the same ordered pages to propose independently versioned navigation evidence.
+- A future PageIndex adapter may consume the same ordered pages to propose independently versioned outline signals for a structure tree.
 
 Flattened Markdown remains a compatibility view produced from the preserved pages. It is not the primary parsing result.

@@ -1,18 +1,18 @@
-# Build and navigate a page-preserving structure tree
+# Build and retrieve from a page-preserving structure tree
 
 ## Quick Summary
 
 - **Purpose**: Define how a source-first paper gains a validated structure tree
   and how a reasoning agent traverses it, without embeddings replacing reasoning.
 - **Read when**: Designing or changing PageIndex-style tree construction, the
-  `mind` navigation package, or hybrid semantic-plus-agentic retrieval.
+  `mind` retrieval package, or hybrid semantic-plus-agentic retrieval.
 - **Status**: Planned. No implementation exists on `master`. This page records
   the accepted design and refines issue #95 for the source-first Paper Flow V1
   model shipped in #120; the `quantmind.mind` package does not exist yet.
 - **Core rule**: One tree implementation. A shared `StructureTree` base carries
-  structure, navigation, and the integrity gate; each document type subclasses it
+  structure, traversal, and the integrity gate; each document type subclasses it
   for identity. The paper structure tree is a derived, source-linked artifact whose model
-  returns only a draft while code validates every node. Navigation reasons over
+  returns only a draft while code validates every node. Retrieval reasons over
   titles and summaries; embeddings are a coarse pre-filter added later, never a
   replacement.
 - **Canonical models**: [Paper source and artifact design](../knowledge/paper.md).
@@ -27,7 +27,7 @@
 - [Ownership](#ownership)
 - [Structure Tree Base and Paper Binding](#structure-tree-base-and-paper-binding)
 - [Build Pipeline](#build-pipeline)
-- [Navigation Retrieval](#navigation-retrieval)
+- [Retrieval](#retrieval)
 - [Multi-Model Compatibility](#multi-model-compatibility)
 - [Hybrid Search Compatibility](#hybrid-search-compatibility)
 - [Boundaries and Import Contracts](#boundaries-and-import-contracts)
@@ -43,7 +43,7 @@ fixed-size chunking fragments a table; a cross-reference such as "see Item 7A"
 shares no similarity with its target; and a stateless retriever cannot use prior
 reasoning to decide where to look.
 
-Reasoning-based navigation reframes retrieval as relevance classification over a
+Reasoning-based retrieval reframes the problem as relevance classification over a
 document's real structure: an agent reads a tree of section titles and
 summaries, picks a branch, drills down, and lazily loads leaf text with exact
 page provenance. `quantmind.knowledge` already records this as the purpose of
@@ -75,7 +75,7 @@ flowchart TD
         RES["resolve(locator): page-cited content"]
     end
     subgraph MND["mind"]
-        NAV["navigate(structure, question): single-pass / agentic"]
+        NAV["retrieve(structure, question): single-pass / agentic"]
     end
     PD --> OUT
     OUT --> DRAFT
@@ -158,7 +158,7 @@ classDiagram
 
 `StructureTree` is a structural base — a plain `BaseModel` with no
 `BaseKnowledge` identity: `root_node_id: UUID`, `nodes: dict[UUID, TreeNode]`, the
-navigation surface (`root()`, `children_of()`, `walk_dfs()`, `find_path()`), and
+traversal surface (`root()`, `children_of()`, `walk_dfs()`, `find_path()`), and
 the `validate()` integrity gate. It carries no `id`, `as_of`, or `source`, so a
 subclass adds whatever identity its storage model needs without a second
 competing identity. The existing `TreeKnowledge` is refactored to
@@ -215,17 +215,17 @@ call for the draft, and code-owned identity and validation.
 
 Steps 1, 3, and 4 have no model dependency and are testable without a network.
 
-## Navigation Retrieval
+## Retrieval
 
-Navigation lives in `quantmind.mind.navigation` and returns node evidence, never
+Retrieval lives in `quantmind.mind.retrieval` and returns node evidence, never
 a synthesized answer:
 
 ```text
-navigate(structure, question, *, library, cfg, seed_locators=None)
-  -> list[NavigationEvidence]
+retrieve(structure, question, *, library, cfg, seed_locators=None)
+  -> list[RetrievalEvidence]
 ```
 
-`structure` is any `StructureTree` — a `PaperStructureTree` today. Navigation is
+`structure` is any `StructureTree` — a `PaperStructureTree` today. Retrieval is
 written against the base, so a future document type reuses it unchanged. Leaf
 content is resolved through the existing `LocalKnowledgeLibrary.resolve()`,
 extended to the new artifact kind, so no parallel page-resolver concept is added.
@@ -239,7 +239,7 @@ Two grains are supported:
   `get_node_content(node_ids)` (page-cited leaf text via `resolve()`) — and let an
   Agent decide, turn by turn, which node to open and when it has enough evidence.
 
-Navigation calls `agents.Runner.run(...)` with its own `RunConfig` directly; it
+Retrieval calls `agents.Runner.run(...)` with its own `RunConfig` directly; it
 does not import `flows._runner`. Whole-tree serialization is bounded by a
 structure token budget over titles and summaries.
 
@@ -262,13 +262,13 @@ structure token budget over titles and summaries.
 Hybrid retrieval — shortlist nodes by semantic search, then reason over the
 shortlist — is a later, explicit step that reuses locator identity end to end. It
 is the only part that needs an embedding provider; build and pure-agentic
-navigation do not.
+retrieval do not.
 
 - Building per-node projections is an explicit later step. Once built,
   `search(SemanticQuery(...))` returns `SemanticHit` values that already carry a
   full `ArtifactLocator`; the design keeps the locator and never collapses a hit
   to a bare `node_id`.
-- Seeds are validated locators: `navigate(..., seed_locators=...)`. Single-tree
+- Seeds are validated locators: `retrieve(..., seed_locators=...)`. Single-tree
   mode constrains the query with `tree_id = artifact.id` and rejects any seed
   whose artifact id does not match, so a hit from another tree, a flat item, or a
   chunk cannot leak in. Cross-artifact traversal keys seeds by the full
@@ -276,7 +276,7 @@ navigation do not.
 - Embeddings stay a coarse pre-filter: the agent may leave the seeded subtree, and
   a hit never becomes an answer without the reasoning step.
 
-Pure-agentic navigation passes no seeds; hybrid adds one shortlist step in front
+Pure-agentic retrieval passes no seeds; hybrid adds one shortlist step in front
 of the same primitive.
 
 ## Boundaries and Import Contracts
@@ -295,7 +295,7 @@ cover a clean table of contents, a missing table of contents, a printed
 page-number reset, and an in-body cross-reference; integrity rejection of cyclic,
 orphaned, and out-of-page-range trees; stable ids and idempotent re-runs; citation
 resolution to correct pages; reopen behavior; and, once projections exist, seeded
-hybrid navigation with locator validation.
+hybrid retrieval with locator validation.
 
 A bounded live slice builds a structure tree over one exact arXiv revision with a
 real model, traverses it single-pass and agentically, and prints the selected
@@ -310,6 +310,6 @@ non-OpenAI model to exercise the capability requirement.
 - a shared runtime module or moving `flows._runner`;
 - a public retriever, vector-store, provider registry, or query-engine hierarchy;
 - a second persistence or semantic-index layer;
-- answer synthesis or agent memory inside the navigation primitive;
+- answer synthesis or agent memory inside the retrieval primitive;
 - corpus-level virtual nodes or query-time tree reconstruction;
 - knowledge-graph construction.
