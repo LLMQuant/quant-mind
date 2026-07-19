@@ -6,9 +6,9 @@
   and how a reasoning agent traverses it, without embeddings replacing reasoning.
 - **Read when**: Designing or changing PageIndex-style tree construction, the
   `mind` retrieval package, or hybrid semantic-plus-agentic retrieval.
-- **Status**: Planned. No implementation exists on `master`. This page records
-  the accepted design and refines issue #95 for the source-first Paper Flow V1
-  model shipped in #120; the `quantmind.mind` package does not exist yet.
+- **Status**: Implemented for vectorless P0 build/persistence and P1
+  single-pass/agentic retrieval. P2 semantic node projections and hybrid
+  seeding remain deferred.
 - **Core rule**: One tree implementation. A shared `StructureTree` base carries
   structure, traversal, and the integrity gate; each document type subclasses it
   for identity. The paper structure tree is a derived, source-linked artifact whose model
@@ -281,26 +281,22 @@ of the same primitive.
 
 ## Boundaries and Import Contracts
 
-Placement satisfies the existing `import-linter` contracts, which already forbid
-`library` and `rag` from importing `quantmind.mind`. When `mind` is implemented,
-add one contract pinning `mind -> library -> knowledge`: `mind` may import
+Placement satisfies the `import-linter` contracts, which forbid `library` and
+`rag` from importing `quantmind.mind` and pin `mind -> library -> knowledge`.
+`mind` may import
 `knowledge`, `library`, `configs`, and `utils`, but not `flows`, `magic`, `rag`,
 or `preprocess`; `flows` may import `mind`. Nothing moves out of `flows`, and
 `rag` keeps its imports-only-`preprocess` rule.
 
 ## Verification Slice
 
-Offline tests use fixed generated PDFs and a fake structuring provider. They
-cover a clean table of contents, a missing table of contents, a printed
-page-number reset, and an in-body cross-reference; integrity rejection of cyclic,
-orphaned, and out-of-page-range trees; stable ids and idempotent re-runs; citation
-resolution to correct pages; reopen behavior; and, once projections exist, seeded
-hybrid retrieval with locator validation.
-
-A bounded live slice builds a structure tree over one exact arXiv revision with a
-real model, traverses it single-pass and agentically, and prints the selected
-titles, resolved page-cited content, and citation pages. It runs at least one
-non-OpenAI model to exercise the capability requirement.
+Offline tests use fixed PDFs and fake model outputs. They cover a table of
+contents, a missing table of contents, a printed page-number reset, and an
+in-body cross-reference; every tree-integrity rejection; stable IDs and
+idempotent re-runs; vectorless persistence and schema migration; single-pass
+and agentic retrieval; citation resolution to correct pages; reopen behavior;
+multi-model identity forwarding; and seed-locator validation. P2 adds seeded
+semantic shortlist quality tests when node projections exist.
 
 ## Out of Scope
 

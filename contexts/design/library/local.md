@@ -4,7 +4,7 @@
 
 - **Purpose**: Define how the local library stores validated knowledge and source-first papers, then searches rebuildable projections.
 - **Read when**: Changing `LocalKnowledgeLibrary`, SQLite schema, semantic projections, filters, hit locators, or file ownership.
-- **Status**: Implemented by `quantmind.library` with SQLite schema version 3 and private LlamaIndex ranking.
+- **Status**: Implemented by `quantmind.library` with SQLite schema version 4 and private LlamaIndex ranking.
 - **Core rule**: Canonical sources and artifacts are durable; projection text, vectors, and private indexes are rebuildable.
 - **User guide**: [`docs/library.md`](../../../docs/library.md)
 
@@ -31,9 +31,10 @@
 | `open()` | Open or migrate a SQLite library without network I/O. |
 | `put()` | Store one conventional `BaseKnowledge` item and its required projections. |
 | `put_paper()` | Store one `PaperFlowResult`, including exact source assets, two artifacts, lineage, and required projections. |
+| `put_paper_structure_tree()` | Store one validated structure-tree artifact and its chunk-set lineage without projections. |
 | `get()` | Rehydrate one conventional knowledge item. |
 | `get_paper()` | Rehydrate one unambiguous source/chunk-set/summary result, or use explicit artifact IDs when versions coexist. |
-| `get_artifact()` | Rehydrate a paper chunk set or global summary by artifact ID. |
+| `get_artifact()` | Rehydrate a paper chunk set, global summary, or structure tree by artifact ID. |
 | `search()` | Filter and rank rebuildable projections, returning `SemanticHit` evidence. |
 | `resolve()` | Resolve a hit locator to its canonical aggregate or member. |
 
@@ -53,7 +54,7 @@ For conventional `BaseKnowledge`, source references remain pointers and the call
 
 ## Canonical Storage
 
-SQLite schema version 3 keeps conventional and source-first paper storage explicit.
+SQLite schema version 4 keeps conventional and source-first paper storage explicit and permits vectorless paper artifacts.
 
 Conventional knowledge uses:
 
@@ -65,9 +66,9 @@ Source-first papers use:
 
 - `paper_sources` for immutable source-revision metadata and canonical manifests;
 - `paper_source_assets` for linked content-addressed bytes and asset metadata;
-- `paper_artifacts` for independently versioned chunk sets and summaries;
-- `paper_artifact_members` for directly addressable chunks;
-- `paper_artifact_lineage` for summary-to-chunk-set derivation;
+- `paper_artifacts` for independently versioned chunk sets, summaries, and structure trees;
+- `paper_artifact_members` for directly addressable chunks or structure nodes;
+- `paper_artifact_lineage` for derived-artifact input relationships;
 - `paper_projections` for rebuildable summary and chunk text embeddings.
 
 There is no single opaque paper JSON blob and no canonical vector field. Aggregate JSON and normalized relationship rows are cross-checked during rehydration.
@@ -122,14 +123,15 @@ Paper projections inherit both times from their exact source revision. This prev
 ## Integrity and Migration
 
 Open performs an explicit SQLite user-version migration from schema 2 to schema 3 by adding paper tables and indexes without rewriting conventional knowledge. Older canonical class references for the pre-V1 paper tree load as `LegacyPaper` solely for database compatibility.
+Schema 3 to 4 permits zero-projection artifacts and adds hierarchical member parents without rewriting conventional knowledge.
 
 Reads fail closed when canonical hashes, counts, IDs, membership, lineage, source relationships, vector bytes, or asset metadata disagree. Blob SHA-256 hashes and byte lengths are checked, and stored asset table fields must match the canonical source manifest. Missing IDs raise `KeyError`; stale or corrupt linked state raises `RuntimeError` with context.
 
 ## PageIndex Boundary
 
-The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. A future PageIndex path may first select candidate nodes through `search()` and then retrieve over a separate paper structure-tree artifact. That agentic, library-backed retrieval is owned by `quantmind.mind`, and `resolve()` is extended to the structure-tree kind. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
+The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. `PaperStructureTree` is persisted as a zero-projection artifact, and a node locator resolves to page-cited content assembled from its input chunk set. Reasoning-based retrieval is owned by `quantmind.mind`. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
 
-PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 deliberately stores chunks and a cited summary without defining a paper tree. A structure tree is stored as a source-linked paper artifact whose canonical persistence needs no embeddings; building per-node projections is an explicit later step that then enables hybrid semantic-plus-agentic retrieval without a second index.
+PageIndex-style retrieval is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 still returns chunks and a cited summary; structure construction and persistence are separate explicit operations. Building per-node projections is an explicit P2 step that will enable hybrid semantic-plus-agentic retrieval without a second index.
 
 ## Out of Scope
 
@@ -137,5 +139,5 @@ PageIndex is not required to use `LocalKnowledgeLibrary.search()` or private Lla
 - implicit persistence inside flows;
 - answer synthesis or agent memory;
 - merging distinct canonical identities;
-- a V1 paper tree or PageIndex retrieval API;
+- per-node structure projections or implicit hybrid seeding;
 - treating rebuildable projections as canonical knowledge.

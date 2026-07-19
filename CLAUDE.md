@@ -40,7 +40,7 @@ handoff all come from `openai-agents`.
 | `quantmind/rag/` | Opinionated LlamaIndex document chunking and retrieval — depends only on `preprocess` |
 | `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
-| `quantmind/mind/` | Cognitive layer (memory protocol); landing via the Agents SDK migration (#71) |
+| `quantmind/mind/` | Cognitive layer for memory and reasoning-based structure retrieval |
 | `quantmind/utils/` | Logger only — keep it that way |
 
 The pre-migration agent runtime was removed and archived on the

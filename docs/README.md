@@ -15,6 +15,8 @@ harness.
 | Operation | Import | Input and config | Result | Example | Design or guide |
 |---|---|---|---|---|---|
 | Source-first paper flow | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `PaperFlowResult` | [Persist and search a paper](../examples/flows/paper.py) | [Paper flow design](../contexts/design/flow/paper.md) |
+| Paper structure build | `quantmind.flows.build_paper_structure_tree` | `ParsedDocument`, `PaperChunkSet`, `PaperFlowCfg` | `PaperStructureTree` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
+| Reasoning-based retrieval | `quantmind.mind.retrieve` | `StructureTree`, question, library, `RetrievalCfg` | `list[RetrievalEvidence]` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
 | News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](../contexts/design/flow/news.md) |
 | Bounded fan-out | `quantmind.flows.batch_run` | Operation inputs and shared config | `BatchResult` | [README usage](../README.md#-usage-examples) | API docstrings |
 | Local semantic search | `quantmind.library.LocalKnowledgeLibrary` | `BaseKnowledge` or `PaperFlowResult`, `SemanticQuery` | `list[SemanticHit]` | [Library example](../examples/library/README.md) | [Library guide](library.md) |

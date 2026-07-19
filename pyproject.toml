@@ -138,6 +138,7 @@ forbidden_modules = [
     "quantmind.knowledge",
     "quantmind.library",
     "quantmind.magic",
+    "quantmind.mind",
     "quantmind.preprocess",
     "quantmind.rag",
 ]
@@ -151,6 +152,7 @@ forbidden_modules = [
     "quantmind.flows",
     "quantmind.library",
     "quantmind.magic",
+    "quantmind.mind",
     "quantmind.preprocess",
     "quantmind.rag",
     "quantmind.utils",
@@ -164,6 +166,7 @@ forbidden_modules = [
     "quantmind.flows",
     "quantmind.library",
     "quantmind.magic",
+    "quantmind.mind",
     "quantmind.preprocess",
     "quantmind.rag",
 ]
@@ -178,6 +181,7 @@ forbidden_modules = [
     "quantmind.knowledge",
     "quantmind.library",
     "quantmind.magic",
+    "quantmind.mind",
     "quantmind.rag",
 ]
 
@@ -215,6 +219,21 @@ forbidden_modules = [
     "quantmind.mind",
     "quantmind.models",
     "quantmind.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "mind only depends on configs, knowledge, library, and utils"
+type = "forbidden"
+source_modules = ["quantmind.mind"]
+forbidden_modules = [
+    "quantmind.config",
+    "quantmind.flow",
+    "quantmind.flows",
+    "quantmind.llm",
+    "quantmind.magic",
+    "quantmind.models",
+    "quantmind.preprocess",
+    "quantmind.rag",
 ]
 
 [[tool.importlinter.contracts]]

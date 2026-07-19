@@ -3,7 +3,7 @@
 A tree's structure carries information: nodes derive meaning from their
 position under a parent. `TreeKnowledge` is the right shape for regulatory
 filings (10-K parts), earnings-call transcripts (intro / Q&A / per-question),
-and a future paper-navigation artifact.
+and document structure artifacts.
 
 Retrieval over a tree is reasoning-driven (PageIndex-style): an agent reads
 the root summary plus children summaries, picks the most likely branch,

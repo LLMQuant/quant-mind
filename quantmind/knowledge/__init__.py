@@ -3,7 +3,7 @@
 The standard defines three shapes that share `BaseKnowledge`:
 
 - `FlattenKnowledge` — atomic cards (`News`, `Earnings`, `Factor`, `Thesis`).
-- `TreeKnowledge` — hierarchical artifacts such as future navigation trees.
+- `TreeKnowledge` — conventional hierarchical knowledge artifacts.
 - `GraphKnowledge` — cross-item edges (placeholder, not implemented).
 
 Every concrete subclass is frozen Pydantic v2 with ``extra="forbid"``,
