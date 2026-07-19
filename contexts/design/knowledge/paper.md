@@ -92,4 +92,4 @@ Canonical paper models do not implement `embedding_text()` and do not select ret
 
 `LegacyPaper` retains the pre-V1 `TreeKnowledge` shape only so existing version-2 databases and the bundled legacy example can be opened. It is not exported as `Paper`, is not produced by `paper_flow`, and is not part of the V1 paper contract.
 
-There is no `PaperTree` in V1. A future tree or PageIndex artifact must be independently versioned, linked to an exact source and inputs, and added only with a real retrieval use case and migration plan.
+There is no `PaperTree` in V1. A future tree or PageIndex artifact must be independently versioned, linked to an exact source and inputs, and added only with a real retrieval use case and migration plan. The accepted plan for that artifact is `PaperStructureTree`, a paper-artifact binding of a shared `StructureTree` base; see [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
