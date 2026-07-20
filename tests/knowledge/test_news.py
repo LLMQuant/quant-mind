@@ -42,7 +42,7 @@ class NewsTests(unittest.TestCase):
                 sentiment="ecstatic",  # type: ignore[arg-type]
             )
 
-    def test_embedding_text(self):
+    def test_retrieval_projection_is_not_a_domain_method(self):
         n = News(
             as_of=_now(),
             source=_src(),
@@ -51,10 +51,7 @@ class NewsTests(unittest.TestCase):
             timestamp=_now(),
             entities=["FOMC", "USD"],
         )
-        self.assertEqual(
-            n.embedding_text(),
-            "Fed holds rates\nmonetary_policy\nFOMC, USD",
-        )
+        self.assertFalse(hasattr(n, "embedding_text"))
 
 
 if __name__ == "__main__":

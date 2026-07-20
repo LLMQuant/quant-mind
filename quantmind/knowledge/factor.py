@@ -17,7 +17,3 @@ class Factor(FlattenKnowledge):
 
     factor_name: str
     universe: str | None = None
-
-    def embedding_text(self) -> str:
-        scope = self.universe or "unspecified"
-        return f"factor {self.factor_name} on {scope}"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# QuantMind Golden Harness — single command, fast-fail verify loop.
+# QuantMind Deterministic Verification Harness — single fast-fail command.
 #
-# Run before pushing; CI runs the same script (.github/workflows/verify.yml).
+# Run before pushing; required CI runs the same script
+# (.github/workflows/ci.yml).
 # Steps execute in order; the first failure stops the loop.
 #
 # Steps:

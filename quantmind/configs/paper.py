@@ -1,17 +1,14 @@
 """Paper-flow configuration + input discriminated union.
 
-`PaperInput` is one of:
-- `ArxivIdentifier`: arxiv id or full URL parsed by preprocess.fetch.arxiv
-- `HttpUrl`: any web URL (PDF or HTML; routed by content-type)
-- `LocalFilePath`: filesystem path to a PDF / HTML / Markdown file
-- `RawText`: an inline string (for tests or LLM-pre-cleaned inputs)
-- `DoiIdentifier`: a DOI to be resolved via preprocess.fetch.doi
+`PaperInput` describes supported and reserved source variants. Paper Flow V1
+accepts PDF-backed arXiv, HTTP, and local inputs. It rejects non-PDF HTTP/local
+content and raw text, and reserves DOI input until an exact PDF resolver exists.
 """
 
 from pathlib import Path
 from typing import Annotated, Literal, Union
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from quantmind.configs.base import BaseFlowCfg, BaseInput
 
@@ -24,21 +21,21 @@ class ArxivIdentifier(BaseInput):
 
 
 class HttpUrl(BaseInput):
-    """Any web URL; PDF vs HTML is decided by content-type."""
+    """A web URL that must resolve to a PDF in Paper Flow V1."""
 
     type: Literal["http"] = "http"
     url: str
 
 
 class LocalFilePath(BaseInput):
-    """Filesystem path to a PDF / HTML / Markdown file."""
+    """Filesystem path to a PDF for Paper Flow V1."""
 
     type: Literal["local"] = "local"
     path: Path
 
 
 class RawText(BaseInput):
-    """Inline text input (tests / pre-cleaned content)."""
+    """Reserved inline text input rejected by page-aware Paper Flow V1."""
 
     type: Literal["text"] = "text"
     text: str
@@ -58,8 +55,34 @@ PaperInput = Annotated[
 
 
 class PaperFlowCfg(BaseFlowCfg):
-    """Knobs specific to paper_flow."""
+    """Chunking and summarization controls for ``paper_flow``.
 
-    extract_methodology: bool = True
-    extract_limitations: bool = True
-    asset_class_hint: str | None = None
+    Summarization is a deterministic map-reduce: code tiles the chunk set into
+    ``summary_research_group_size`` groups (so coverage is guaranteed by
+    construction), fans out one research agent per group with
+    ``summary_concurrency`` parallelism, then runs one reducer. Per-agent output
+    is bounded by ``max_summary_output_tokens`` through ``ModelSettings``; there
+    is no hand-rolled token accountant.
+    """
+
+    model: str = "gpt-4o-mini"
+    max_turns: int = Field(default=16, ge=1)
+    chunk_size: int = Field(default=512, gt=0)
+    chunk_overlap: int = Field(default=64, ge=0)
+    summary_prompt_version: str = "paper-summary-v3"
+    summary_instructions: str | None = None
+    summary_research_group_size: int = Field(default=8, ge=1)
+    summary_concurrency: int = Field(default=4, ge=1)
+    max_summary_output_tokens: int = Field(default=4_096, gt=0)
+    min_summary_citations: int = Field(default=3, ge=1)
+    min_summary_pages: int = Field(default=2, ge=1)
+
+    @model_validator(mode="after")
+    def _validate_paper_bounds(self) -> "PaperFlowCfg":
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        if self.min_summary_pages > self.min_summary_citations:
+            raise ValueError(
+                "min_summary_pages cannot exceed min_summary_citations"
+            )
+        return self

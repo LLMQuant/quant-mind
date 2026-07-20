@@ -191,7 +191,7 @@ We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python packag
 
 Component-specific guides and architecture notes live under [`docs/`](docs/).
 
-#### Run a single paper through `paper_flow`
+#### Build an exact paper source, chunks, and cited summary
 
 ```python
 import asyncio
@@ -202,11 +202,12 @@ from quantmind.flows import paper_flow
 
 
 async def main() -> None:
-    paper = await paper_flow(
-        ArxivIdentifier(id="2401.12345"),
+    result = await paper_flow(
+        ArxivIdentifier(id="1706.03762v7"),
         cfg=PaperFlowCfg(model="gpt-4o-mini"),
     )
-    print(paper.model_dump_json(indent=2))
+    print(result.global_summary.summary)
+    print(result.source_revision.id, result.chunk_set.id)
 
 
 asyncio.run(main())
@@ -276,8 +277,8 @@ async def main() -> None:
         "Pull arXiv 2401.12345 about cross-sectional momentum; use gpt-4o-mini.",
         target_flow=paper_flow,
     )
-    paper = await paper_flow(inp, cfg=cfg)
-    print(paper.model_dump_json(indent=2))
+    result = await paper_flow(inp, cfg=cfg)
+    print(result.global_summary.summary)
 
 
 asyncio.run(main())
@@ -308,17 +309,12 @@ stable inputs, stable outputs, and a durable path from observation to memory.
 
 ### 🗺️ Roadmap
 
-- [x] Remove the legacy in-repo agent runtime
-- [x] Reposition QuantMind on top of OpenAI Agents SDK
-- [x] Land the permanent module roots: `flows/`, `configs/`, `knowledge/`,
-  `preprocess/`, `magic.py`
-- [x] Ship a canonical verification loop (`scripts/verify.sh`)
-- [ ] Add filesystem-backed working memory in `mind/memory`
-- [ ] Add the store/retrieval layer in `mind/store`
-- [ ] Expand beyond the first paper flow with more domain flows
-- [ ] Improve multi-agent loop patterns, observability, and replay support
-- [ ] Keep agent-facing docs and extension paths under regular review during
-  active weekly iteration
+- [x] Better `flow` design for user-friendly usage
+- [x] First production level example (Quant Paper Agent)
+- [ ] Migrate Agent layer to OpenAI Agents SDK
+- [x] Standardize knowledge format with `knowledge/` (Pydantic-based)
+- [ ] Additional content sources (financial news, blogs, reports)
+- [ ] Cross-step working memory (`mind/memory`) for batch document processing
 
 ---
 
@@ -340,18 +336,10 @@ longer-term goal is a reusable foundation for agentic knowledge work across
 domains.
 
 > [!NOTE]
-> **Future Conceptual Example (PR6 brings `FilesystemMemory`):**
->
-> ```python
-> from quantmind.configs.paper import ArxivIdentifier
-> from quantmind.flows import paper_flow
-> from quantmind.knowledge import Paper
-> from quantmind.mind.memory import FilesystemMemory  # PR6
->
-> memory = FilesystemMemory("./mem/factor-research/")
-> for arxiv_id in arxiv_ids:
->     paper: Paper = await paper_flow(ArxivIdentifier(id=arxiv_id), memory=memory)
-> ```
+> The current source-first paper path produces independently versioned source,
+> chunk-set, and cited-summary artifacts. Future agent memory and cross-document
+> reasoning can build on `LocalKnowledgeLibrary.search()` without changing
+> those canonical artifacts.
 
 This future state represents the shift from one-off extraction to reusable,
 memory-aware, agentic knowledge systems.

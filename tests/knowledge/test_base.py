@@ -75,13 +75,10 @@ class ExtractionRefTests(unittest.TestCase):
 
 
 class _ConcreteKnowledge(BaseKnowledge):
-    """Test fixture: concrete subclass that overrides embedding_text."""
+    """Test fixture for shared canonical metadata behavior."""
 
     item_type: str = "test"  # pyright: ignore[reportIncompatibleVariableOverride]
     payload: str = ""
-
-    def embedding_text(self) -> str:
-        return self.payload
 
 
 class BaseKnowledgeTests(unittest.TestCase):
@@ -101,6 +98,19 @@ class BaseKnowledgeTests(unittest.TestCase):
     def test_default_confidence_is_medium(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
         self.assertEqual(item.confidence, "medium")
+
+    def test_available_at_is_optional_and_round_trips(self):
+        item = _ConcreteKnowledge(
+            as_of=_now(),
+            available_at=_now() + timedelta(hours=2),
+            source=_src(),
+        )
+        revived = _ConcreteKnowledge.model_validate_json(item.model_dump_json())
+        self.assertEqual(revived.available_at, _now() + timedelta(hours=2))
+
+    def test_available_at_defaults_to_unknown(self):
+        item = _ConcreteKnowledge(as_of=_now(), source=_src())
+        self.assertIsNone(item.available_at)
 
     def test_default_schema_version(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
@@ -126,19 +136,9 @@ class BaseKnowledgeTests(unittest.TestCase):
                 unexpected_field=1,  # type: ignore[call-arg]
             )
 
-    def test_embedding_text_default_raises(self):
-        # BaseKnowledge.embedding_text raises NotImplementedError; subclasses
-        # must override. We test via a class that doesn't override.
-        class _NoEmbed(BaseKnowledge):
-            item_type: str = "no_embed"  # pyright: ignore[reportIncompatibleVariableOverride]
-
-        item = _NoEmbed(as_of=_now(), source=_src())
-        with self.assertRaises(NotImplementedError):
-            item.embedding_text()
-
-    def test_embedding_text_override(self):
+    def test_embedding_selection_is_not_canonical_domain_behavior(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src(), payload="hello")
-        self.assertEqual(item.embedding_text(), "hello")
+        self.assertFalse(hasattr(item, "embedding_text"))
 
     def test_extraction_optional(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
@@ -198,9 +198,12 @@ class PackageExportTests(unittest.TestCase):
             Factor,
             FlattenKnowledge,
             GraphKnowledge,
+            LegacyPaper,
             News,
-            Paper,
-            PaperKnowledgeCard,
+            PaperChunkSet,
+            PaperFlowResult,
+            PaperGlobalSummary,
+            PaperSourceRevision,
             SourceRef,
             Thesis,
             TreeKnowledge,
@@ -212,10 +215,13 @@ class PackageExportTests(unittest.TestCase):
         self.assertTrue(issubclass(GraphKnowledge, BaseKnowledge))
         self.assertTrue(issubclass(News, FlattenKnowledge))
         self.assertTrue(issubclass(Earnings, FlattenKnowledge))
-        self.assertTrue(issubclass(PaperKnowledgeCard, FlattenKnowledge))
         self.assertTrue(issubclass(Factor, FlattenKnowledge))
         self.assertTrue(issubclass(Thesis, FlattenKnowledge))
-        self.assertTrue(issubclass(Paper, TreeKnowledge))
+        self.assertTrue(issubclass(LegacyPaper, TreeKnowledge))
+        self.assertEqual(PaperSourceRevision.__name__, "PaperSourceRevision")
+        self.assertEqual(PaperChunkSet.__name__, "PaperChunkSet")
+        self.assertEqual(PaperGlobalSummary.__name__, "PaperGlobalSummary")
+        self.assertEqual(PaperFlowResult.__name__, "PaperFlowResult")
         # Ensure side-imports are real classes
         self.assertEqual(Citation.__name__, "Citation")
         self.assertEqual(SourceRef.__name__, "SourceRef")

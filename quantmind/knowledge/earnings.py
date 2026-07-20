@@ -19,7 +19,3 @@ class Earnings(FlattenKnowledge):
     guidance: str | None = None
     surprise_flags: list[str] = Field(default_factory=list)
     transcript_quote: str | None = None
-
-    def embedding_text(self) -> str:
-        guidance = self.guidance or ""
-        return f"{self.ticker} {self.period} earnings\n{guidance}".strip()

@@ -1,4 +1,4 @@
-"""News knowledge schema (output of news_flow)."""
+"""Semantic news-event schema for agent and LLM extraction."""
 
 from datetime import datetime
 from typing import Literal
@@ -9,7 +9,7 @@ from quantmind.knowledge._flatten import FlattenKnowledge
 
 
 class News(FlattenKnowledge):
-    """A single news event extraction."""
+    """A single extracted news event, distinct from collection evidence."""
 
     item_type: Literal["news"] = "news"
 
@@ -19,7 +19,3 @@ class News(FlattenKnowledge):
     entities: list[str] = Field(default_factory=list)
     sentiment: Literal["positive", "neutral", "negative"] = "neutral"
     materiality: Literal["low", "medium", "high"] = "medium"
-
-    def embedding_text(self) -> str:
-        entities = ", ".join(self.entities)
-        return f"{self.headline}\n{self.event_type}\n{entities}".strip()

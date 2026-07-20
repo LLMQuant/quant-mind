@@ -1,13 +1,13 @@
-"""Tests for ``quantmind.flows.paper``."""
+"""Offline tests for source-first ``paper_flow`` behavior."""
 
+import asyncio
+import json
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from unittest.mock import AsyncMock, patch
 
-from agents import RunHooks
+from agents import ModelSettings
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -17,343 +17,435 @@ from quantmind.configs.paper import (
     LocalFilePath,
     RawText,
 )
+from quantmind.flows._paper_summary import (
+    PaperResearchCitationDraft,
+    PaperResearchDraft,
+    PaperResearchFindingDraft,
+    PaperSummaryCitationDraft,
+    PaperSummaryDraft,
+    PaperSummaryError,
+    _AgentsPaperSummaryProvider,
+    _chunk_groups,
+    _ChunkGroup,
+    _summary_model_settings,
+    _validate_research_draft,
+)
 from quantmind.flows.paper import (
     UnsupportedContentTypeError,
-    _compose_instructions,
-    _fetch_and_format,
-    _format_by_content_type,
-    _format_input,
+    _build_summary,
+    _fetch_paper_source,
     paper_flow,
 )
-from quantmind.knowledge import Paper, SourceRef, TreeNode
+from quantmind.knowledge import PaperCitationValidationError
 from quantmind.preprocess.fetch import Fetched, RawPaper
+from tests.paper_helpers import build_paper_result
+
+_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "paper"
+    / "golden"
+    / "paper.pdf"
+)
+_WHEN = datetime(2017, 12, 6, tzinfo=timezone.utc)
 
 
-def _stub_paper() -> Paper:
-    root_id = uuid4()
-    root = TreeNode(node_id=root_id, title="root", summary="stub")
-    return Paper(
-        as_of=datetime(2026, 5, 7, tzinfo=timezone.utc),
-        source=SourceRef(
-            kind="arxiv",
-            uri="arxiv:2604.12345",
-            fetched_at=datetime(2026, 5, 7, tzinfo=timezone.utc),
-        ),
-        root_node_id=root_id,
-        nodes={root_id: root},
-    )
+class _FakeSummaryProvider:
+    def __init__(self, *, fail: Exception | None = None) -> None:
+        self.fail = fail
+        self.calls = []
 
-
-def _patch_runner(return_value: Any) -> Any:
-    return patch(
-        "quantmind.flows.paper.run_with_observability",
-        new=AsyncMock(return_value=return_value),
-    )
-
-
-class FormatByContentTypeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_pdf_dispatches_to_pdf_to_markdown(self) -> None:
-        raw = Fetched(bytes=b"%PDF-x", content_type="application/pdf")
-        with patch(
-            "quantmind.flows.paper.pdf_to_markdown",
-            new=AsyncMock(return_value="MD"),
-        ) as pdf_mock:
-            md = await _format_by_content_type(raw)
-        pdf_mock.assert_awaited_once_with(b"%PDF-x")
-        self.assertEqual(md, "MD")
-
-    async def test_html_dispatches_to_html_to_markdown(self) -> None:
-        raw = Fetched(
-            bytes="<html>hi</html>".encode("utf-8"),
-            content_type="text/html; charset=utf-8",
-        )
-        with patch(
-            "quantmind.flows.paper.html_to_markdown",
-            new=AsyncMock(return_value="HTML-MD"),
-        ) as html_mock:
-            md = await _format_by_content_type(raw)
-        html_mock.assert_awaited_once_with("<html>hi</html>")
-        self.assertEqual(md, "HTML-MD")
-
-    async def test_markdown_passes_through(self) -> None:
-        raw = Fetched(
-            bytes=b"# heading\n\nbody",
-            content_type="text/markdown",
-        )
-        md = await _format_by_content_type(raw)
-        self.assertEqual(md, "# heading\n\nbody")
-
-    async def test_plain_text_passes_through(self) -> None:
-        raw = Fetched(bytes=b"plain", content_type="text/plain")
-        md = await _format_by_content_type(raw)
-        self.assertEqual(md, "plain")
-
-    async def test_unsupported_content_type_raises(self) -> None:
-        raw = Fetched(bytes=b"\x00\x00", content_type="application/zip")
-        with self.assertRaises(UnsupportedContentTypeError):
-            await _format_by_content_type(raw)
-
-
-class FetchAndFormatTests(unittest.IsolatedAsyncioTestCase):
-    async def test_arxiv_branch(self) -> None:
-        raw_paper = RawPaper(
-            bytes=b"%PDF",
-            content_type="application/pdf",
-            source_url="http://arxiv.org/pdf/2604.12345.pdf",
-            arxiv_id="2604.12345",
-            title="Momentum",
-            authors=("Alice", "Bob"),
-        )
-        with (
-            patch(
-                "quantmind.flows.paper.fetch_arxiv",
-                new=AsyncMock(return_value=raw_paper),
-            ) as fetch_mock,
-            patch(
-                "quantmind.flows.paper.pdf_to_markdown",
-                new=AsyncMock(return_value="MARKDOWN"),
-            ) as fmt_mock,
-        ):
-            md, meta = await _fetch_and_format(ArxivIdentifier(id="2604.12345"))
-        fetch_mock.assert_awaited_once_with("2604.12345")
-        fmt_mock.assert_awaited_once_with(b"%PDF")
-        self.assertEqual(md, "MARKDOWN")
-        self.assertEqual(meta["source"], "arxiv")
-        self.assertEqual(meta["arxiv_id"], "2604.12345")
-        self.assertEqual(meta["title"], "Momentum")
-        self.assertEqual(meta["authors"], ["Alice", "Bob"])
-
-    async def test_http_pdf_branch(self) -> None:
-        raw = Fetched(
-            bytes=b"%PDF",
-            content_type="application/pdf",
-            source_url="http://example/x.pdf",
-        )
-        with (
-            patch(
-                "quantmind.flows.paper.fetch_url",
-                new=AsyncMock(return_value=raw),
-            ) as fetch_mock,
-            patch(
-                "quantmind.flows.paper.pdf_to_markdown",
-                new=AsyncMock(return_value="PDFMD"),
+    async def summarize(self, source, chunk_set, *, cfg):
+        self.calls.append((source, chunk_set, cfg))
+        if self.fail is not None:
+            raise self.fail
+        selected = []
+        pages: set[int] = set()
+        for chunk in chunk_set.chunks:
+            page = chunk.source_spans[0].page_number
+            if page not in pages or len(selected) < cfg.min_summary_citations:
+                selected.append((chunk, page))
+                pages.add(page)
+            if (
+                len(selected) >= cfg.min_summary_citations
+                and len(pages) >= cfg.min_summary_pages
+            ):
+                break
+        return PaperSummaryDraft(
+            summary=(
+                "The paper studies a source-first test methodology and reports "
+                "deterministic evidence across physical pages."
             ),
-        ):
-            md, meta = await _fetch_and_format(
-                HttpUrl(url="http://example/x.pdf")
-            )
-        fetch_mock.assert_awaited_once_with("http://example/x.pdf")
-        self.assertEqual(md, "PDFMD")
-        self.assertEqual(meta["source"], "web")
-        self.assertEqual(meta["content_type"], "application/pdf")
-
-    async def test_local_file_branch(self) -> None:
-        raw = Fetched(
-            bytes=b"## body",
-            content_type="text/markdown",
-            source_url="file:///tmp/p.md",
+            citations=tuple(
+                PaperSummaryCitationDraft(
+                    chunk_index=chunk.position,
+                    page_number=page,
+                )
+                for chunk, page in selected
+            ),
         )
-        with patch(
-            "quantmind.flows.paper.read_local_file",
-            new=AsyncMock(return_value=raw),
-        ) as read_mock:
-            md, meta = await _fetch_and_format(
-                LocalFilePath(path=Path("/tmp/p.md"))
-            )
-        read_mock.assert_awaited_once_with(Path("/tmp/p.md"))
-        self.assertEqual(md, "## body")
-        self.assertEqual(meta["source"], "local")
-        self.assertEqual(meta["path"], "/tmp/p.md")
-        self.assertEqual(meta["content_type"], "text/markdown")
-
-    async def test_raw_text_branch(self) -> None:
-        md, meta = await _fetch_and_format(RawText(text="hello"))
-        self.assertEqual(md, "hello")
-        self.assertEqual(meta, {"source": "inline"})
-
-    async def test_doi_branch_raises_not_implemented(self) -> None:
-        with self.assertRaises(NotImplementedError) as ctx:
-            await _fetch_and_format(DoiIdentifier(doi="10.1234/abcd"))
-        self.assertIn("DOI", str(ctx.exception))
-
-
-class ComposeInstructionsTests(unittest.TestCase):
-    def test_default_renders_cfg_flags(self) -> None:
-        cfg = PaperFlowCfg(
-            extract_methodology=False,
-            extract_limitations=True,
-            asset_class_hint="equities",
-        )
-        out = _compose_instructions(
-            "go {extract_methodology} {extract_limitations} "
-            "{asset_class_hint!r}",
-            None,
-            cfg,
-        )
-        self.assertEqual(out, "go False True 'equities'")
-
-    def test_extra_appended(self) -> None:
-        cfg = PaperFlowCfg()
-        out = _compose_instructions("BASE", "USER", cfg)
-        self.assertIn("BASE", out)
-        self.assertIn("Additional instructions:", out)
-        self.assertIn("USER", out)
-
-
-class FormatInputTests(unittest.TestCase):
-    def test_tuple_authors_join_as_csv(self) -> None:
-        out = _format_input(
-            "BODY",
-            {"authors": ("Alice", "Bob"), "title": "x"},
-        )
-        self.assertIn("authors: Alice, Bob", out)
-        self.assertIn("title: x", out)
-        self.assertIn("BODY", out)
-
-    def test_none_values_skipped(self) -> None:
-        out = _format_input("BODY", {"a": "1", "b": None})
-        self.assertIn("a: 1", out)
-        self.assertNotIn("b:", out)
 
 
 class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
-    async def test_happy_path_arxiv(self) -> None:
-        raw_paper = RawPaper(
+    async def test_local_pdf_builds_chunks_before_summary(self) -> None:
+        provider = _FakeSummaryProvider()
+        cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
+
+        result = await paper_flow(
+            LocalFilePath(path=_FIXTURE),
+            cfg=cfg,
+            _summary_provider=provider,
+        )
+
+        self.assertEqual(len(provider.calls), 1)
+        source_seen, chunk_set_seen, _ = provider.calls[0]
+        self.assertIs(source_seen, result.source_revision)
+        self.assertIs(chunk_set_seen, result.chunk_set)
+        self.assertEqual(len(result.source_revision.parsed.pages), 4)
+        self.assertTrue(result.chunk_set.chunks)
+        self.assertTrue(result.global_summary.summary)
+        self.assertGreaterEqual(len(result.global_summary.citations), 3)
+        self.assertGreaterEqual(
+            len(
+                {
+                    citation.page_number
+                    for citation in result.global_summary.citations
+                }
+            ),
+            2,
+        )
+        self.assertTrue(
+            all(
+                chunk.source_revision_id == result.source_revision.id
+                and chunk.source_spans
+                for chunk in result.chunk_set.chunks
+            )
+        )
+
+    async def test_exact_arxiv_source_facts_are_code_owned(self) -> None:
+        raw = RawPaper(
+            bytes=_FIXTURE.read_bytes(),
+            content_type="application/pdf",
+            source_url="https://arxiv.org/pdf/1706.03762v7.pdf",
+            resolved_url="https://arxiv.org/pdf/1706.03762v7.pdf",
+            fetched_at=_WHEN,
+            arxiv_id="1706.03762v7",
+            title="Attention Is All You Need",
+            authors=("Ashish Vaswani",),
+            published_at=_WHEN,
+            updated_at=_WHEN,
+        )
+        with patch(
+            "quantmind.flows.paper.fetch_arxiv",
+            new=AsyncMock(return_value=raw),
+        ):
+            result = await paper_flow(
+                ArxivIdentifier(id="1706.03762v7"),
+                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+                _summary_provider=_FakeSummaryProvider(),
+            )
+
+        self.assertEqual(result.source_revision.arxiv_id, "1706.03762v7")
+        self.assertEqual(result.source_revision.source.kind, "arxiv")
+        self.assertEqual(
+            result.source_revision.title, "Attention Is All You Need"
+        )
+        self.assertEqual(
+            result.source_revision.source.content_hash,
+            result.source_revision.parsed.source_hash,
+        )
+        self.assertFalse(hasattr(result.global_summary, "root_node_id"))
+
+    async def test_summary_failure_prevents_flow_success(self) -> None:
+        provider = _FakeSummaryProvider(fail=RuntimeError("summary failed"))
+
+        with self.assertRaisesRegex(RuntimeError, "summary failed"):
+            await paper_flow(
+                LocalFilePath(path=_FIXTURE),
+                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+                _summary_provider=provider,
+            )
+
+    async def test_same_pdf_and_configs_have_idempotent_ids(self) -> None:
+        cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
+        first = await paper_flow(
+            LocalFilePath(path=_FIXTURE),
+            cfg=cfg,
+            _summary_provider=_FakeSummaryProvider(),
+        )
+        second = await paper_flow(
+            LocalFilePath(path=_FIXTURE),
+            cfg=cfg,
+            _summary_provider=_FakeSummaryProvider(),
+        )
+
+        self.assertEqual(first.source_revision.id, second.source_revision.id)
+        self.assertEqual(first.chunk_set.id, second.chunk_set.id)
+        self.assertEqual(first.global_summary.id, second.global_summary.id)
+        self.assertEqual(
+            [chunk.chunk_id for chunk in first.chunk_set.chunks],
+            [chunk.chunk_id for chunk in second.chunk_set.chunks],
+        )
+
+
+class SourceDispatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_http_pdf_preserves_resolved_url_and_fetch_time(self) -> None:
+        raw = Fetched(
             bytes=b"%PDF",
             content_type="application/pdf",
-            arxiv_id="2604.12345",
+            source_url="https://example.test/input.pdf",
+            resolved_url="https://cdn.example.test/exact.pdf",
+            fetched_at=_WHEN,
         )
-        stub = _stub_paper()
-        with (
-            patch(
-                "quantmind.flows.paper.fetch_arxiv",
-                new=AsyncMock(return_value=raw_paper),
-            ),
-            patch(
-                "quantmind.flows.paper.pdf_to_markdown",
-                new=AsyncMock(return_value="MD"),
-            ),
-            _patch_runner(stub) as runner,
+        with patch(
+            "quantmind.flows.paper.fetch_url",
+            new=AsyncMock(return_value=raw),
         ):
-            out = await paper_flow(ArxivIdentifier(id="2604.12345"))
-        self.assertIs(out, stub)
-        runner.assert_awaited_once()
-
-    async def test_extra_instructions_passed_to_agent(self) -> None:
-        seen: dict[str, Any] = {}
-
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock(name="agent", _name="paper_extractor")
-
-        stub = _stub_paper()
-        with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(stub),
-        ):
-            await paper_flow(
-                RawText(text="hello"),
-                extra_instructions="EXTRA-USER-DIRECTIVE",
+            fetched = await _fetch_paper_source(
+                HttpUrl(url="https://example.test/input.pdf")
             )
-        self.assertIn("EXTRA-USER-DIRECTIVE", seen["instructions"])
-        self.assertIn("structured QuantMind", seen["instructions"])
 
-    async def test_output_type_override_propagated(self) -> None:
-        seen: dict[str, Any] = {}
+        self.assertEqual(fetched.uri, "https://cdn.example.test/exact.pdf")
+        self.assertEqual(fetched.fetched_at, _WHEN)
 
-        class MyPaper(Paper):
-            pass
-
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock()
-
-        with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+    async def test_non_pdf_and_raw_text_are_rejected_before_summary(
+        self,
+    ) -> None:
+        html = Fetched(bytes=b"<html/>", content_type="text/html")
+        with patch(
+            "quantmind.flows.paper.fetch_url",
+            new=AsyncMock(return_value=html),
         ):
-            await paper_flow(RawText(text="x"), output_type=MyPaper)
-        self.assertIs(seen["output_type"], MyPaper)
+            with self.assertRaises(UnsupportedContentTypeError):
+                await _fetch_paper_source(HttpUrl(url="https://example.test"))
+        with self.assertRaises(UnsupportedContentTypeError):
+            await _fetch_paper_source(RawText(text="no physical pages"))
 
-    async def test_extra_tools_and_guardrails_forwarded(self) -> None:
-        seen: dict[str, Any] = {}
+    async def test_doi_requires_an_exact_pdf_resolver(self) -> None:
+        with self.assertRaises(NotImplementedError):
+            await _fetch_paper_source(DoiIdentifier(doi="10.1000/test"))
 
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock()
 
-        sentinel_tool = MagicMock(name="tool")
-        in_g = MagicMock()
-        out_g = MagicMock()
-        with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+class CitationValidationTests(unittest.TestCase):
+    def test_unknown_chunk_page_and_quote_are_rejected(self) -> None:
+        result = build_paper_result()
+        cfg = PaperFlowCfg(
+            min_summary_citations=1,
+            min_summary_pages=1,
+        )
+        invalid_drafts = (
+            PaperSummaryDraft(
+                summary="x",
+                citations=(
+                    PaperSummaryCitationDraft(
+                        chunk_index=99,
+                        page_number=1,
+                    ),
+                ),
+            ),
+            PaperSummaryDraft(
+                summary="x",
+                citations=(
+                    PaperSummaryCitationDraft(
+                        chunk_index=0,
+                        page_number=2,
+                    ),
+                ),
+            ),
+            PaperSummaryDraft(
+                summary="x",
+                citations=(
+                    PaperSummaryCitationDraft(
+                        chunk_index=0,
+                        page_number=1,
+                        quote="not in source chunk",
+                    ),
+                ),
+            ),
+        )
+
+        for draft in invalid_drafts:
+            with self.subTest(draft=draft):
+                with self.assertRaises(PaperCitationValidationError):
+                    _build_summary(
+                        result.chunk_set,
+                        draft,
+                        cfg,
+                    )
+
+    def test_configured_citation_and_page_coverage_is_enforced(self) -> None:
+        result = build_paper_result()
+        draft = PaperSummaryDraft(
+            summary="x",
+            citations=(
+                PaperSummaryCitationDraft(chunk_index=0, page_number=1),
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            PaperCitationValidationError,
+            "fewer citations",
         ):
-            await paper_flow(
-                RawText(text="x"),
-                extra_tools=[sentinel_tool],
-                extra_input_guardrails=[in_g],
-                extra_output_guardrails=[out_g],
+            _build_summary(
+                result.chunk_set,
+                draft,
+                PaperFlowCfg(),
             )
-        self.assertEqual(seen["tools"], [sentinel_tool])
-        self.assertEqual(seen["input_guardrails"], [in_g])
-        self.assertEqual(seen["output_guardrails"], [out_g])
 
-    async def test_memory_accepted_as_no_op(self) -> None:
-        with (
-            patch(
-                "quantmind.flows.paper.Agent",
-                return_value=MagicMock(),
+
+def _fake_research_run(cfg, source_pages):
+    """A run_with_observability stub: real worker drafts, one reducer draft."""
+
+    async def fake_run(agent, payload, *, cfg, memory, extra_run_hooks):
+        data = json.loads(payload)
+        if agent.name == "paper_chunk_researcher":
+            return PaperResearchDraft(
+                scope_summary="reviewed the assigned chunk group",
+                findings=tuple(
+                    PaperResearchFindingDraft(
+                        kind="method",
+                        claim=f"finding for chunk {chunk['chunk_index']}",
+                        citation=PaperResearchCitationDraft(
+                            chunk_index=chunk["chunk_index"],
+                            page_number=chunk["pages"][0],
+                        ),
+                    )
+                    for chunk in data["chunks"]
+                ),
+            )
+        return PaperSummaryDraft(
+            summary="synthesized global summary across physical pages",
+            citations=(
+                PaperSummaryCitationDraft(chunk_index=0, page_number=1),
             ),
-            _patch_runner(_stub_paper()) as runner,
-        ):
-            await paper_flow(RawText(text="x"), memory=object())
-        # The runner sees the memory placeholder forwarded.
-        self.assertIsNotNone(runner.await_args.kwargs["memory"])
+        )
 
-    async def test_extra_run_hooks_forwarded(self) -> None:
-        class _H(RunHooks[Any]):
-            pass
+    return fake_run
 
-        hook = _H()
-        with (
-            patch(
-                "quantmind.flows.paper.Agent",
-                return_value=MagicMock(),
+
+class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
+    def test_chunk_groups_tile_every_chunk_exactly_once(self) -> None:
+        groups = _chunk_groups(7, 3)
+        self.assertEqual(
+            [(group.start, group.count) for group in groups],
+            [(0, 3), (3, 3), (6, 1)],
+        )
+        covered = [
+            index
+            for group in groups
+            for index in range(group.start, group.start + group.count)
+        ]
+        self.assertEqual(covered, list(range(7)))
+
+    def test_research_finding_outside_its_group_is_rejected(self) -> None:
+        result = build_paper_result()
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk only",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="method",
+                    claim="a finding pointing outside the assigned group",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=2,
+                        page_number=2,
+                    ),
+                ),
             ),
-            _patch_runner(_stub_paper()) as runner,
+        )
+        with self.assertRaisesRegex(ValueError, "outside its group"):
+            _validate_research_draft(
+                result.chunk_set,
+                _ChunkGroup(start=0, count=1),
+                draft,
+            )
+
+    def test_worker_and_reducer_output_is_capped(self) -> None:
+        capped = _summary_model_settings(
+            PaperFlowCfg(
+                max_summary_output_tokens=256,
+                model_settings=ModelSettings(max_tokens=1024),
+            )
+        )
+        self.assertEqual(capped.max_tokens, 256)
+        lower = _summary_model_settings(
+            PaperFlowCfg(
+                max_summary_output_tokens=256,
+                model_settings=ModelSettings(max_tokens=128),
+            )
+        )
+        self.assertEqual(lower.max_tokens, 128)
+
+    async def test_map_reduce_fans_out_one_worker_per_group(self) -> None:
+        result = build_paper_result()
+        cfg = PaperFlowCfg(
+            summary_research_group_size=1,
+            summary_concurrency=2,
+            min_summary_citations=1,
+            min_summary_pages=1,
+        )
+        run_mock = AsyncMock(
+            side_effect=_fake_research_run(
+                cfg, result.source_revision.parsed.pages
+            )
+        )
+        with patch(
+            "quantmind.flows._paper_summary.run_with_observability",
+            new=run_mock,
         ):
-            await paper_flow(RawText(text="x"), extra_run_hooks=[hook])
-        self.assertEqual(runner.await_args.kwargs["extra_run_hooks"], [hook])
+            draft = await _AgentsPaperSummaryProvider().summarize(
+                result.source_revision,
+                result.chunk_set,
+                cfg=cfg,
+            )
 
-    async def test_model_settings_forwarded_when_set(self) -> None:
-        seen: dict[str, Any] = {}
+        self.assertIsInstance(draft, PaperSummaryDraft)
+        worker_calls = [
+            call.args[0].name
+            for call in run_mock.await_args_list
+            if call.args[0].name == "paper_chunk_researcher"
+        ]
+        self.assertEqual(len(worker_calls), len(result.chunk_set.chunks))
+        self.assertEqual(run_mock.await_count, len(result.chunk_set.chunks) + 1)
 
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock()
+    async def test_summary_timeout_raises(self) -> None:
+        result = build_paper_result()
+        cfg = PaperFlowCfg(
+            summary_research_group_size=8,
+            timeout_seconds=0.01,
+            min_summary_citations=1,
+            min_summary_pages=1,
+        )
 
-        from agents import ModelSettings
+        async def fake_run(agent, payload, *, cfg, memory, extra_run_hooks):
+            data = json.loads(payload)
+            if agent.name == "paper_chunk_researcher":
+                return PaperResearchDraft(
+                    scope_summary="reviewed the assigned chunk group",
+                    findings=tuple(
+                        PaperResearchFindingDraft(
+                            kind="method",
+                            claim=f"finding for chunk {chunk['chunk_index']}",
+                            citation=PaperResearchCitationDraft(
+                                chunk_index=chunk["chunk_index"],
+                                page_number=chunk["pages"][0],
+                            ),
+                        )
+                        for chunk in data["chunks"]
+                    ),
+                )
+            await asyncio.sleep(10)
 
-        ms = ModelSettings(temperature=0.42)
-        cfg = PaperFlowCfg(model_settings=ms)
-        with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
+        with patch(
+            "quantmind.flows._paper_summary.run_with_observability",
+            new=AsyncMock(side_effect=fake_run),
         ):
-            await paper_flow(RawText(text="x"), cfg=cfg)
-        self.assertIs(seen["model_settings"], ms)
+            with self.assertRaises(PaperSummaryError):
+                await _AgentsPaperSummaryProvider().summarize(
+                    result.source_revision,
+                    result.chunk_set,
+                    cfg=cfg,
+                )
 
-    async def test_model_settings_omitted_when_none(self) -> None:
-        seen: dict[str, Any] = {}
 
-        def _capture_agent(*_a: Any, **kwargs: Any) -> Any:
-            seen.update(kwargs)
-            return MagicMock()
-
-        with (
-            patch("quantmind.flows.paper.Agent", side_effect=_capture_agent),
-            _patch_runner(_stub_paper()),
-        ):
-            await paper_flow(RawText(text="x"))
-        self.assertNotIn("model_settings", seen)
+if __name__ == "__main__":
+    unittest.main()

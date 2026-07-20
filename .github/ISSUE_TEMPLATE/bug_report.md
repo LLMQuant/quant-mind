@@ -2,9 +2,11 @@
 name: 🐛 Bug Report
 about: Report a bug to help us improve QuantMind
 title: 'bug: [brief description of the bug]'
-labels: ['bug', 'needs-triage']
+labels: ['type: bug']
 assignees: ''
 ---
+
+<!-- github-prose-style: Keep each logical paragraph/list item on one physical line; do not hard-wrap at 80 columns. -->
 
 ## 🐛 Bug Description
 

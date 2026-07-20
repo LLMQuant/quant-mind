@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from quantmind.preprocess._news_types import NewsTickerHint
 from quantmind.preprocess.clean import (
     collapse_whitespace,
     dedupe_lines,
@@ -50,6 +51,11 @@ _EXCHANGE_TICKER_RE = re.compile(
     r"(?:\)|\b)",
     re.IGNORECASE,
 )
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]\n]+)\]\([^\)\n]*\)")
+_MARKDOWN_EMPHASIS_RE = re.compile(
+    r"(?<!\*)\*{1,2}([A-Z][A-Z0-9.-]{0,9})\*{1,2}(?!\*)",
+    re.IGNORECASE,
+)
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
 )
@@ -66,17 +72,6 @@ _EXCHANGE_NAMES: dict[str, str] = {
     "OTC": "OTC",
     "CBOE": "CBOE",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class NewsTickerHint:
-    """Ticker hint extracted before instrument resolution."""
-
-    symbol: str
-    exchange: str | None = None
-    source: str = "exchange_code"
-    confidence: float = 1.0
-    raw: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +95,7 @@ class NewsCandidate:
     body_text: str
     content_hash: str
     source_type: NewsSourceType
-    dedup_key: str
+    identity: str
     source_url: str | None = None
     title: str | None = None
     publisher: str | None = None
@@ -319,7 +314,7 @@ def preprocess_news_document(raw: RawNewsDocument) -> NewsCandidate:
         body_text=body_text,
         content_hash=news_content_hash(body_text),
         source_type=raw.source_type,
-        dedup_key=build_news_dedup_key(
+        identity=build_news_identity(
             source_type=raw.source_type,
             source_url=source_url,
             payload_id=raw.payload_id,
@@ -345,13 +340,13 @@ def news_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def build_news_dedup_key(
+def build_news_identity(
     *,
     source_type: NewsSourceType,
     source_url: str | None = None,
     payload_id: str | None = None,
 ) -> str:
-    """Build a deterministic source-document dedup key.
+    """Build a deterministic source-document identity.
 
     Press-release/wire rows use the payload id when available and otherwise
     fall back to the canonical source URL. The identity is hashed so callers do
@@ -361,27 +356,27 @@ def build_news_dedup_key(
     if not identity and source_url:
         identity = canonicalize_source_url(source_url)
     if not identity:
-        raise ValueError("news dedup key requires payload_id or source_url")
+        raise ValueError("news identity requires payload_id or source_url")
     prefix = _SOURCE_PREFIX[source_type]
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return f"{prefix}:{digest}"
 
 
-def build_sec_news_dedup_key(
+def build_sec_news_identity(
     *,
     accession_number: str,
     section_key: str,
 ) -> str:
-    """Build a stable 8-K EX-99.x news dedup key."""
+    """Build a stable 8-K EX-99.x news identity."""
     accession = accession_number.strip()
     section = section_key.strip().lower()
     if not accession or not section:
-        raise ValueError("SEC news dedup key requires accession and section")
+        raise ValueError("SEC news identity requires accession and section")
     return f"sec:{accession}:{section}"
 
 
 def canonicalize_source_url(url: str) -> str:
-    """Normalise source URLs for stable dedup identity."""
+    """Normalise source URLs for stable source identity."""
     parsed = urlsplit(url.strip())
     query = [
         (key, value)
@@ -408,10 +403,14 @@ def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
 
     Examples matched include ``(NASDAQ: NVDA)`` and ``NYSE: IBM``. The result is
     only a hint; downstream instrument resolution should still validate it.
+    Markdown link and emphasis decoration is removed from a scan-only copy so
+    stored news text and its content hash retain their original representation.
     """
+    scan_text = _MARKDOWN_LINK_RE.sub(r"\1", text)
+    scan_text = _MARKDOWN_EMPHASIS_RE.sub(r"\1", scan_text)
     hints: list[NewsTickerHint] = []
     seen: set[tuple[str, str | None]] = set()
-    for match in _EXCHANGE_TICKER_RE.finditer(text):
+    for match in _EXCHANGE_TICKER_RE.finditer(scan_text):
         raw_exchange = " ".join(match.group(1).upper().split())
         exchange = _EXCHANGE_NAMES.get(raw_exchange, raw_exchange)
         symbol = match.group(2).upper()

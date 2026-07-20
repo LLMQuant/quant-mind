@@ -1,19 +1,19 @@
-"""Paper extraction flow.
+"""Source-first paper flow that returns chunks before a cited summary.
 
-`paper_flow` ingests one of the ``PaperInput`` discriminated-union
-variants, fetches and converts the raw payload to markdown via
-``preprocess.fetch`` + ``preprocess.format``, then runs an
-``Agent(output_type=Paper)`` to produce a typed ``Paper``
-``TreeKnowledge`` object.
-
-Customization happens through the configured ``PaperFlowCfg`` (Layer 1)
-or the keyword arguments on this function (Layer 2). To swap the whole
-flow, fork this file (Layer 3 — design doc §9).
+The flow is deliberately thin. It owns only what genuinely needs both the
+preprocess/rag value objects and IO: fetching bytes, parsing the PDF, reading
+page-asset bytes off disk, and mapping those ephemeral, path-based artifacts
+into knowledge-native inputs. All identity (IDs, content and producer hashes,
+citation resolution) lives on the knowledge models' ``from_*`` constructors,
+so this module imports no private ID helpers and computes no paper ID itself.
 """
 
-from typing import Any, TypeVar
-
-from agents import Agent, RunHooks, Tool
+import mimetypes
+from collections.abc import Sequence
+from datetime import datetime, timezone
+from importlib.metadata import version
+from pathlib import Path
+from typing import Literal
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import (
@@ -24,180 +24,311 @@ from quantmind.configs.paper import (
     PaperInput,
     RawText,
 )
-from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import Paper
+from quantmind.flows._paper_summary import (
+    PaperSummaryDraft,
+    _AgentsPaperSummaryProvider,
+    _PaperSummaryProvider,
+    _summary_instructions_hash,
+)
+from quantmind.knowledge import (
+    PaperAssetInput,
+    PaperBoundingBox,
+    PaperChunkingConfig,
+    PaperChunkInput,
+    PaperChunkSet,
+    PaperCitationDraft,
+    PaperFlowResult,
+    PaperGlobalSummary,
+    PaperPageInput,
+    PaperParsedBlock,
+    PaperSourceFacts,
+    PaperSourceRevision,
+    PaperSummaryProducer,
+)
 from quantmind.preprocess.fetch import (
     Fetched,
+    RawPaper,
     fetch_arxiv,
     fetch_url,
     read_local_file,
 )
-from quantmind.preprocess.format import html_to_markdown, pdf_to_markdown
-
-P = TypeVar("P", bound=Paper)
-
-_DEFAULT_INSTRUCTIONS = """\
-You are extracting a research paper into a structured QuantMind ``Paper``
-TreeKnowledge object. Build the section tree top-down: every node has a
-title and a short summary; leaf nodes additionally carry the section
-markdown content. Cite supporting passages on each node.
-
-Honour these flags from the run config:
-- extract_methodology={extract_methodology}: when true, every methodology
-  section becomes its own subtree with a per-step summary.
-- extract_limitations={extract_limitations}: when true, surface
-  limitations as a dedicated top-level child rather than inlining them.
-- asset_class_hint={asset_class_hint!r}: when set, prefer this asset
-  class for ``Paper.asset_classes`` if the paper does not state one
-  explicitly.
-
-Set ``as_of`` to the publication date when given; otherwise use today's
-date. Set the ``source`` provenance ref using the metadata supplied in
-the prompt.
-"""
+from quantmind.preprocess.format import ParsedDocument, parse_pdf
+from quantmind.rag import (
+    ParsedChunk,
+    SentenceSplitterConfig,
+    chunk_parsed_document,
+)
 
 
 class UnsupportedContentTypeError(ValueError):
-    """Fetched bytes have a content type paper_flow cannot route to a parser."""
+    """The source is not a page-aware PDF supported by Paper Flow V1."""
 
 
 async def paper_flow(
     input: PaperInput,
     *,
     cfg: PaperFlowCfg | None = None,
-    extra_tools: list[Tool] | None = None,
-    extra_instructions: str | None = None,
-    output_type: type[P] | None = None,
-    memory: object | None = None,
-    extra_run_hooks: list[RunHooks[Any]] | None = None,
-    extra_input_guardrails: list[Any] | None = None,
-    extra_output_guardrails: list[Any] | None = None,
-) -> P | Paper:
-    """Extract a ``Paper`` from a typed ``PaperInput``.
+    _summary_provider: _PaperSummaryProvider | None = None,
+) -> PaperFlowResult:
+    """Build a page-aware chunk set and one cited global summary.
 
-    See design doc §4.1 for the rationale on each kwarg. ``memory`` is a
-    PR6 placeholder — non-None values are accepted but unused in PR5.
+    IDs, source metadata, artifact membership, lineage, and citation links are
+    minted and validated by the knowledge-layer constructors. The model returns
+    only summary prose and chunk/page coordinates through a bounded seam.
+
+    Args:
+        input: Typed paper source. V1 requires a PDF-backed input.
+        cfg: Splitter, summary model, and usage/runtime limits.
+
+    Returns:
+        The exact source revision, one chunk-set artifact, and one cited
+        global-summary artifact.
 
     Raises:
-        UnsupportedContentTypeError: When fetched bytes are not PDF /
-            HTML / markdown / plain-text.
-        NotImplementedError: When ``input`` is a ``DoiIdentifier`` (the
-            unpaywall fallback is its own follow-up issue).
+        UnsupportedContentTypeError: If the resolved content is not a PDF.
+        PaperCitationValidationError: If generated citations are invalid or do
+            not meet the configured source-coverage policy.
+        NotImplementedError: If a DOI input has no exact open PDF resolver.
     """
     cfg = cfg or PaperFlowCfg()
-    out_type: type[Paper] = output_type or Paper  # type: ignore[assignment]
-
-    raw_md, source_meta = await _fetch_and_format(input)
-
-    # Agent's `model_settings` parameter is non-optional (defaults to a
-    # fresh ``ModelSettings()``); only forward when cfg has one set.
-    agent_kwargs: dict[str, Any] = {
-        "name": "paper_extractor",
-        "instructions": _compose_instructions(
-            _DEFAULT_INSTRUCTIONS, extra_instructions, cfg
+    facts = await _fetch_paper_source(input)
+    parsed = await parse_pdf(facts.raw_bytes, artifact_dir=cfg.output_dir)
+    source = PaperSourceRevision.from_parsed(
+        facts=facts,
+        source_hash=parsed.source_hash,
+        parser_name=parsed.parser_name,
+        parser_version=parsed.parser_version,
+        cleanup_version=parsed.cleanup_version,
+        pages=_adapt_pages(parsed),
+    )
+    parsed_chunks = chunk_parsed_document(
+        parsed,
+        config=SentenceSplitterConfig(
+            chunk_size=cfg.chunk_size,
+            chunk_overlap=cfg.chunk_overlap,
         ),
-        "model": cfg.model,
-        "tools": list(extra_tools or []),
-        "output_type": out_type,
-        "input_guardrails": list(extra_input_guardrails or []),
-        "output_guardrails": list(extra_output_guardrails or []),
-    }
-    if cfg.model_settings is not None:
-        agent_kwargs["model_settings"] = cfg.model_settings
-    agent: Agent[Any] = Agent(**agent_kwargs)
-    return await run_with_observability(
-        agent,
-        _format_input(raw_md, source_meta),
-        cfg=cfg,
-        memory=memory,
-        extra_run_hooks=list(extra_run_hooks or []),
+    )
+    producer = PaperChunkingConfig(
+        splitter_version=version("llama-index-core"),
+        chunk_size=cfg.chunk_size,
+        chunk_overlap=cfg.chunk_overlap,
+    )
+    chunk_set = PaperChunkSet.from_parsed_chunks(
+        source,
+        _adapt_chunks(parsed_chunks, source),
+        producer=producer,
+    )
+    provider = _summary_provider or _AgentsPaperSummaryProvider()
+    draft = await provider.summarize(source, chunk_set, cfg=cfg)
+    summary = _build_summary(chunk_set, draft, cfg)
+    return PaperFlowResult(
+        source_revision=source,
+        chunk_set=chunk_set,
+        global_summary=summary,
     )
 
 
-async def _fetch_and_format(
-    input: PaperInput,
-) -> tuple[str, dict[str, Any]]:
-    """Dispatch on the input variant; return (markdown, source metadata)."""
+def _aware_or_now(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _require_pdf(raw: Fetched) -> None:
+    media_type = (raw.content_type or "").lower()
+    if not media_type.startswith("application/pdf"):
+        raise UnsupportedContentTypeError(
+            "Paper Flow V1 requires a page-aware PDF; resolved content type "
+            f"was {media_type!r}"
+        )
+
+
+async def _fetch_paper_source(input: PaperInput) -> PaperSourceFacts:
+    """Fetch and normalize one input into code-owned source facts (IO)."""
     if isinstance(input, ArxivIdentifier):
-        raw = await fetch_arxiv(input.id)
-        md = await pdf_to_markdown(raw.bytes)
-        return md, {
-            "source": "arxiv",
-            "arxiv_id": raw.arxiv_id,
-            "title": raw.title,
-            "authors": list(raw.authors),
-        }
+        raw_paper: RawPaper = await fetch_arxiv(input.id)
+        _require_pdf(raw_paper)
+        fetched_at = _aware_or_now(raw_paper.fetched_at)
+        available_at = _aware_or_now(
+            raw_paper.updated_at or raw_paper.published_at or fetched_at
+        )
+        uri = raw_paper.resolved_url or raw_paper.source_url
+        if uri is None:
+            raise ValueError("resolved arXiv paper is missing its source URL")
+        return PaperSourceFacts(
+            kind="arxiv",
+            uri=uri,
+            media_type="application/pdf",
+            raw_bytes=raw_paper.bytes,
+            fetched_at=fetched_at,
+            available_at=available_at,
+            published_at=raw_paper.published_at,
+            arxiv_id=raw_paper.arxiv_id,
+            title=raw_paper.title,
+            authors=raw_paper.authors,
+        )
     if isinstance(input, HttpUrl):
-        raw = await fetch_url(input.url)
-        md = await _format_by_content_type(raw)
-        return md, {
-            "source": "web",
-            "url": input.url,
-            "content_type": raw.content_type,
-        }
+        raw_http = await fetch_url(input.url)
+        _require_pdf(raw_http)
+        fetched_at = _aware_or_now(raw_http.fetched_at)
+        return PaperSourceFacts(
+            kind="http",
+            uri=raw_http.resolved_url or raw_http.source_url or input.url,
+            media_type="application/pdf",
+            raw_bytes=raw_http.bytes,
+            fetched_at=fetched_at,
+            available_at=fetched_at,
+        )
     if isinstance(input, LocalFilePath):
-        raw = await read_local_file(input.path)
-        md = await _format_by_content_type(raw)
-        return md, {
-            "source": "local",
-            "path": str(input.path),
-            "content_type": raw.content_type,
-        }
+        raw_local = await read_local_file(input.path)
+        _require_pdf(raw_local)
+        observed_at = _aware_or_now(raw_local.fetched_at)
+        path = Path(input.path).expanduser().resolve()
+        return PaperSourceFacts(
+            kind="local",
+            uri=raw_local.source_url or path.as_uri(),
+            media_type="application/pdf",
+            raw_bytes=raw_local.bytes,
+            fetched_at=observed_at,
+            available_at=observed_at,
+        )
     if isinstance(input, RawText):
-        return input.text, {"source": "inline"}
+        raise UnsupportedContentTypeError(
+            "Paper Flow V1 requires a page-aware PDF; RawText has no physical "
+            "page evidence"
+        )
     if isinstance(input, DoiIdentifier):
-        # PR4's CrossrefMetadata exposes only `primary_url` (publisher
-        # landing page), not a direct PDF link. Adding the unpaywall
-        # fallback that turns a DOI into an OA PDF URL is its own
-        # follow-up issue.
         raise NotImplementedError(
-            "DOI inputs require an OA PDF resolver (unpaywall fallback) "
-            "which is tracked as a PR4 follow-up. Use ArxivIdentifier or "
-            "HttpUrl for now."
+            "DOI inputs require an exact open PDF resolver before they can "
+            "produce a paper source revision"
         )
     raise TypeError(f"Unsupported PaperInput variant: {type(input)!r}")
 
 
-async def _format_by_content_type(raw: Fetched) -> str:
-    """Route a ``Fetched`` payload through the right format helper."""
-    ct = (raw.content_type or "").lower()
-    if ct.startswith("application/pdf"):
-        return await pdf_to_markdown(raw.bytes)
-    if ct.startswith("text/html"):
-        return await html_to_markdown(
-            raw.bytes.decode("utf-8", errors="replace")
+def _read_page_asset(
+    path_value: str,
+    *,
+    kind: Literal["screenshot", "image"],
+    page_number: int,
+) -> PaperAssetInput:
+    """Read one parser-written page asset off disk into knowledge input (IO)."""
+    path = Path(path_value)
+    try:
+        content = path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(
+            f"Parser asset for page {page_number} is missing: {path}"
+        ) from exc
+    media_type = (
+        mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    )
+    return PaperAssetInput(kind=kind, content=content, media_type=media_type)
+
+
+def _adapt_pages(parsed: ParsedDocument) -> list[PaperPageInput]:
+    """Map path-based parsed pages into knowledge-native page inputs."""
+    pages: list[PaperPageInput] = []
+    for page in parsed.pages:
+        blocks = tuple(
+            PaperParsedBlock(
+                text=block.text,
+                bbox=PaperBoundingBox(
+                    x0=block.bbox.x0,
+                    y0=block.bbox.y0,
+                    x1=block.bbox.x1,
+                    y1=block.bbox.y1,
+                ),
+                font_name=block.font_name,
+                font_size=block.font_size,
+                confidence=block.confidence,
+            )
+            for block in page.blocks
         )
-    if ct.startswith("text/markdown") or ct.startswith("text/plain"):
-        return raw.bytes.decode("utf-8", errors="replace")
-    raise UnsupportedContentTypeError(
-        f"Unsupported content-type for paper input: {ct!r}"
+        screenshot = (
+            _read_page_asset(
+                page.screenshot_path,
+                kind="screenshot",
+                page_number=page.page_number,
+            )
+            if page.screenshot_path is not None
+            else None
+        )
+        images = tuple(
+            _read_page_asset(
+                image_path,
+                kind="image",
+                page_number=page.page_number,
+            )
+            for image_path in page.image_paths
+        )
+        pages.append(
+            PaperPageInput(
+                page_number=page.page_number,
+                width=page.width,
+                height=page.height,
+                text=page.text,
+                blocks=blocks,
+                screenshot=screenshot,
+                images=images,
+            )
+        )
+    return pages
+
+
+def _adapt_chunks(
+    parsed_chunks: Sequence[ParsedChunk],
+    source: PaperSourceRevision,
+) -> list[PaperChunkInput]:
+    """Map splitter chunks into knowledge-native chunk inputs."""
+    content_hash = source.source.content_hash
+    chunks: list[PaperChunkInput] = []
+    for parsed_chunk in parsed_chunks:
+        if parsed_chunk.source_hash != content_hash:
+            raise ValueError("parsed chunk belongs to another source revision")
+        chunks.append(
+            PaperChunkInput(
+                page_number=parsed_chunk.page_number,
+                start_char=parsed_chunk.start_char,
+                end_char=parsed_chunk.end_char,
+                block_boxes=tuple(
+                    PaperBoundingBox(x0=box.x0, y0=box.y0, x1=box.x1, y1=box.y1)
+                    for box in parsed_chunk.block_boxes
+                ),
+                text=parsed_chunk.text,
+            )
+        )
+    return chunks
+
+
+def _build_summary(
+    chunk_set: PaperChunkSet,
+    draft: PaperSummaryDraft,
+    cfg: PaperFlowCfg,
+) -> PaperGlobalSummary:
+    """Assemble the summary producer and delegate identity to the model."""
+    producer = PaperSummaryProducer(
+        model=cfg.model,
+        prompt_version=cfg.summary_prompt_version,
+        input_chunk_set_id=chunk_set.id,
+        instructions_hash=_summary_instructions_hash(cfg),
+        max_output_tokens=cfg.max_summary_output_tokens,
+        research_group_size=cfg.summary_research_group_size,
     )
-
-
-def _compose_instructions(
-    base: str, extra: str | None, cfg: PaperFlowCfg
-) -> str:
-    """Render the system instructions, appending ``extra`` if provided."""
-    instructions = base.format(
-        extract_methodology=cfg.extract_methodology,
-        extract_limitations=cfg.extract_limitations,
-        asset_class_hint=cfg.asset_class_hint,
+    citations = tuple(
+        PaperCitationDraft(
+            chunk_index=citation.chunk_index,
+            page_number=citation.page_number,
+            quote=citation.quote,
+        )
+        for citation in draft.citations
     )
-    if extra:
-        instructions = f"{instructions}\n\nAdditional instructions:\n{extra}"
-    return instructions
-
-
-def _format_input(raw_md: str, source_meta: dict[str, Any]) -> str:
-    """Concatenate metadata + content into the prompt the agent sees."""
-    lines: list[str] = []
-    for key, value in source_meta.items():
-        if value is None:
-            continue
-        if isinstance(value, (list, tuple)):
-            value = ", ".join(map(str, value))
-        lines.append(f"{key}: {value}")
-    header = "\n".join(lines)
-    return (
-        f"--- Source metadata ---\n{header}\n\n--- Paper content ---\n{raw_md}"
+    return PaperGlobalSummary.from_draft(
+        chunk_set,
+        producer=producer,
+        summary=draft.summary,
+        citations=citations,
+        min_citations=cfg.min_summary_citations,
+        min_pages=cfg.min_summary_pages,
     )

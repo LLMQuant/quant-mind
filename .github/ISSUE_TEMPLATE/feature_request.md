@@ -2,9 +2,11 @@
 name: ✨ Feature Request
 about: Suggest a new feature or enhancement for QuantMind
 title: 'feat: [brief description of the feature]'
-labels: ['enhancement', 'needs-triage']
+labels: ['type: feature']
 assignees: ''
 ---
+
+<!-- github-prose-style: Keep each logical paragraph/list item on one physical line; do not hard-wrap at 80 columns. -->
 
 ## ✨ Feature Summary
 

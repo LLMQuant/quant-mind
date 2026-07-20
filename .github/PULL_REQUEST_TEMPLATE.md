@@ -1,14 +1,22 @@
-## Description
+<!-- github-prose-style: Keep each logical paragraph/list item on one physical line; do not hard-wrap at 80 columns. -->
 
-<!-- Brief description. Refer to the related issues if existed.
-It'll be great if relevant reviewers can be assigned as well.-->
+## Summary
+
+<!-- What changed and why? Keep this concise and link the design when useful. -->
+
+## Related Issue
+
+<!-- Use `Closes #NN`, `Part of #NN`, or explain why no issue applies. -->
+
+## Verification
+
+<!-- List the exact deterministic and applicable live-network commands. -->
 
 ## Checklist
 
-Please feel free to remove inapplicable items for your PR.
-
-- [ ] The PR title starts with `$CATEGORY(xx): xxx` (such as `feat(tool): xxx`, `fix(source): xxx`, `docs(README): xxx`)
-- [ ] Related issue is referred in this PR
-- [ ] The markdown and latex are rendered correctly.
-- [ ] The code in PR is well-documented.
-- [ ] The PR is complete and small, read the [Google eng practice (CL equals to PR)](https://google.github.io/eng-practices/review/developer/small-cls.html) to understand more about small PR.
+- [ ] The title uses English Conventional Commit format: `type(scope): summary`.
+- [ ] The related issue or design discussion is linked when applicable.
+- [ ] `bash scripts/verify.sh` passes.
+- [ ] Every applicable live-network component smoke test passes, or this PR states why none applies.
+- [ ] Public behavior has focused tests, an example, and documentation where applicable.
+- [ ] The PR is complete, small, and contains no unrelated changes.

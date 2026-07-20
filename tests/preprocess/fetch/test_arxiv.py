@@ -27,6 +27,7 @@ def _stub_arxiv_result(
         authors=["Alice Smith", "Bob Jones"],
         summary="Abstract goes here.",
         published=datetime(2024, 4, 15, tzinfo=timezone.utc),
+        updated=datetime(2024, 4, 16, tzinfo=timezone.utc),
         primary_category="q-fin.ST",
         categories=["q-fin.ST", "stat.ML"],
     )
@@ -89,9 +90,13 @@ class FetchArxivTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.primary_category, "q-fin.ST")
         self.assertEqual(result.categories, ("q-fin.ST", "stat.ML"))
         self.assertEqual(result.source_url, pdf_url)
+        self.assertEqual(result.resolved_url, pdf_url)
+        self.assertIsNotNone(result.fetched_at)
         assert result.published_at is not None
         self.assertEqual(result.published_at.tzinfo, timezone.utc)
         self.assertEqual(result.published_at.year, 2024)
+        assert result.updated_at is not None
+        self.assertEqual(result.updated_at.day, 16)
 
     async def test_naive_published_promoted_to_utc(self):
         naive_published = datetime(2024, 4, 15, 12, 0)

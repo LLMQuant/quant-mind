@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from quantmind.preprocess.news import RawNewsDocument, preprocess_news_document
 
 raw = RawNewsDocument(
-    title="NVIDIA Announces Results",
+    title="Carnival Announces Results",
     body_text=(
-        "NVIDIA Corporation (NASDAQ: NVDA) today reported record quarterly "
-        "revenue and highlighted demand for accelerated computing."
+        "Carnival Corporation & plc (NYSE: [CCL](#financial-modal)) today "
+        "reported record quarterly revenue."
     ),
     source_type="press_release",
-    source_url="https://example.com/news/nvidia-results",
+    source_url="https://example.com/news/carnival-results",
     publisher="Example Newswire",
     published_at=datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
     payload_id="example-wire-123",
@@ -19,6 +19,7 @@ raw = RawNewsDocument(
 
 candidate = preprocess_news_document(raw)
 
-print(candidate.dedup_key)
+print(candidate.identity)
 print(candidate.content_hash)
+print(candidate.body_text)
 print([hint.symbol for hint in candidate.ticker_hints])

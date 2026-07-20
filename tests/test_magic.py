@@ -46,6 +46,19 @@ class IntrospectFlowSignatureTests(unittest.TestCase):
         # PaperInput is the Annotated[Union[...]] alias; pass through.
         self.assertEqual(input_type, PaperInput)
 
+    def test_resolves_postponed_annotations(self) -> None:
+        async def postponed_flow(
+            input: "ArxivIdentifier",
+            *,
+            cfg: "PaperFlowCfg | None" = None,
+        ) -> None:
+            return None
+
+        input_type, cfg_type = _introspect_flow_signature(postponed_flow)
+
+        self.assertIs(input_type, ArxivIdentifier)
+        self.assertIs(cfg_type, PaperFlowCfg)
+
     def test_missing_input_param_raises(self) -> None:
         async def bad(*, cfg: PaperFlowCfg | None = None) -> None:
             return None

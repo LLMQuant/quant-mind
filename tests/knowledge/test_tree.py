@@ -104,9 +104,9 @@ class TreeNodeTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             n.title = "z"  # type: ignore[misc]
 
-    def test_default_embedding_text(self):
+    def test_retrieval_projection_is_not_a_node_method(self):
         n = TreeNode(title="Methodology", summary="We use X to do Y.")
-        self.assertEqual(n.embedding_text(), "Methodology\nWe use X to do Y.")
+        self.assertFalse(hasattr(n, "embedding_text"))
 
 
 class TreeKnowledgeTests(unittest.TestCase):
@@ -143,9 +143,9 @@ class TreeKnowledgeTests(unittest.TestCase):
         tree = _make_tree()
         self.assertEqual(tree.find_path(uuid4()), [])
 
-    def test_embedding_text_uses_root(self):
+    def test_retrieval_projection_is_not_a_tree_method(self):
         tree = _make_tree()
-        self.assertEqual(tree.embedding_text(), "Root\nroot summary")
+        self.assertFalse(hasattr(tree, "embedding_text"))
 
 
 if __name__ == "__main__":
