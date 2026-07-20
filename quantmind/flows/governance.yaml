@@ -1,0 +1,43 @@
+version: "2.0.0"
+
+global_settings:
+  loop_budget_max: 5
+  fallback_policy: "quarantine_and_continue"
+
+l3_commit:
+  min_confidence: 0.85
+  require_provenance: true
+  require_schema_validity: true
+  require_dedup_check: true
+  require_contradiction_check: true
+
+scenarios:
+  architecture_analysis:
+    description: "Technical document analysis and refactor suggestion"
+    agents:
+      - role: "Scout"
+        allowed_tools: ["scan_repo", "read_file"]
+        output_tier: "L1"
+      - role: "Extractor"
+        allowed_tools: ["parse_ast"]
+        required_schema: "ArchitectureSummary"
+        output_tier: "L2"
+      - role: "Reviewer"
+        allowed_tools: ["diff_analyze"]
+        confidence_threshold: 0.8
+        output_tier: "L3"
+
+  tolerant_ingestion:
+    description: "Ingesting malformed multi-source datasets safely"
+    agents:
+      - role: "Scout"
+        allowed_tools: ["fetch_source"]
+        output_tier: "L1"
+      - role: "Parser"
+        allowed_tools: ["recoverable_validate"]
+        fallback_node: "RawFallbackNode"
+        output_tier: "L2"
+      - role: "GraphWriter"
+        allowed_tools: ["graph_write"]
+        confidence_threshold: 0.9
+        output_tier: "L3"

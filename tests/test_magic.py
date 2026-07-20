@@ -12,8 +12,10 @@ from pydantic import BaseModel
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import ArxivIdentifier, PaperInput
 from quantmind.flows import paper_flow
+from quantmind.flows.governance import load_governance_policy
 from quantmind.magic import (
     ResolvedFlowConfig,
+    _enforce_governance,
     _introspect_flow_signature,
     _pydantic_schema_str,
     _strip_optional,
@@ -207,6 +209,37 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
                 resolver_model="claude-3-5-sonnet",
             )
         self.assertEqual(captured["model"], "claude-3-5-sonnet")
+
+
+class GovernanceIntegrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.policy = load_governance_policy()
+
+    def test_policy_requires_scenario(self) -> None:
+        with self.assertRaises(ValueError):
+            _enforce_governance(
+                governance_policy=self.policy,
+                governance_scenario=None,
+                requested_tools=["scan_repo"],
+                resolver_role="Scout",
+            )
+
+    def test_disallowed_tool_raises_permission_error(self) -> None:
+        with self.assertRaises(PermissionError):
+            _enforce_governance(
+                governance_policy=self.policy,
+                governance_scenario="architecture_analysis",
+                requested_tools=["graph_write"],
+                resolver_role="Scout",
+            )
+
+    def test_allowed_tools_pass(self) -> None:
+        _enforce_governance(
+            governance_policy=self.policy,
+            governance_scenario="architecture_analysis",
+            requested_tools=["scan_repo", "read_file"],
+            resolver_role="Scout",
+        )
 
 
 class PreviewResolveTests(unittest.IsolatedAsyncioTestCase):

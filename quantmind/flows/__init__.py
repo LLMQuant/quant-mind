@@ -23,4 +23,5 @@ __all__ = [
     "batch_run",
     "collect_news",
     "paper_flow",
+    "run_fallback_policy",
 ]

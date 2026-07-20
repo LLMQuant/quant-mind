@@ -8,7 +8,9 @@ setup and the contribution process. The canonical development workflow
 live in `AGENTS.md` / `CLAUDE.md`. If you develop with a coding agent, it
 will pick these up automatically.
 
-## 🚀 Quick Setup
+QuantMind is now a **domain library on top of the OpenAI Agents SDK**, not a
+self-contained agent framework. The first production flow is finance-first, but
+the architecture is intentionally useful for broader agentic knowledge work.
 
 1. **Fork and clone** the repository
 2. **Set up environment**:
@@ -85,7 +87,7 @@ pytest tests/<module>/
 - **Public operations and sources**: update the component catalog in
   `docs/README.md`; public-network sources also require a bounded live check.
 
-## 🔄 Pull Request Process
+### New domain extension
 
 1. **Create a feature branch** from `master`.
 2. **Follow Conventional Commits**: `type(scope): description`, in English.
@@ -100,10 +102,10 @@ For significant changes (new modules, new dependencies, API redesigns),
 open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss
 first.
 
-## ❓ Questions?
+## ❓Questions?
 
 - Check existing [issues](https://github.com/LLMQuant/quant-mind/issues)
 - Review architecture patterns in existing code
 - See `AGENTS.md` / `CLAUDE.md` for repository-wide rules
 
-Thank you for contributing! 🚀
+Thank you for contributing.

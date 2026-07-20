@@ -31,6 +31,7 @@ from agents import Agent, Runner
 from pydantic import BaseModel
 
 from quantmind.configs.base import BaseFlowCfg
+from quantmind.flows.governance import GovernancePolicy, ensure_tool_allowed
 
 InputT = TypeVar("InputT", bound=BaseModel)
 CfgT = TypeVar("CfgT", bound=BaseModel)
@@ -73,6 +74,10 @@ async def resolve_magic_input(
     target_flow: Callable[..., Awaitable[Any]],
     resolver_model: str = "gpt-4o-mini",
     resolver_instructions: str | None = None,
+    governance_policy: GovernancePolicy | None = None,
+    governance_scenario: str | None = None,
+    requested_tools: list[str] | None = None,
+    resolver_role: str = "Resolver",
 ) -> tuple[Any, Any]:
     """Parse ``natural_language`` into ``(input_obj, cfg_obj)`` for ``target_flow``.
 
@@ -84,11 +89,24 @@ async def resolve_magic_input(
         resolver_instructions: Optional override for the resolver's
             system prompt template. Receives ``flow_name``,
             ``input_schema``, and ``cfg_schema`` via ``str.format``.
+        governance_policy: Optional governance policy to enforce before
+            model execution.
+        governance_scenario: Scenario name used with
+            ``governance_policy`` for tool allowlist checks.
+        requested_tools: Tool names that the resolver intends to use.
+        resolver_role: Role name used for governance lookup when policy
+            checks are enabled.
 
     Returns:
         Tuple of ``(input_obj, cfg_obj)`` populated by the resolver.
     """
     input_type, cfg_type = _introspect_flow_signature(target_flow)
+    _enforce_governance(
+        governance_policy=governance_policy,
+        governance_scenario=governance_scenario,
+        requested_tools=requested_tools,
+        resolver_role=resolver_role,
+    )
     template = resolver_instructions or _RESOLVER_INSTRUCTIONS
     instructions = template.format(
         flow_name=target_flow.__name__,
@@ -111,12 +129,20 @@ async def preview_resolve(
     *,
     target_flow: Callable[..., Awaitable[Any]],
     resolver_model: str = "gpt-4o-mini",
+    governance_policy: GovernancePolicy | None = None,
+    governance_scenario: str | None = None,
+    requested_tools: list[str] | None = None,
+    resolver_role: str = "Resolver",
 ) -> tuple[Any, Any]:
     """Resolve and pretty-print the result without invoking the flow."""
     inp, cfg = await resolve_magic_input(
         natural_language,
         target_flow=target_flow,
         resolver_model=resolver_model,
+        governance_policy=governance_policy,
+        governance_scenario=governance_scenario,
+        requested_tools=requested_tools,
+        resolver_role=resolver_role,
     )
     print("input_obj:", inp.model_dump_json(indent=2))
     print("cfg_obj:", cfg.model_dump_json(indent=2))
@@ -208,3 +234,26 @@ def _pydantic_schema_str(t: Any) -> str:
         ]
         return json.dumps({"oneOf": schemas}, indent=2)
     return repr(t)
+
+
+def _enforce_governance(
+    *,
+    governance_policy: GovernancePolicy | None,
+    governance_scenario: str | None,
+    requested_tools: list[str] | None,
+    resolver_role: str,
+) -> None:
+    """Apply optional resolver-side governance checks."""
+    if governance_policy is None:
+        return
+    if not governance_scenario:
+        raise ValueError(
+            "governance_scenario is required when governance_policy is set"
+        )
+    for tool_name in requested_tools or []:
+        ensure_tool_allowed(
+            governance_policy,
+            scenario_name=governance_scenario,
+            role=resolver_role,
+            tool_name=tool_name,
+        )
