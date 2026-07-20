@@ -1602,29 +1602,11 @@ class _SQLiteStore:
             return artifact
         if isinstance(artifact, PaperStructureTree):
             try:
-                node = artifact.nodes[locator.member_id]
+                return artifact.nodes[locator.member_id]
             except KeyError as exc:
                 raise KeyError(
                     f"Paper structure node '{locator.member_id}' not found"
                 ) from exc
-            source = self.get_paper_source(artifact.source_revision_id)
-            pages = {
-                page.page_number: page.text for page in source.parsed.pages
-            }
-            content: list[str] = []
-            seen: set[int] = set()
-            for citation in node.citations:
-                page_number = citation.page
-                if page_number is None or page_number in seen:
-                    continue
-                page_text = pages.get(page_number)
-                if page_text is None:
-                    raise RuntimeError(
-                        "Stored paper structure-tree citation is unresolved"
-                    )
-                seen.add(page_number)
-                content.append(page_text)
-            return node.model_copy(update={"content": "\n\n".join(content)})
         if not isinstance(artifact, PaperChunkSet):
             raise KeyError("Paper artifact does not have resolvable members")
         for chunk in artifact.chunks:

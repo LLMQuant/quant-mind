@@ -1,4 +1,11 @@
-"""Vectorless reasoning-based retrieval over a validated structure tree."""
+"""Vectorless reasoning-based retrieval over a self-contained structure tree.
+
+Single-tree retrieval is a pure value operation: the tree carries its own node
+content, so ``retrieve`` reads evidence text straight from ``tree.nodes`` and
+returns evidence *values*. It binds no library and imports none. The reference
+(``ArtifactLocator``) rides along only as optional provenance for future
+cross-artifact fusion, never as the path a consumer must resolve to see content.
+"""
 
 import asyncio
 import json
@@ -13,22 +20,23 @@ from quantmind.knowledge import (
     ArtifactLocator,
     Citation,
     StructureTree,
-    TreeNode,
 )
-from quantmind.library import LocalKnowledgeLibrary
 
 _SINGLE_PASS_INSTRUCTIONS = """\
 Select the structure-tree nodes that contain evidence relevant to the question.
 Reason only over the supplied titles, summaries, hierarchy, and optional seed
-nodes. Return node UUIDs, not an answer. Prefer the smallest sufficient set and
-never invent an ID.
+nodes. Prefer leaf nodes, which carry the actual source text; an internal node
+stands in only for the union of its leaves. Return node UUIDs, not an answer.
+Prefer the smallest sufficient set and never invent an ID.
 """
 
 _AGENTIC_INSTRUCTIONS = """\
 Retrieve evidence relevant to the question by inspecting the document structure
-and opening node content as needed. Return the UUIDs of the smallest sufficient
-evidence nodes, not an answer. Never invent an ID. Seed nodes are hints only;
-you may inspect other branches when the structure supports it.
+and opening node content as needed. Prefer leaf nodes, which carry the actual
+source text; opening an internal node returns the concatenation of its leaves.
+Return the UUIDs of the smallest sufficient evidence nodes, not an answer. Never
+invent an ID. Seed nodes are hints only; you may inspect other branches when the
+structure supports it.
 """
 
 
@@ -37,14 +45,14 @@ class RetrievalError(RuntimeError):
 
 
 class RetrievalEvidence(BaseModel):
-    """One selected node with lazily resolved page-cited source content."""
+    """One selected node's self-contained, page-cited source content."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    locator: ArtifactLocator
     title: str
     content: str = Field(min_length=1)
-    citations: tuple[Citation, ...] = Field(min_length=1)
+    citations: tuple[Citation, ...] = ()
+    locator: ArtifactLocator | None = None
 
 
 class _RetrievalSelectionDraft(BaseModel):
@@ -57,155 +65,177 @@ class _RetrievalSelectionDraft(BaseModel):
 
 @runtime_checkable
 class _ResolvableStructure(Protocol):
-    """Identity required to address one StructureTree through a library."""
+    """Identity a tree exposes when it can address itself as an artifact."""
 
     id: UUID
     source_revision_id: UUID
     artifact_kind: str
 
 
-class StructureRetriever:
-    """Reusable reasoning service for one structure tree per query.
+async def retrieve(
+    tree: StructureTree,
+    question: str,
+    *,
+    cfg: RetrievalCfg | None = None,
+    seed_node_ids: list[UUID] | None = None,
+) -> list[RetrievalEvidence]:
+    """Select and read page-cited evidence from one self-contained tree.
 
-    The service owns stable library and retrieval policy dependencies. It does
-    not retain a current structure, question, seed, or result, so one instance
-    can safely query different document trees.
+    This is a library-free pure value operation: node content is read from the
+    tree itself (see ``_node_text``), so every returned evidence value carries
+    its own content and needs no downstream resolution. When the tree is
+    identity-bearing (e.g. a ``PaperStructureTree``), each evidence value also
+    carries an ``ArtifactLocator`` for optional cross-artifact fusion; otherwise
+    ``locator`` is ``None`` and content is still present.
+
+    Dispatch is on ``cfg.grain`` today:
+
+    - ``single-pass``: serialize the tree (ids, titles, summaries, hierarchy —
+      leaf text stripped for the token budget), make one model call for the
+      relevant node ids, then read those nodes' content from the tree.
+    - ``agentic``: expose ``get_document_structure()`` and
+      ``get_node_content(node_ids)`` tools that read the in-memory tree, and let
+      an Agent traverse turn by turn.
+
+    Future seam: a widened ``retrieve`` is intended to also dispatch to
+    ``semantic`` search over a vector-backed knowledge shape and to ``hybrid``
+    (semantic shortlist, then agentic reasoning over it) when both are
+    available. Those grains are deliberately not implemented here; a single
+    function that branches on cfg/knowledge kind is internal dispatch, not the
+    forbidden generic retriever/query-engine hierarchy.
+
+    Args:
+        tree: Validated self-contained structure tree whose leaf nodes carry
+            their own source content.
+        question: Evidence need used for relevance reasoning.
+        cfg: Model, retrieval grain, and structure/evidence bounds. A default
+            ``RetrievalCfg`` is used when omitted.
+        seed_node_ids: Optional in-tree node hints (validated against
+            ``tree.nodes``) reserved for a later semantic shortlist. This
+            operation performs no semantic search and takes no library seeds.
+
+    Returns:
+        Selected node evidence with self-contained content and optional
+        provenance.
+
+    Raises:
+        ValueError: If the question, seeds, or selected node IDs are invalid.
+        RetrievalError: If runtime or evidence bounds are exceeded, or a
+            selected node yields no content.
     """
-
-    __slots__ = ("_cfg", "_library")
-
-    def __init__(
-        self,
-        *,
-        library: LocalKnowledgeLibrary,
-        cfg: RetrievalCfg,
-    ) -> None:
-        """Initialize retrieval with shared dependencies and policy.
-
-        Args:
-            library: Canonical library used for lazy node resolution.
-            cfg: Model, retrieval grain, and structure/evidence bounds.
-        """
-        self._library = library
-        self._cfg = cfg.model_copy(deep=True)
-
-    async def retrieve(
-        self,
-        structure: StructureTree,
-        question: str,
-        *,
-        seed_locators: list[ArtifactLocator] | None = None,
-    ) -> list[RetrievalEvidence]:
-        """Select and resolve page-cited evidence from one structure tree.
-
-        Args:
-            structure: Validated shared tree with a resolvable artifact binding.
-            question: Evidence need used for relevance reasoning.
-            seed_locators: Optional same-tree node hints reserved for a later
-                semantic shortlist. This operation performs no semantic search.
-
-        Returns:
-            Selected node evidence with canonical locators and source content.
-
-        Raises:
-            ValueError: If the question, seeds, or selected node IDs are invalid.
-            TypeError: If the structure has no resolvable artifact identity.
-            RetrievalError: If runtime or evidence bounds are exceeded.
-        """
-        normalized_question = question.strip()
-        if not normalized_question:
-            raise ValueError("retrieval question must not be blank")
-        structure.validate()
-        identity = _resolvable_identity(structure)
-        seed_ids = _validate_seed_locators(
-            structure,
-            identity,
-            seed_locators or [],
+    active_cfg = (cfg or RetrievalCfg()).model_copy(deep=True)
+    normalized_question = question.strip()
+    if not normalized_question:
+        raise ValueError("retrieval question must not be blank")
+    tree.validate()
+    seed_ids = _validate_seed_node_ids(tree, seed_node_ids or [])
+    serialized = _serialize_structure(
+        tree,
+        token_budget=active_cfg.structure_token_budget,
+        seed_ids=set(seed_ids),
+    )
+    if active_cfg.grain == "single-pass":
+        selection = await _single_pass_select(
+            normalized_question,
+            serialized,
+            seed_ids,
+            active_cfg,
         )
-        serialized = _serialize_structure(
-            structure,
-            token_budget=self._cfg.structure_token_budget,
-            seed_ids=set(seed_ids),
+    else:
+        selection = await _agentic_select(
+            tree,
+            normalized_question,
+            serialized,
+            seed_ids,
+            active_cfg,
         )
-        if self._cfg.grain == "single-pass":
-            selection = await _single_pass_select(
-                normalized_question,
-                serialized,
-                seed_ids,
-                self._cfg,
-            )
-        else:
-            selection = await _agentic_select(
-                structure,
-                identity,
-                normalized_question,
-                serialized,
-                seed_ids,
-                self._library,
-                self._cfg,
-            )
-        node_ids = _validate_selection(structure, selection, self._cfg)
-        return [
-            await _resolve_evidence(
-                structure,
-                identity,
-                node_id,
-                self._library,
-            )
-            for node_id in node_ids
-        ]
+    node_ids = _validate_selection(tree, selection, active_cfg)
+    return [_node_evidence(tree, node_id) for node_id in node_ids]
 
 
-def _resolvable_identity(structure: StructureTree) -> _ResolvableStructure:
-    if not isinstance(structure, _ResolvableStructure):
-        raise TypeError(
-            "structure must expose id, source_revision_id, and artifact_kind"
-        )
-    return structure
-
-
-def _validate_seed_locators(
-    structure: StructureTree,
-    identity: _ResolvableStructure,
-    locators: list[ArtifactLocator],
+def _validate_seed_node_ids(
+    tree: StructureTree,
+    seed_node_ids: list[UUID],
 ) -> tuple[UUID, ...]:
     node_ids: list[UUID] = []
-    for locator in locators:
-        if (
-            locator.source_revision_id != identity.source_revision_id
-            or locator.artifact_id != identity.id
-            or locator.artifact_kind != identity.artifact_kind
-            or locator.member_id is None
-            or locator.member_id not in structure.nodes
-        ):
-            raise ValueError(
-                "seed locator must address a node in the selected structure tree"
-            )
-        if locator.member_id not in node_ids:
-            node_ids.append(locator.member_id)
+    for node_id in seed_node_ids:
+        if node_id not in tree.nodes:
+            raise ValueError("seed_node_ids must address nodes in the tree")
+        if node_id not in node_ids:
+            node_ids.append(node_id)
     return tuple(node_ids)
 
 
+def _node_text(tree: StructureTree, node_id: UUID) -> str:
+    """Return a node's self-contained text.
+
+    A leaf yields its own ``content``; an internal node yields the reading-order
+    concatenation of its descendant leaves' content, so evidence is non-empty
+    even when the model selects an internal node.
+    """
+    node = tree.nodes[node_id]
+    if not node.children_ids:
+        return node.content or ""
+    texts: list[str] = []
+
+    def collect(current_id: UUID) -> None:
+        current = tree.nodes[current_id]
+        if not current.children_ids:
+            if current.content:
+                texts.append(current.content)
+            return
+        for child_id in current.children_ids:
+            collect(child_id)
+
+    collect(node_id)
+    return "\n\n".join(texts)
+
+
+def _tree_locator(tree: StructureTree, node_id: UUID) -> ArtifactLocator | None:
+    if not isinstance(tree, _ResolvableStructure):
+        return None
+    return ArtifactLocator(
+        source_revision_id=tree.source_revision_id,
+        artifact_id=tree.id,
+        artifact_kind=tree.artifact_kind,
+        member_id=node_id,
+    )
+
+
+def _node_evidence(tree: StructureTree, node_id: UUID) -> RetrievalEvidence:
+    node = tree.nodes[node_id]
+    content = _node_text(tree, node_id)
+    if not content:
+        raise RetrievalError("structure node yielded no resolvable content")
+    return RetrievalEvidence(
+        title=node.title,
+        content=content,
+        citations=tuple(node.citations),
+        locator=_tree_locator(tree, node_id),
+    )
+
+
 def _serialize_structure(
-    structure: StructureTree,
+    tree: StructureTree,
     *,
     token_budget: int,
     seed_ids: set[UUID],
 ) -> str:
     character_budget = token_budget * 4
     payload: dict[str, object] = {
-        "root_node_id": str(structure.root_node_id),
+        "root_node_id": str(tree.root_node_id),
         "nodes": [],
         "truncated": False,
     }
     serialized_nodes = cast(list[dict[str, object]], payload["nodes"])
-    for node in structure.walk_dfs():
+    for node in tree.walk_dfs():
         candidate: dict[str, object] = {
             "node_id": str(node.node_id),
             "parent_id": str(node.parent_id) if node.parent_id else None,
             "position": node.position,
             "title": node.title,
             "summary": node.summary,
+            "is_leaf": not node.children_ids,
             "children_ids": [str(value) for value in node.children_ids],
             "seeded": node.node_id in seed_ids,
         }
@@ -271,12 +301,10 @@ async def _single_pass_select(
 
 
 async def _agentic_select(
-    structure: StructureTree,
-    identity: _ResolvableStructure,
+    tree: StructureTree,
     question: str,
     serialized: str,
     seed_ids: tuple[UUID, ...],
-    library: LocalKnowledgeLibrary,
     cfg: RetrievalCfg,
 ) -> _RetrievalSelectionDraft:
     @function_tool
@@ -286,7 +314,7 @@ async def _agentic_select(
 
     @function_tool
     async def get_node_content(node_ids: list[str]) -> str:
-        """Resolve page-cited source content for structure node UUIDs.
+        """Read self-contained source content for structure node UUIDs.
 
         Args:
             node_ids: Canonical node UUID strings from the document structure.
@@ -301,15 +329,9 @@ async def _agentic_select(
                 raise ValueError(
                     "get_node_content received an invalid UUID"
                 ) from exc
-            if node_id not in structure.nodes:
+            if node_id not in tree.nodes:
                 raise ValueError("get_node_content received an unknown node ID")
-            evidence = await _resolve_evidence(
-                structure,
-                identity,
-                node_id,
-                library,
-            )
-            values.append(evidence.model_dump(mode="json"))
+            values.append(_node_evidence(tree, node_id).model_dump(mode="json"))
         return json.dumps(values, ensure_ascii=False)
 
     agent = Agent(
@@ -345,41 +367,16 @@ async def _agentic_select(
 
 
 def _validate_selection(
-    structure: StructureTree,
+    tree: StructureTree,
     selection: _RetrievalSelectionDraft,
     cfg: RetrievalCfg,
 ) -> tuple[UUID, ...]:
     selected: list[UUID] = []
     for node_id in selection.node_ids:
-        if node_id not in structure.nodes:
+        if node_id not in tree.nodes:
             raise ValueError("retrieval selected an unknown structure node")
         if node_id not in selected:
             selected.append(node_id)
     if len(selected) > cfg.max_evidence_nodes:
         raise RetrievalError("retrieval exceeds max_evidence_nodes")
     return tuple(selected)
-
-
-async def _resolve_evidence(
-    structure: StructureTree,
-    identity: _ResolvableStructure,
-    node_id: UUID,
-    library: LocalKnowledgeLibrary,
-) -> RetrievalEvidence:
-    locator = ArtifactLocator(
-        source_revision_id=identity.source_revision_id,
-        artifact_id=identity.id,
-        artifact_kind=identity.artifact_kind,
-        member_id=node_id,
-    )
-    resolved = await library.resolve(locator)
-    if not isinstance(resolved, TreeNode) or not resolved.content:
-        raise RetrievalError(
-            "library did not resolve structure node source content"
-        )
-    return RetrievalEvidence(
-        locator=locator,
-        title=structure.nodes[node_id].title,
-        content=resolved.content,
-        citations=tuple(resolved.citations),
-    )

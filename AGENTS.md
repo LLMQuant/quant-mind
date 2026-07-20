@@ -75,10 +75,13 @@ the user explicitly authorizes it — fix the underlying issue instead.
 ## Architecture Constraints (stable)
 
 1. **Library, not framework** — use functions for self-contained stateless
-   transformations and small service classes when operations share reusable
-   dependencies, policy, or lifecycle. Keep canonical values free of runtime
-   service state; use `Protocol` over ABC, with no framework-style class
-   hierarchies, plugin registries, hook discovery, or CLI.
+   transformations, small service classes when operations share a reusable
+   construction-time dependency, and document-scoped handles bound to one
+   immutable input (`PaperFlow.open(...)`) whose methods are pure derivations of
+   it. Demote a class back to a function when its only bound dependency
+   disappears. Keep canonical values free of runtime service state; use
+   `Protocol` over ABC, with no framework-style class hierarchies, plugin
+   registries, hook discovery, or CLI.
 2. **RAG data plane, not framework** — use LlamaIndex directly inside
    `quantmind.rag`; keep upstream types private and do not add retriever,
    vector-store, provider, or backend registries.
@@ -96,7 +99,19 @@ the user explicitly authorizes it — fix the underlying issue instead.
    side effect beyond the call it wraps; otherwise inline it.
 8. **Name public operations by intent** — follow
    `contexts/design/operations/naming.md`; use stage verbs, and reserve
-   `pipeline` for deliberate multi-stage composition.
+   `pipeline` for deliberate multi-stage composition. `flow` as a verb or
+   `*_flow` function name is banned; `Flow` as a noun on a document handle
+   (`PaperFlow`) is allowed.
+9. **Pipelines produce self-contained artifacts** — a `flows` pipeline is pure
+   processing (`input → artifact`) and returns a value usable without a store; it
+   does not bind a `library`, persist, or retrieve. `library` only dumps and
+   loads (`put` / `open_*`, round-tripping to an identical value); `mind` only
+   retrieves, returning evidence **values** (content included) with any locator
+   as optional provenance. A self-contained artifact carries its own text (and
+   any embeddings), not a reference refilled from a store; accept modest
+   redundancy to keep it self-contained. Half-finished intermediates stay
+   component seams, not public flows. See
+   `contexts/design/operations/orchestration.md`.
 
 ## Tests and Examples
 

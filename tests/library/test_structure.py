@@ -99,7 +99,19 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         try:
             restored = await reopened.get_artifact(tree.id)
             self.assertIsInstance(restored, PaperStructureTree)
+            # The reopened tree is an identical self-contained value: every
+            # leaf node keeps its own text through dump/load, with no chunk
+            # set present.
             self.assertEqual(restored, tree)
+            assert isinstance(restored, PaperStructureTree)
+            for node in restored.nodes.values():
+                if node.children_ids:
+                    self.assertIsNone(node.content)
+                else:
+                    self.assertTrue(node.content)
+                    self.assertEqual(
+                        node.content, tree.nodes[node.node_id].content
+                    )
             hits = await reopened.search(SemanticQuery(text="attention"))
             self.assertEqual(hits, [])
             self.assertNotIn(
@@ -109,7 +121,23 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await reopened.close()
 
-    async def test_resolve_node_assembles_cited_source_page_content(
+    async def test_open_structure_returns_self_contained_tree(self) -> None:
+        result = build_paper_result()
+        tree = build_paper_structure_tree()
+        library = await self._open(_FakeEmbeddingProvider())
+        try:
+            await library.put_paper_structure_tree(result.source_revision, tree)
+            loaded = await library.open_structure(tree.id)
+            self.assertIsInstance(loaded, PaperStructureTree)
+            self.assertEqual(loaded, tree)
+            leaf = next(
+                node for node in loaded.nodes.values() if not node.children_ids
+            )
+            self.assertTrue(leaf.content)
+        finally:
+            await library.close()
+
+    async def test_resolve_node_returns_stored_content_without_refill(
         self,
     ) -> None:
         result = build_paper_result()
@@ -136,6 +164,10 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertIsInstance(resolved, TreeNode)
             assert isinstance(resolved, TreeNode)
+            # resolve returns the node's own stored content verbatim; it does
+            # not reconstruct text from source pages.
+            self.assertEqual(resolved, node)
+            self.assertEqual(resolved.content, node.content)
             self.assertEqual(
                 resolved.content,
                 result.source_revision.parsed.pages[1].text,

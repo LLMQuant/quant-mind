@@ -5,28 +5,27 @@
 - **Purpose**: Decide where construction/identity logic lives, and when a step should be an autonomous agent versus deterministic code.
 - **Read when**: Adding or refactoring any flow that builds knowledge models from preprocess/rag values, or that calls a model more than once.
 - **Status**: Derived from the Paper Flow V1 refactor. Applies to every flow.
-- **Core rule**: Identity belongs in the knowledge layer; translation belongs in the flow. Use an autonomous agent only when the decomposition must be decided at runtime.
+- **Core rule**: Identity belongs in the knowledge layer; translation belongs in the flow. A pipeline is pure processing that returns a complete, self-contained artifact; persistence and retrieval are separate downstream concerns. Use an autonomous agent only when the decomposition must be decided at runtime.
 
 ## Contents
 
-- [Two Principles](#two-principles)
+- [Three Principles](#three-principles)
 - [Principle 1: Identity vs Translation Altitude](#principle-1-identity-vs-translation-altitude)
 - [Principle 2: Agentic vs Deterministic Orchestration](#principle-2-agentic-vs-deterministic-orchestration)
+- [Principle 3: Pipeline vs Component Altitude](#principle-3-pipeline-vs-component-altitude)
+- [Callable Shape: Function, Service, or Document Handle](#callable-shape-function-service-or-document-handle)
 - [Worked Example: Paper Flow V1](#worked-example-paper-flow-v1)
 - [Checklist](#checklist)
 
-## Two Principles
+## Three Principles
 
-Both principles came from one observation: a flow file had become large and was reaching into another module's private helpers. The cause was not bad code locally — it was two responsibilities placed at the wrong altitude.
+The first two principles came from one observation: a flow file had become large and was reaching into another module's private helpers. The cause was not bad code locally — it was responsibilities placed at the wrong altitude. The third came from a redesign of structure retrieval, where a "pipeline" had quietly taken on persistence and retrieval that belonged elsewhere.
 
 1. **Identity vs translation altitude** — who mints IDs and hashes, and who maps one type system onto another.
 2. **Agentic vs deterministic orchestration** — whether a model decides *how* the work is decomposed, or code does.
+3. **Pipeline vs component altitude** — what a finished pipeline owns (pure processing to a complete artifact) versus what stays a downstream concern (persistence, retrieval).
 
-These principles do not require every operation to have the same callable
-shape. A self-contained stateless transformation is a function. A small service
-class is appropriate when repeated operations share dependencies, policy, or a
-lifecycle; its methods still receive the active input explicitly and return the
-result instead of storing mutable current-work state.
+These principles do not require every operation to have the same callable shape — see [Callable Shape](#callable-shape-function-service-or-document-handle) below.
 
 ## Principle 1: Identity vs Translation Altitude
 
@@ -63,11 +62,39 @@ Using the SDK does **not** force the agentic pattern. Single-agent `Runner.run(a
 
 **Do not build a framework for it.** The fan-out primitive is a function, not a base class: `asyncio.gather` over code-computed items with a `Semaphore`. Keep it inline until a second flow needs it; only then extract a small `map_reduce(items, map_fn, reduce_fn, *, concurrency)` helper. A `BaseFlow`/`ParallelWorkflow` base class is the framework this project explicitly avoids.
 
-Likewise, a concrete builder or retriever service may bind a model policy,
-provider seam, or library reused across calls without introducing a generic
-workflow hierarchy. Canonical knowledge artifacts remain frozen values and do
-not acquire `build()`, `retrieve()`, persistence, or provider state merely to
-make call sites look object-oriented.
+Likewise, a small service or document handle may bind a genuinely shared
+dependency (a model policy, a provider seam, or an immutable parsed source)
+without introducing a generic workflow hierarchy — see
+[Callable Shape](#callable-shape-function-service-or-document-handle). But when
+the bound dependency disappears (a self-contained artifact removes the store a
+retriever used to hold), demote the class back to a function rather than keep an
+empty shell. Canonical knowledge artifacts remain frozen values and do not
+acquire `build()`, `retrieve()`, persistence, or provider state merely to make
+call sites look object-oriented.
+
+## Principle 3: Pipeline vs Component Altitude
+
+A **pipeline** (in `quantmind.flows`) is a finished, batteries-included workflow: a caller states an intent and gets back a **complete, self-contained artifact**. A **component** (`knowledge`, `preprocess`, `rag`, `library`, `mind`) is a building block a caller wires themselves.
+
+Three rules keep the two altitudes honest:
+
+- **A pipeline is pure processing: `input → artifact`.** It fetches, parses, chunks, structures, and produces any embeddings the artifact carries. It does **not** bind a store, persist, or retrieve. Producing the artifact *fully* is the whole job.
+- **The artifact is a self-contained value.** It carries everything needed to use it — a structure tree's nodes hold their own text (and optionally an embedding), not a reference that must be refilled from a store later. Accept modest redundancy (a derived artifact copying some source text) to buy self-containment; do not trade it away to save bytes.
+- **Persistence and retrieval are downstream.** `library` only dumps and loads that value (`put` / `open_*`); `mind` only retrieves. A caller chooses those steps; the pipeline does not do them. `library.put(x)` then `library.open_*(id)` must round-trip to an identical value.
+
+**Retrieval returns values, not references.** A single-artifact retrieval reads content directly from the self-contained artifact and returns evidence with the content in it; a locator rides along only as optional provenance for cross-artifact fusion. If retrieval returned a bare reference, every call would be forced back through a store — the coupling this principle removes. Store-backed reference resolution is a corpus-scale concern (thousands of artifacts that do not fit in memory), not a single-artifact one.
+
+**Half-finished intermediates are not pipelines.** "Parse only," "just the source revision," or "just the chunks" are component seams. Expose them from the component that owns them; do not promote them to a public flow just because a pipeline uses them internally.
+
+**Smell test.** If a "pipeline" takes a `library` argument, writes to a store, or returns something you must resolve before you can read it, it has absorbed a downstream concern. Split the pure-processing part out and let the caller persist/retrieve.
+
+## Callable Shape: Function, Service, or Document Handle
+
+The same operation can be a function, a small service, or a document handle. Pick by what is genuinely shared, not by taste:
+
+- **Function** — a self-contained transformation with no reusable construction-time dependency. `retrieve(tree, question, *, cfg)` is a function: once a tree is self-contained, retrieval binds nothing, so a class would be ceremony. When the only reason a class existed (a bound library, a bound provider) disappears, demote it to a function.
+- **Small service class** — repeated calls share a genuine construction-time dependency (a store, a provider seam, a model policy). Methods still take the active input explicitly and return the result; no mutable "current input/result" state. A single service (or function) that dispatches on a `cfg` field or artifact kind is **not** a forbidden hierarchy — the prohibition is on class trees, registries, and managers, not on internal branching.
+- **Document-scoped handle** — a distinct, blessed category: an object bound once to an **immutable** input (e.g. `PaperFlow.open(input)` fetch-and-parses once) whose methods are pure derivations of it (`build_structure()`, `extract_knowledge()`). This is *not* the mutable current-work state the service rule forbids: the bound state never changes, methods share one expensive step, and nothing accumulates between calls. It is also *not* a canonical value gaining behavior — a frozen `knowledge` artifact still never grows `build()`/`retrieve()`/persistence.
 
 ## Worked Example: Paper Flow V1
 
@@ -85,3 +112,8 @@ When adding a flow that turns preprocess/rag values into knowledge models:
 - [ ] For multi-call model steps: can code compute the decomposition? If yes, use map-reduce, not a coordinator.
 - [ ] Are you enforcing coverage/budget on an autonomous agent? If yes, prefer deterministic decomposition instead.
 - [ ] Is the fan-out a plain function (`gather` + `Semaphore`), not a base class?
+- [ ] Does the pipeline return a **self-contained** artifact (usable without a store), and does it avoid taking a `library`, persisting, or retrieving?
+- [ ] Are persistence and retrieval left to the caller (`library` dump/load, `mind` retrieve), rather than folded into the pipeline?
+- [ ] Does retrieval return evidence **values** (content included), with any locator as optional provenance — not a bare reference?
+- [ ] If a service class binds only a dependency that a self-contained artifact has removed, should it be a function instead?
+- [ ] Are you exposing a half-finished intermediate as a public flow? If so, keep it a component seam.

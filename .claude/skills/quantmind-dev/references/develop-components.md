@@ -14,13 +14,18 @@ apply throughout.
    forbidden import, the design is wrong — restructure, do not work around
    the contract.
 3. **Implement small and flat.** Use functions for self-contained stateless
-   transformations. Use a small service class when operations share reusable
-   dependencies, policy, or lifecycle; do not add a class only as a namespace,
-   and do not store an implicit mutable "current input" or "current result".
-   Use `Protocol` over ABC and avoid framework-style class hierarchies. No
-   meaningless wrappers (a method must add logic, abstraction, or a side effect
-   beyond the call it wraps). No premature abstractions — extract shared code
-   when the second real caller appears, not before.
+   transformations. Use a small service class when operations share a reusable
+   construction-time dependency; do not add a class only as a namespace, and do
+   not store an implicit mutable "current input" or "current result". A
+   document-scoped handle bound to one **immutable** input (`PaperFlow.open()`),
+   with pure-derivation methods, is an allowed variant — the bound state never
+   mutates. Demote a class back to a function when its only bound dependency
+   disappears (`StructureRetriever(library=...)` became `retrieve(tree, ...)`
+   once the tree was self-contained). Use `Protocol` over ABC and avoid
+   framework-style class hierarchies. No meaningless wrappers (a method must add
+   logic, abstraction, or a side effect beyond the call it wraps). No premature
+   abstractions — extract shared code when the second real caller appears, not
+   before.
 4. **Add the unit test and the example** (sections below).
 5. **Update the public surface** if needed: package exports, the relevant
    design or guide, and the catalog in `docs/README.md`. Update the root
@@ -40,6 +45,8 @@ apply throughout.
 | `quantmind/configs/` | `knowledge` only |
 | `quantmind/preprocess/` | `utils` only |
 | `quantmind/rag/` | `preprocess` only |
+| `quantmind/library/` | `knowledge` only |
+| `quantmind/mind/` | `knowledge`, `configs`, `utils` (retrieval is library-free; the `library` edge is reserved for the future collection path, not single-tree `retrieve`) |
 | `quantmind/flows/`, `quantmind/magic.py` | apex — may import all of the above |
 
 ### `quantmind/knowledge/` — data standard
@@ -81,21 +88,47 @@ apply throughout.
 
 - Public operations are intent-oriented async callables. Prefer a function for
   one self-contained operation; use a small service class when its constructor
-  binds dependencies or policy reused across calls. Service instances must not
-  hide the active input or result as mutable state, and side effects stay
-  explicit.
+  binds dependencies or policy reused across calls; use a document-scoped handle
+  (`PaperFlow.open(...)`) to group several pipelines over one immutable input.
+  Instances must not hide the active input or result as mutable state, and side
+  effects stay explicit.
+- **A pipeline is pure processing: `input → self-contained artifact`.** It does
+  not bind a `library`, persist, or retrieve. Producing the artifact fully —
+  including any embeddings it carries — is the whole job. Persistence (`library`
+  dump/load) and retrieval (`mind`) are downstream steps the caller chooses.
+- Do not expose a half-finished intermediate (parse-only, source-only) as a
+  public flow; that is a component seam owned by `preprocess`/`rag`/`knowledge`.
 - Semantic operations use the OpenAI Agents SDK directly (`Agent`,
   `@function_tool`, `output_type=`); deterministic operations do not add an
   LLM. Never wrap `from agents import ...` in a facade.
 - Fan-out goes through `batch_run` (bounded concurrency, error policy);
   `batch_run` rejects `memory=` at the signature layer by design.
 
+### `quantmind/library/` — local persistence and semantic retrieval
+
+- Persist canonical knowledge and derived artifacts; dump and load, do not
+  transform. A self-contained artifact (e.g. a structure tree carrying its own
+  node text and any embeddings) round-trips through `put` / `open_*` to an
+  identical value. Do not make one artifact's content depend on refilling from
+  another at read time.
+- Keep SQLite and LlamaIndex types private; import from `knowledge` only.
+- Do not add a vector-store, retriever, provider, or backend registry.
+
 ### `quantmind/mind/` — cognitive layer
 
-- Lands via the Agents SDK migration (tracking: #71). Backends implement
-  the `Memory` Protocol with granular `tools()`, `mcp_servers()`,
-  `run_hooks()`, `reset()` — each may return an empty list; do not force
-  MCP on every implementation.
+- **Memory**: backends implement the `Memory` Protocol with granular `tools()`,
+  `mcp_servers()`, `run_hooks()`, `reset()` — each may return an empty list; do
+  not force MCP on every implementation.
+- **Retrieval**: `retrieve(tree, question, *, cfg)` reasons over one
+  **self-contained** `StructureTree` value and returns `RetrievalEvidence`
+  values whose `content` comes from the tree — no `library`, no query-time
+  refill. The `locator` field is optional provenance for cross-artifact fusion,
+  never the path to the content. Dispatch grains on `cfg` (`single-pass` /
+  `agentic`); leave `semantic` / `hybrid` as documented `NotImplementedError`
+  seams. Use the Agents SDK directly (`Agent`, `@function_tool`, `output_type=`,
+  its own `RunConfig`); do not import `flows._runner`, and do not build a
+  retriever/query-engine hierarchy — internal cfg/kind dispatch is fine.
+  See `contexts/design/mind/retrieval.md`.
 
 ### `quantmind/utils/`
 
@@ -108,9 +141,9 @@ A public operation is complete only when all of these agree:
 
 1. A stage and name consistent with `contexts/design/operations/naming.md`.
 2. Typed input and config models, exported from `quantmind.configs`.
-3. One intent-oriented async function or small service class exported from
-   `quantmind.flows`, with its result contract exported from the canonical
-   owning layer.
+3. One intent-oriented async function, small service class, or document-scoped
+   handle exported from `quantmind.flows`, with its result contract exported
+   from the canonical owning layer.
 4. Offline success and failure tests for the public callable, plus a
    magic-introspection test when a function follows the `(input, *, cfg)`
    convention.

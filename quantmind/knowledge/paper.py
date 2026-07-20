@@ -781,8 +781,17 @@ class PaperStructureTree(StructureTree):
             self.nodes,
         ):
             raise ValueError("paper structure-tree content hash mismatch")
-        if any(node.content is not None for node in self.nodes.values()):
-            raise ValueError("paper structure-tree nodes must not copy content")
+        for node in self.nodes.values():
+            if node.children_ids:
+                if node.content is not None:
+                    raise ValueError(
+                        "paper structure-tree internal nodes must not carry "
+                        "content"
+                    )
+            elif not node.content:
+                raise ValueError(
+                    "paper structure-tree leaf nodes require content"
+                )
         if any(not node.citations for node in self.nodes.values()):
             raise ValueError("paper structure-tree nodes require citations")
         self.validate()
@@ -813,6 +822,9 @@ class PaperStructureTree(StructureTree):
             if draft.quality == "low"
             else draft.root
         )
+        page_texts: dict[int, str] = {
+            page.page_number: page.text for page in source.parsed.pages
+        }
         nodes: dict[UUID, TreeNode] = {}
         node_count = 0
 
@@ -850,13 +862,22 @@ class PaperStructureTree(StructureTree):
                 for child_position, child in enumerate(value.children)
             ]
             citations = cls._resolve_structure_citations(source, value)
+            content = (
+                None
+                if children_ids
+                else "\n\n".join(
+                    page_texts[citation.page]
+                    for citation in citations
+                    if citation.page is not None
+                )
+            )
             nodes[node_id] = TreeNode(
                 node_id=node_id,
                 parent_id=parent_id,
                 position=position,
                 title=value.title,
                 summary=value.summary,
-                content=None,
+                content=content,
                 citations=citations,
                 children_ids=children_ids,
             )

@@ -279,6 +279,25 @@ class LocalKnowledgeLibrary:
                 raise RuntimeError("LocalKnowledgeLibrary is closed")
             return store.get_paper_artifact(artifact_id)
 
+    async def open_structure(self, tree_id: UUID) -> PaperStructureTree:
+        """Load one self-contained paper structure tree by its artifact id.
+
+        The returned tree is a complete value: every leaf node carries its own
+        text, so callers can retrieve over it without any further library
+        round-trip. This is the dump/load counterpart of
+        ``put_paper_structure_tree``.
+        """
+        async with self._lock:
+            store = self._store
+            if store is None:
+                raise RuntimeError("LocalKnowledgeLibrary is closed")
+            artifact = store.get_paper_artifact(tree_id)
+            if not isinstance(artifact, PaperStructureTree):
+                raise KeyError(
+                    f"Paper artifact '{tree_id}' is not a structure tree"
+                )
+            return artifact
+
     async def resolve(
         self, locator: ArtifactLocator
     ) -> BaseKnowledge | TreeNode | ResolvedPaperArtifact:

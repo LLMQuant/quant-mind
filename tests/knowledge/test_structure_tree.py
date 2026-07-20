@@ -12,13 +12,16 @@ from quantmind.knowledge import (
     PaperStructureTreeDraft,
     StructureTree,
     StructureTreeValidationError,
+    TreeNode,
 )
+from quantmind.knowledge.paper import _paper_structure_content_hash
 from tests.paper_helpers import build_paper_result, build_paper_structure_tree
 
 
 class PaperStructureTreeTests(unittest.TestCase):
-    def test_from_draft_builds_valid_cited_tree_without_content(self) -> None:
+    def test_from_draft_builds_self_contained_cited_tree(self) -> None:
         tree = build_paper_structure_tree()
+        pages = build_paper_result().source_revision.parsed.pages
 
         tree.validate(source_pages={1, 2})
         self.assertEqual(len(tree.nodes), 3)
@@ -30,12 +33,20 @@ class PaperStructureTreeTests(unittest.TestCase):
                 "Attention and results",
             ],
         )
-        self.assertTrue(
-            all(
-                node.content is None and node.citations
-                for node in tree.nodes.values()
-            )
-        )
+        # Internal nodes carry no content; every leaf carries its own text.
+        for node in tree.nodes.values():
+            self.assertTrue(node.citations)
+            if node.children_ids:
+                self.assertIsNone(node.content)
+            else:
+                self.assertTrue(node.content)
+        leaves = {
+            node.title: node
+            for node in tree.nodes.values()
+            if not node.children_ids
+        }
+        self.assertEqual(leaves["Architecture"].content, pages[0].text)
+        self.assertEqual(leaves["Attention and results"].content, pages[1].text)
         self.assertEqual(
             {citation.page for citation in tree.root().citations},
             {1, 2},
@@ -47,6 +58,72 @@ class PaperStructureTreeTests(unittest.TestCase):
                 for citation in node.citations
             )
         )
+
+    def test_multi_page_leaf_joins_cited_page_text_in_order(self) -> None:
+        result = build_paper_result()
+        pages = result.source_revision.parsed.pages
+        producer = PaperStructureProducer(
+            model="fake",
+            prompt_version="test-v1",
+            instructions_hash=hashlib.sha256(b"instructions").hexdigest(),
+            page_text_chars=1_200,
+            max_output_tokens=256,
+            max_depth=2,
+            max_nodes=4,
+        )
+        # A single root leaf spanning both physical pages.
+        draft = PaperStructureTreeDraft(
+            root=PaperStructureNodeDraft(
+                title="Paper",
+                summary="Whole paper as one leaf.",
+                start_page=1,
+                end_page=2,
+            )
+        )
+        tree = PaperStructureTree.from_draft(
+            result.source_revision, producer=producer, draft=draft
+        )
+        self.assertEqual(len(tree.nodes), 1)
+        self.assertEqual(
+            tree.root().content, f"{pages[0].text}\n\n{pages[1].text}"
+        )
+
+    def _revalidate_with_nodes(
+        self, tree: PaperStructureTree, *updated: TreeNode
+    ) -> PaperStructureTree:
+        """Rebuild ``tree`` with tampered nodes and re-run its integrity gate."""
+        nodes = dict(tree.nodes)
+        for node in updated:
+            nodes[node.node_id] = node
+        payload = tree.model_dump(mode="json")
+        payload["content_hash"] = _paper_structure_content_hash(
+            tree.root_node_id, nodes
+        )
+        payload["nodes"] = {
+            str(node_id): node.model_dump(mode="json")
+            for node_id, node in nodes.items()
+        }
+        return PaperStructureTree.model_validate(payload)
+
+    def test_rejects_leaf_without_content(self) -> None:
+        tree = build_paper_structure_tree()
+        leaf = next(
+            node for node in tree.nodes.values() if not node.children_ids
+        )
+        with self.assertRaisesRegex(ValueError, "leaf nodes require content"):
+            self._revalidate_with_nodes(
+                tree, leaf.model_copy(update={"content": None})
+            )
+
+    def test_rejects_internal_node_carrying_content(self) -> None:
+        tree = build_paper_structure_tree()
+        root = tree.root()
+        with self.assertRaisesRegex(
+            ValueError, "internal nodes must not carry content"
+        ):
+            self._revalidate_with_nodes(
+                tree, root.model_copy(update={"content": "leaked body text"})
+            )
 
     def test_identity_is_idempotent_and_producer_changes_version_it(
         self,

@@ -5,13 +5,14 @@
 - **Purpose**: Define clear names for public QuantMind callables and their input, config, and result types.
 - **Read when**: Adding or renaming a public function, service, operation type, or pipeline.
 - **Status**: Use these rules for new names. Keep the existing `paper_flow` name until a separate change explains how callers will migrate.
-- **Core rule**: Name a function or service method with a verb that says what it does. Use `pipeline` only when one callable combines several public operations. Do not use `flow` as a verb.
+- **Core rule**: Name a function or service method with a verb that says what it does. Use `pipeline` only when one callable combines several public operations. Do not use `flow` as a **verb**; `flow` as a **noun** naming a finished pipeline collection (`PaperFlow`) is allowed.
 
 ## Contents
 
 - [Scope](#scope)
 - [Name Patterns](#name-patterns)
 - [Service Class Patterns](#service-class-patterns)
+- [Document-Scoped Handle Patterns](#document-scoped-handle-patterns)
 - [Type Names](#type-names)
 - [Current API](#current-api)
 - [Review Checklist](#review-checklist)
@@ -39,9 +40,18 @@ Start a public function name with a verb that describes its result:
 | Generic execution | `batch_run` and similar helpers | Apply an operation to a batch without changing what the operation means |
 | Pipeline | `<domain>_<purpose>_pipeline` | Combine several named operations into one reusable function |
 
-`flow` is not a verb that explains a result. Do not add a public `*_flow` name
-only because a function performs several steps. Name the result precisely, or
-use `*_pipeline` when the function combines multiple public operations.
+`flow` is not a verb that explains a result. Do not add a public `*_flow`
+**function** name only because a function performs several steps. Name the
+result precisely, or use `*_pipeline` when the function combines multiple public
+operations.
+
+`Flow` as a **noun**, on a domain object that groups several finished pipelines
+over one input, is allowed and preferred there: `PaperFlow` is a
+document-scoped handle (`PaperFlow.open(input)` parses once; `build_structure()`
+and `extract_knowledge()` are pipelines over that immutable source). The object
+reads as "the paper's workflows," and its *methods* still use intent verbs
+(`build_structure`, `extract_knowledge`). What stays banned is `flow` as a verb
+or a `do_x_flow()` function name.
 
 ## Service Class Patterns
 
@@ -49,8 +59,8 @@ Use a service class only when repeated calls share dependencies, policy, or a
 lifecycle that belongs at construction time. Keep the active input and result
 on method arguments and return values rather than mutable instance state.
 
-- Name the class by its stable role, such as `PaperStructureBuilder` or
-  `StructureRetriever`.
+- Name the class by its stable role (a `*Builder` / `*Store` noun), not by a
+  single method it exposes.
 - Name its primary async methods with the same intent verbs used for functions,
   such as `build()` or `retrieve()`.
 - Do not add a class only to group helpers or shorten one function signature.
@@ -58,6 +68,24 @@ on method arguments and return values rather than mutable instance state.
   artifacts; services consume and return those canonical values.
 - Do not add a base service, registry, or manager hierarchy around one concrete
   implementation.
+- **Demote when the binding disappears.** A class justified only by a bound
+  dependency should become a function when that dependency is removed. Structure
+  retrieval was `StructureRetriever(library=...)`; once the tree became
+  self-contained and retrieval bound no library, it is the function
+  `retrieve(tree, question, *, cfg)`.
+
+## Document-Scoped Handle Patterns
+
+A document-scoped handle is a service variant whose bound state is an
+**immutable** input set once at an `open()` classmethod, with methods that are
+pure derivations sharing one expensive step (fetch + parse):
+
+- Name it `<Domain>Flow` when it groups several finished pipelines over that
+  input (`PaperFlow`). `Flow` here is a noun for "the domain's workflows."
+- Use `open()` for the async factory that does the shared work; use intent verbs
+  for the pipeline methods (`build_structure()`, `extract_knowledge()`).
+- The handle binds no store and performs no persistence or retrieval — those are
+  downstream of the pipelines it exposes.
 
 ## Type Names
 
@@ -74,8 +102,15 @@ on method arguments and return values rather than mutable instance state.
 
 - `collect_news` is a collection operation and follows these naming rules.
 - `batch_run` is a generic batch helper, not a news or paper operation.
-- `paper_flow` is an existing extraction API with an old name. Do not copy that
-  pattern for new operations. Renaming it requires a separate migration plan.
+- `paper_flow` is an existing extraction **function** with an old name; it stays
+  as a thin compatibility wrapper over `PaperFlow.open(...).extract_knowledge()`.
+  Do not copy the `*_flow` function pattern for new operations.
+- `PaperFlow` is the document-scoped handle grouping the finished paper
+  pipelines (`open`, `build_structure`, `extract_knowledge`). `Flow` as a noun on
+  this object is deliberate and allowed.
+- `retrieve(tree, question, *, cfg)` is the structure-retrieval function in
+  `quantmind.mind` (formerly the `StructureRetriever` class, demoted once the
+  self-contained tree removed its library binding).
 
 The current `quantmind.flows` package continues to contain public operations in
 this release. Renaming it to `operations` or adding a separate `pipelines`

@@ -28,19 +28,17 @@ Putting the same result again is safe and reuses valid vectors. A changed splitt
 
 ## Store and Resolve a Structure Tree
 
-After building a `PaperStructureTree` from an exact source revision, persist the source and tree together without creating chunk, summary, or embedding projections:
+After building a self-contained `PaperStructureTree` with `PaperFlow`, persist the source and tree together without creating chunk, summary, or embedding projections, then reopen the tree by id:
 
 ```python
-builder = PaperStructureBuilder(PaperStructureCfg(model="gpt-4o-mini"))
-structure = await builder.build(paper_result.source_revision)
+paper = await PaperFlow.open(ArxivIdentifier(id="1706.03762v7"))
+structure = await paper.build_structure(cfg=PaperStructureCfg(model="gpt-4o-mini"))
 
-await library.put_paper_structure_tree(
-    paper_result.source_revision,
-    structure,
-)
+await library.put_paper_structure_tree(paper.source, structure)
+tree = await library.open_structure(structure.id)  # identical self-contained value
 ```
 
-The structure tree is derived only from the exact source pages and structuring producer configuration. Splitter settings and chunk-set versions do not affect its identity. Its normalized page-cited members are canonical; a node `ArtifactLocator` passed to `resolve()` returns a `TreeNode` whose `content` is assembled lazily from the cited source pages. Building node projections and semantic hybrid seeding are deferred to P2.
+The structure tree is derived only from the exact source pages and structuring producer configuration. Splitter settings and chunk-set versions do not affect its identity. The tree is **self-contained**: its leaf nodes carry their own page text, so it round-trips through `put_paper_structure_tree()` / `open_structure()` to an identical value and can be retrieved from with no chunk set present. A node `ArtifactLocator` passed to `resolve()` returns a `TreeNode` with its stored `content` (no query-time refill). Building node projections and semantic hybrid seeding are deferred to P2.
 
 ## Reopen, Search, and Resolve
 
@@ -76,7 +74,7 @@ finally:
     await library.close()
 ```
 
-A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `StructureRetriever.retrieve()`, not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
+A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `quantmind.mind.retrieve()`, not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
 
 - `matched_text`, the exact library-owned projection used for ranking;
 - `projection`, the projection version, model, dimensions, and content hash;
