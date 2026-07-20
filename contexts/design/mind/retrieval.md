@@ -188,7 +188,7 @@ others.
 from quantmind.flows import PaperFlow, batch_run
 from quantmind.configs import PaperStructureCfg
 
-tree_flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))   # bind cfg once
+tree_flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))   # bind cfg once
 tree = await tree_flow.build(input)                             # -> PaperStructureTree
 
 # a batch runs every input under one fixed, reproducible setting:
@@ -250,7 +250,7 @@ vector store):
 from quantmind.mind import AgenticRetriever
 from quantmind.configs import RetrievalCfg
 
-retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
+retriever = AgenticRetriever(RetrievalCfg(model="gpt-5.6-luna"))
 evidence = await retriever.retrieve(tree, "What are the method and limitations?")
 for item in evidence:
     print(item.title, item.content)     # content is already here; no library

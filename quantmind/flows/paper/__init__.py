@@ -3,7 +3,7 @@
 ``PaperFlow`` binds an immutable build config at construction and applies it to
 each input, so a batch runs under one unified, reproducible setting:
 
-    tree_flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))  # bind cfg once
+    tree_flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))  # bind cfg once
     tree = await tree_flow.build(input)                            # -> tree
     trees = await batch_run(tree_flow.build, inputs)               # one setting
 

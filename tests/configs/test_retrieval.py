@@ -11,7 +11,7 @@ class RetrievalCfgTests(unittest.TestCase):
     def test_defaults(self) -> None:
         cfg = RetrievalCfg()
 
-        self.assertEqual(cfg.model, "gpt-4o-mini")
+        self.assertEqual(cfg.model, "gpt-5.6-luna")
         self.assertGreaterEqual(cfg.structure_token_budget, 256)
         self.assertGreaterEqual(cfg.max_evidence_nodes, 1)
         self.assertGreaterEqual(cfg.max_nodes_per_tool_call, 1)

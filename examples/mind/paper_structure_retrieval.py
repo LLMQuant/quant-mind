@@ -33,12 +33,12 @@ async def main(pdf_path: Path) -> None:
     """Build a structure tree and retrieve from it in memory (no library)."""
     # Bind the build config once; build(input) applies it per input. A batch
     # would call batch_run(flow.build, inputs) under this one setting.
-    flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))
+    flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))
     tree = await flow.build(LocalFilePath(path=pdf_path))
 
     # Bind the retrieval config once; retrieve(tree, question) takes only the
     # operands. Evidence carries content directly — no library.
-    retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
+    retriever = AgenticRetriever(RetrievalCfg(model="gpt-5.6-luna"))
     evidence = await retriever.retrieve(tree, _QUESTION)
     for item in evidence:
         print(item.title, "—", item.content[:500])
@@ -65,7 +65,7 @@ async def _optional_persist_reopen(tree: PaperStructureTree) -> None:
         await library.put(tree)  # standalone: no source revision required
         reopened = await library.open_structure(tree.id)  # identical value
 
-        retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
+        retriever = AgenticRetriever(RetrievalCfg(model="gpt-5.6-luna"))
         evidence = await retriever.retrieve(reopened, _QUESTION)
         for item in evidence:
             print(item.title, "—", item.content[:500])

@@ -31,7 +31,7 @@ Putting the same result again is safe and reuses valid vectors. A changed splitt
 After building a self-contained `PaperStructureTree` with `PaperFlow`, persist just the tree — no source, chunk, summary, or embedding projections — then reopen it by id:
 
 ```python
-tree_flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))
+tree_flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))
 structure = await tree_flow.build(ArxivIdentifier(id="1706.03762v7"))
 
 await library.put(structure)                        # standalone; no source needed

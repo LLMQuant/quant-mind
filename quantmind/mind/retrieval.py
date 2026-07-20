@@ -24,6 +24,7 @@ from typing import Protocol, cast, runtime_checkable
 from uuid import UUID
 
 from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
+from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel, ConfigDict, Field
 
 from quantmind.configs import RetrievalCfg
@@ -101,7 +102,7 @@ class AgenticRetriever:
     a future hybrid path composes the two rather than adding a strategy here.
 
     Example:
-        >>> retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
+        >>> retriever = AgenticRetriever(RetrievalCfg(model="gpt-5.6-luna"))
         >>> evidence = await retriever.retrieve(tree, "What is the method?")
     """
 
@@ -347,6 +348,11 @@ async def _agentic_select(
     except asyncio.TimeoutError as exc:
         raise RetrievalError(
             "agentic retrieval exceeded timeout_seconds"
+        ) from exc
+    except MaxTurnsExceeded as exc:
+        raise RetrievalError(
+            "agentic retrieval exceeded max_turns before returning a selection; "
+            "raise RetrievalCfg.max_turns or use a stronger model"
         ) from exc
     return _RetrievalSelectionDraft.model_validate(result.final_output)
 

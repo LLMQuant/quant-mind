@@ -13,7 +13,7 @@ class PaperStructureCfg(BaseFlowCfg):
     ``PaperStructureTree`` shape.
     """
 
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-5.6-luna"
     prompt_version: str = "paper-structure-v2"
     instructions: str | None = None
     page_text_chars: int = Field(default=1_200, ge=80)

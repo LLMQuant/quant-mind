@@ -32,6 +32,7 @@ Import result contracts from the canonical layer shown in the catalog.
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
 | arXiv Transformer PDF | `ArxivIdentifier(id="1706.03762v7")` | `paper_flow`, persistence, reopen, search, and resolution | `python scripts/verify_pdf_rag_e2e.py` |
+| Golden paper PDF (structure) | `LocalFilePath(...golden/paper.pdf)` | `PaperFlow.build`, standalone `put`/`open_structure`, and `AgenticRetriever.retrieve` | `python scripts/verify_structure_e2e.py` |
 
 The PR Newswire smoke test checks the public RSS feed, a complete preceding
 24-hour listing window, and ticker-hint recall on a bounded sample of up to 25
@@ -46,6 +47,14 @@ chunk projections with `text-embedding-3-small`, reopens the database, searches
 both artifact kinds, and resolves every hit. It runs daily, manually, and on
 pull requests that change its dependency paths, and it remains non-required
 because arXiv and model providers are public-network dependencies.
+
+The `structure` job builds a self-contained `PaperStructureTree` from the local
+golden fixture PDF under the default model, dumps and reopens it through the
+library unchanged, and runs a real `AgenticRetriever` traversal. It exercises the
+one path offline tests mock away (a real structured-output draft call and a real
+agentic loop). It runs daily, manually, and on pull requests that change its
+dependency paths, and it remains non-required because model providers are a
+public-network dependency.
 When the repository `OPENAI_API_KEY` secret is unavailable, the job emits an
 explicit skip notice instead of reporting an implementation failure; the
 catalog command remains the direct way to run the same bounded slice locally.

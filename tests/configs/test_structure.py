@@ -11,7 +11,7 @@ class PaperStructureCfgTests(unittest.TestCase):
     def test_defaults_are_build_specific(self) -> None:
         cfg = PaperStructureCfg()
 
-        self.assertEqual(cfg.model, "gpt-4o-mini")
+        self.assertEqual(cfg.model, "gpt-5.6-luna")
         self.assertEqual(cfg.prompt_version, "paper-structure-v2")
         self.assertEqual(cfg.page_text_chars, 1_200)
         self.assertEqual(cfg.max_depth, 6)
