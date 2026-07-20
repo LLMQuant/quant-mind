@@ -22,6 +22,12 @@ Both principles came from one observation: a flow file had become large and was 
 1. **Identity vs translation altitude** — who mints IDs and hashes, and who maps one type system onto another.
 2. **Agentic vs deterministic orchestration** — whether a model decides *how* the work is decomposed, or code does.
 
+These principles do not require every operation to have the same callable
+shape. A self-contained stateless transformation is a function. A small service
+class is appropriate when repeated operations share dependencies, policy, or a
+lifecycle; its methods still receive the active input explicitly and return the
+result instead of storing mutable current-work state.
+
 ## Principle 1: Identity vs Translation Altitude
 
 "Construction" is two separable concerns that belong in different layers:
@@ -56,6 +62,12 @@ Ask one question:
 Using the SDK does **not** force the agentic pattern. Single-agent `Runner.run(agent, output_type=...)` gives structured output, tracing, retries, and guardrails inside a fully deterministic map-reduce — you do not drop to a raw completion API to get determinism.
 
 **Do not build a framework for it.** The fan-out primitive is a function, not a base class: `asyncio.gather` over code-computed items with a `Semaphore`. Keep it inline until a second flow needs it; only then extract a small `map_reduce(items, map_fn, reduce_fn, *, concurrency)` helper. A `BaseFlow`/`ParallelWorkflow` base class is the framework this project explicitly avoids.
+
+Likewise, a concrete builder or retriever service may bind a model policy,
+provider seam, or library reused across calls without introducing a generic
+workflow hierarchy. Canonical knowledge artifacts remain frozen values and do
+not acquire `build()`, `retrieve()`, persistence, or provider state merely to
+make call sites look object-oriented.
 
 ## Worked Example: Paper Flow V1
 

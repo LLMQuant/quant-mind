@@ -40,6 +40,13 @@ class PaperStructureTreeTests(unittest.TestCase):
             {citation.page for citation in tree.root().citations},
             {1, 2},
         )
+        self.assertTrue(
+            all(
+                citation.node_id is None and citation.tree_id is None
+                for node in tree.nodes.values()
+                for citation in node.citations
+            )
+        )
 
     def test_identity_is_idempotent_and_producer_changes_version_it(
         self,
@@ -56,19 +63,19 @@ class PaperStructureTreeTests(unittest.TestCase):
     def test_low_quality_draft_falls_back_to_flat_source_order(self) -> None:
         tree = build_paper_structure_tree(quality="low")
 
-        self.assertEqual(len(tree.children_of(tree.root_node_id)), 3)
+        self.assertEqual(len(tree.children_of(tree.root_node_id)), 2)
         self.assertEqual(
             [node.position for node in tree.children_of(tree.root_node_id)],
-            [0, 1, 2],
+            [0, 1],
         )
 
-    def test_unknown_chunk_index_is_rejected(self) -> None:
+    def test_page_outside_exact_source_is_rejected(self) -> None:
         result = build_paper_result()
         producer = PaperStructureProducer(
             model="fake",
             prompt_version="test-v1",
-            input_chunk_set_id=result.chunk_set.id,
             instructions_hash=hashlib.sha256(b"instructions").hexdigest(),
+            page_text_chars=1_200,
             max_output_tokens=256,
             max_depth=2,
             max_nodes=4,
@@ -77,16 +84,17 @@ class PaperStructureTreeTests(unittest.TestCase):
             root=PaperStructureNodeDraft(
                 title="Paper",
                 summary="Paper summary.",
-                chunk_indices=(99,),
+                start_page=1,
+                end_page=99,
             )
         )
 
         with self.assertRaisesRegex(
             StructureTreeValidationError,
-            "unknown chunk index",
+            "outside its source",
         ):
             PaperStructureTree.from_draft(
-                result.chunk_set,
+                result.source_revision,
                 producer=producer,
                 draft=draft,
             )

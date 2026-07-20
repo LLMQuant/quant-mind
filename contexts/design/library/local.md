@@ -31,7 +31,7 @@
 | `open()` | Open or migrate a SQLite library without network I/O. |
 | `put()` | Store one conventional `BaseKnowledge` item and its required projections. |
 | `put_paper()` | Store one `PaperFlowResult`, including exact source assets, two artifacts, lineage, and required projections. |
-| `put_paper_structure_tree()` | Store one validated structure-tree artifact and its chunk-set lineage without projections. |
+| `put_paper_structure_tree()` | Atomically store one exact source revision and validated structure tree without projections or embeddings. |
 | `get()` | Rehydrate one conventional knowledge item. |
 | `get_paper()` | Rehydrate one unambiguous source/chunk-set/summary result, or use explicit artifact IDs when versions coexist. |
 | `get_artifact()` | Rehydrate a paper chunk set, global summary, or structure tree by artifact ID. |
@@ -68,7 +68,7 @@ Source-first papers use:
 - `paper_source_assets` for linked content-addressed bytes and asset metadata;
 - `paper_artifacts` for independently versioned chunk sets, summaries, and structure trees;
 - `paper_artifact_members` for directly addressable chunks or structure nodes;
-- `paper_artifact_lineage` for derived-artifact input relationships;
+- `paper_artifact_lineage` for derived-artifact input relationships such as summary-to-chunk-set provenance;
 - `paper_projections` for rebuildable summary and chunk text embeddings.
 
 There is no single opaque paper JSON blob and no canonical vector field. Aggregate JSON and normalized relationship rows are cross-checked during rehydration.
@@ -80,6 +80,12 @@ There is no single opaque paper JSON blob and no canonical vector field. Aggrega
 The transaction writes or reuses the source, asset blobs, artifacts, members, lineage, and all required projections. Any constraint, integrity, or write failure rolls back the transaction. An embedding-provider failure occurs before the transaction and therefore leaves no partial source or artifact rows.
 
 Putting an unchanged result is idempotent and reuses valid vectors. The same source may own multiple chunk-set and summary versions. Artifact identity includes producer configuration, so one version never silently replaces another.
+
+`put_paper_structure_tree(source, tree)` is a separate vectorless transaction.
+It validates that every node citation belongs to the exact source, writes or
+reuses the source and its assets, then stores the tree and normalized members.
+It does not require `put_paper()`, a chunk set, an embedding provider call, or
+artifact-lineage rows.
 
 ## Search Projections
 
@@ -129,7 +135,7 @@ Reads fail closed when canonical hashes, counts, IDs, membership, lineage, sourc
 
 ## PageIndex Boundary
 
-The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. `PaperStructureTree` is persisted as a zero-projection artifact, and a node locator resolves to page-cited content assembled from its input chunk set. Reasoning-based retrieval is owned by `quantmind.mind`. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
+The library is canonical storage plus collection-wide semantic search, not a vector database abstraction. `PaperStructureTree` is persisted as a zero-projection artifact, and a node locator resolves to content assembled directly from its cited canonical source pages. Reasoning-based retrieval is owned by `quantmind.mind`. See [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).
 
 PageIndex-style retrieval is not required to use `LocalKnowledgeLibrary.search()` or private LlamaIndex vector ranking. Paper Flow V1 still returns chunks and a cited summary; structure construction and persistence are separate explicit operations. Building per-node projections is an explicit P2 step that will enable hybrid semantic-plus-agentic retrieval without a second index.
 

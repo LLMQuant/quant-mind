@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from collections.abc import Sequence
 from pathlib import Path
+from uuid import uuid4
 
 from quantmind.knowledge import (
     ArtifactLocator,
@@ -63,31 +64,30 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         tree = build_paper_structure_tree()
         provider = _FakeEmbeddingProvider()
         library = await self._open(provider)
-        await library.put_paper(result)
-        await library.put_paper_structure_tree(tree)
-        await library.put_paper_structure_tree(tree)
+        await library.put_paper_structure_tree(result.source_revision, tree)
+        await library.put_paper_structure_tree(result.source_revision, tree)
         await library.close()
 
-        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls, [])
         with sqlite3.connect(self.db_path) as db:
             self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertEqual(
                 db.execute("SELECT COUNT(*) FROM paper_artifacts").fetchone()[
                     0
                 ],
-                3,
+                1,
             )
             self.assertEqual(
                 db.execute(
                     "SELECT COUNT(*) FROM paper_artifact_members"
                 ).fetchone()[0],
-                len(result.chunk_set.chunks) + len(tree.nodes),
+                len(tree.nodes),
             )
             self.assertEqual(
                 db.execute("SELECT COUNT(*) FROM paper_projections").fetchone()[
                     0
                 ],
-                len(result.chunk_set.chunks) + 1,
+                0,
             )
             target_count = db.execute(
                 "SELECT target_count FROM paper_artifacts WHERE artifact_id = ?",
@@ -101,7 +101,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(restored, PaperStructureTree)
             self.assertEqual(restored, tree)
             hits = await reopened.search(SemanticQuery(text="attention"))
-            self.assertTrue(hits)
+            self.assertEqual(hits, [])
             self.assertNotIn(
                 PaperArtifactKind.STRUCTURE_TREE,
                 {hit.item_type for hit in hits},
@@ -109,13 +109,17 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await reopened.close()
 
-    async def test_resolve_node_assembles_cited_chunk_content(self) -> None:
+    async def test_resolve_node_assembles_cited_source_page_content(
+        self,
+    ) -> None:
         result = build_paper_result()
         tree = build_paper_structure_tree()
         library = await self._open(_FakeEmbeddingProvider())
         try:
-            await library.put_paper(result)
-            await library.put_paper_structure_tree(tree)
+            await library.put_paper_structure_tree(
+                result.source_revision,
+                tree,
+            )
             node = next(
                 value
                 for value in tree.nodes.values()
@@ -134,9 +138,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
             assert isinstance(resolved, TreeNode)
             self.assertEqual(
                 resolved.content,
-                "\n\n".join(
-                    chunk.text for chunk in result.chunk_set.chunks[1:]
-                ),
+                result.source_revision.parsed.pages[1].text,
             )
             self.assertEqual(
                 {citation.page for citation in resolved.citations}, {2}
@@ -144,12 +146,17 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await library.close()
 
-    async def test_put_requires_stored_source_and_chunk_set(self) -> None:
+    async def test_put_rejects_a_tree_for_another_source(self) -> None:
+        result = build_paper_result()
         tree = build_paper_structure_tree()
+        mismatched = tree.model_copy(update={"source_revision_id": uuid4()})
         library = await self._open(_FakeEmbeddingProvider())
         try:
-            with self.assertRaises(KeyError):
-                await library.put_paper_structure_tree(tree)
+            with self.assertRaisesRegex(ValueError, "another source"):
+                await library.put_paper_structure_tree(
+                    result.source_revision,
+                    mismatched,
+                )
         finally:
             await library.close()
 
@@ -167,8 +174,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         result = build_paper_result()
         tree = build_paper_structure_tree()
         library = await self._open(_FakeEmbeddingProvider())
-        await library.put_paper(result)
-        await library.put_paper_structure_tree(tree)
+        await library.put_paper_structure_tree(result.source_revision, tree)
         await library.close()
 
         node = next(value for value in tree.nodes.values() if value.parent_id)

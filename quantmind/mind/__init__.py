@@ -3,7 +3,7 @@
 from quantmind.mind.retrieval import (
     RetrievalError,
     RetrievalEvidence,
-    retrieve,
+    StructureRetriever,
 )
 
-__all__ = ["RetrievalError", "RetrievalEvidence", "retrieve"]
+__all__ = ["RetrievalError", "RetrievalEvidence", "StructureRetriever"]

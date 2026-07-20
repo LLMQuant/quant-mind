@@ -64,69 +64,96 @@ class _ResolvableStructure(Protocol):
     artifact_kind: str
 
 
-async def retrieve(
-    structure: StructureTree,
-    question: str,
-    *,
-    library: LocalKnowledgeLibrary,
-    cfg: RetrievalCfg,
-    seed_locators: list[ArtifactLocator] | None = None,
-) -> list[RetrievalEvidence]:
-    """Select and resolve page-cited evidence from one structure tree.
+class StructureRetriever:
+    """Reusable reasoning service for one structure tree per query.
 
-    Args:
-        structure: Validated shared tree with a resolvable artifact binding.
-        question: Evidence need used for relevance reasoning.
-        library: Existing canonical library used for lazy node resolution.
-        cfg: Model, retrieval grain, and structure/evidence bounds.
-        seed_locators: Optional same-tree node hints reserved for a later
-            semantic shortlist. This operation performs no semantic search.
-
-    Returns:
-        Selected node evidence with canonical locators and source content.
-
-    Raises:
-        ValueError: If the question, seeds, or selected node IDs are invalid.
-        TypeError: If the structural base has no resolvable artifact identity.
-        RetrievalError: If runtime or configured evidence bounds are exceeded.
+    The service owns stable library and retrieval policy dependencies. It does
+    not retain a current structure, question, seed, or result, so one instance
+    can safely query different document trees.
     """
-    normalized_question = question.strip()
-    if not normalized_question:
-        raise ValueError("retrieval question must not be blank")
-    structure.validate()
-    identity = _resolvable_identity(structure)
-    seed_ids = _validate_seed_locators(
-        structure,
-        identity,
-        seed_locators or [],
-    )
-    serialized = _serialize_structure(
-        structure,
-        token_budget=cfg.structure_token_budget,
-        seed_ids=set(seed_ids),
-    )
-    if cfg.grain == "single-pass":
-        selection = await _single_pass_select(
-            normalized_question,
-            serialized,
-            seed_ids,
-            cfg,
-        )
-    else:
-        selection = await _agentic_select(
+
+    __slots__ = ("_cfg", "_library")
+
+    def __init__(
+        self,
+        *,
+        library: LocalKnowledgeLibrary,
+        cfg: RetrievalCfg,
+    ) -> None:
+        """Initialize retrieval with shared dependencies and policy.
+
+        Args:
+            library: Canonical library used for lazy node resolution.
+            cfg: Model, retrieval grain, and structure/evidence bounds.
+        """
+        self._library = library
+        self._cfg = cfg.model_copy(deep=True)
+
+    async def retrieve(
+        self,
+        structure: StructureTree,
+        question: str,
+        *,
+        seed_locators: list[ArtifactLocator] | None = None,
+    ) -> list[RetrievalEvidence]:
+        """Select and resolve page-cited evidence from one structure tree.
+
+        Args:
+            structure: Validated shared tree with a resolvable artifact binding.
+            question: Evidence need used for relevance reasoning.
+            seed_locators: Optional same-tree node hints reserved for a later
+                semantic shortlist. This operation performs no semantic search.
+
+        Returns:
+            Selected node evidence with canonical locators and source content.
+
+        Raises:
+            ValueError: If the question, seeds, or selected node IDs are invalid.
+            TypeError: If the structure has no resolvable artifact identity.
+            RetrievalError: If runtime or evidence bounds are exceeded.
+        """
+        normalized_question = question.strip()
+        if not normalized_question:
+            raise ValueError("retrieval question must not be blank")
+        structure.validate()
+        identity = _resolvable_identity(structure)
+        seed_ids = _validate_seed_locators(
             structure,
             identity,
-            normalized_question,
-            serialized,
-            seed_ids,
-            library,
-            cfg,
+            seed_locators or [],
         )
-    node_ids = _validate_selection(structure, selection, cfg)
-    return [
-        await _resolve_evidence(structure, identity, node_id, library)
-        for node_id in node_ids
-    ]
+        serialized = _serialize_structure(
+            structure,
+            token_budget=self._cfg.structure_token_budget,
+            seed_ids=set(seed_ids),
+        )
+        if self._cfg.grain == "single-pass":
+            selection = await _single_pass_select(
+                normalized_question,
+                serialized,
+                seed_ids,
+                self._cfg,
+            )
+        else:
+            selection = await _agentic_select(
+                structure,
+                identity,
+                normalized_question,
+                serialized,
+                seed_ids,
+                self._library,
+                self._cfg,
+            )
+        node_ids = _validate_selection(structure, selection, self._cfg)
+        return [
+            await _resolve_evidence(
+                structure,
+                identity,
+                node_id,
+                self._library,
+            )
+            for node_id in node_ids
+        ]
 
 
 def _resolvable_identity(structure: StructureTree) -> _ResolvableStructure:

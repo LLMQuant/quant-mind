@@ -13,10 +13,14 @@ apply throughout.
    adding any import. `lint-imports` enforces these; if your design needs a
    forbidden import, the design is wrong — restructure, do not work around
    the contract.
-3. **Implement small and flat.** Pure functions over classes; `Protocol`
-   over ABC; no meaningless wrappers (a method must add logic, abstraction,
-   or a side effect beyond the call it wraps). No premature abstractions —
-   extract shared code when the second real caller appears, not before.
+3. **Implement small and flat.** Use functions for self-contained stateless
+   transformations. Use a small service class when operations share reusable
+   dependencies, policy, or lifecycle; do not add a class only as a namespace,
+   and do not store an implicit mutable "current input" or "current result".
+   Use `Protocol` over ABC and avoid framework-style class hierarchies. No
+   meaningless wrappers (a method must add logic, abstraction, or a side effect
+   beyond the call it wraps). No premature abstractions — extract shared code
+   when the second real caller appears, not before.
 4. **Add the unit test and the example** (sections below).
 5. **Update the public surface** if needed: package exports, the relevant
    design or guide, and the catalog in `docs/README.md`. Update the root
@@ -75,8 +79,11 @@ apply throughout.
 
 ### `quantmind/flows/` and `quantmind/magic.py` — apex layer
 
-- Public operations are `async def` functions, not classes; state passes
-  as arguments and side effects are explicit.
+- Public operations are intent-oriented async callables. Prefer a function for
+  one self-contained operation; use a small service class when its constructor
+  binds dependencies or policy reused across calls. Service instances must not
+  hide the active input or result as mutable state, and side effects stay
+  explicit.
 - Semantic operations use the OpenAI Agents SDK directly (`Agent`,
   `@function_tool`, `output_type=`); deterministic operations do not add an
   LLM. Never wrap `from agents import ...` in a facade.
@@ -101,10 +108,12 @@ A public operation is complete only when all of these agree:
 
 1. A stage and name consistent with `contexts/design/operations/naming.md`.
 2. Typed input and config models, exported from `quantmind.configs`.
-3. One intent-oriented `async def` operation exported from `quantmind.flows`,
-   with its result contract exported from the canonical owning layer.
-4. Offline success and failure tests plus a magic-introspection test when the
-   operation follows the `(input, *, cfg)` convention.
+3. One intent-oriented async function or small service class exported from
+   `quantmind.flows`, with its result contract exported from the canonical
+   owning layer.
+4. Offline success and failure tests for the public callable, plus a
+   magic-introspection test when a function follows the `(input, *, cfg)`
+   convention.
 5. One runnable common-path example under `examples/<module>/`.
 6. A relevant design or guide and one row in `docs/README.md`.
 

@@ -15,16 +15,16 @@ harness.
 | Operation | Import | Input and config | Result | Example | Design or guide |
 |---|---|---|---|---|---|
 | Source-first paper flow | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `PaperFlowResult` | [Persist and search a paper](../examples/flows/paper.py) | [Paper flow design](../contexts/design/flow/paper.md) |
-| Paper structure build | `quantmind.flows.build_paper_structure_tree` | `ParsedDocument`, `PaperChunkSet`, `PaperFlowCfg` | `PaperStructureTree` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
-| Reasoning-based retrieval | `quantmind.mind.retrieve` | `StructureTree`, question, library, `RetrievalCfg` | `list[RetrievalEvidence]` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
+| Paper structure build | `quantmind.flows.PaperStructureBuilder` | Constructor: `PaperStructureCfg`; `build()`: `PaperSourceRevision` | `PaperStructureTree` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
+| Reasoning-based retrieval | `quantmind.mind.StructureRetriever` | Constructor: library + `RetrievalCfg`; `retrieve()`: one `StructureTree` + question | `list[RetrievalEvidence]` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
 | News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](../contexts/design/flow/news.md) |
 | Bounded fan-out | `quantmind.flows.batch_run` | Operation inputs and shared config | `BatchResult` | [README usage](../README.md#-usage-examples) | API docstrings |
 | Local semantic search | `quantmind.library.LocalKnowledgeLibrary` | `BaseKnowledge` or `PaperFlowResult`, `SemanticQuery` | `list[SemanticHit]` | [Library example](../examples/library/README.md) | [Library guide](library.md) |
 | Page-aware document RAG | `quantmind.rag.chunk_parsed_document`, `quantmind.rag.retrieve_parsed_document` | `ParsedDocument`, splitter config, and query | `tuple[ParsedDocumentHit, ...]` | [Paper RAG](../examples/rag/paper.py) | [Document RAG design](../contexts/design/rag/document.md) |
 
-Import public inputs and configs from `quantmind.configs` and current public
-operations from `quantmind.flows`. Import result contracts from the canonical
-layer shown in the catalog.
+Import public inputs and configs from `quantmind.configs`, flow operations and
+builders from `quantmind.flows`, and cognitive services from `quantmind.mind`.
+Import result contracts from the canonical layer shown in the catalog.
 
 ## Public-Network Sources
 

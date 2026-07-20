@@ -4,36 +4,39 @@ import asyncio
 import sys
 from pathlib import Path
 
-from quantmind.configs import PaperFlowCfg, RetrievalCfg
+from quantmind.configs import PaperFlowCfg, PaperStructureCfg, RetrievalCfg
 from quantmind.configs.paper import LocalFilePath
-from quantmind.flows import build_paper_structure_tree, paper_flow
+from quantmind.flows import PaperStructureBuilder, paper_flow
 from quantmind.library import LocalKnowledgeLibrary
-from quantmind.mind import retrieve
-from quantmind.preprocess import parse_pdf
+from quantmind.mind import StructureRetriever
 
 
 async def main(pdf_path: Path) -> None:
     """Run the common vectorless retrieval path for one local PDF."""
-    cfg = PaperFlowCfg(model="gpt-4o-mini")
-    document = await parse_pdf(pdf_path.read_bytes())
-    paper = await paper_flow(LocalFilePath(path=pdf_path), cfg=cfg)
-    structure = await build_paper_structure_tree(
-        document,
-        paper.chunk_set,
-        cfg=cfg,
+    paper = await paper_flow(
+        LocalFilePath(path=pdf_path),
+        cfg=PaperFlowCfg(model="gpt-4o-mini"),
     )
+    # Structure construction consumes only the exact source revision; paper
+    # chunk and summary artifacts do not affect tree identity or content.
+    builder = PaperStructureBuilder(PaperStructureCfg(model="gpt-4o-mini"))
+    structure = await builder.build(paper.source_revision)
     library = await LocalKnowledgeLibrary.open(
         ":memory:",
         embedding_model="text-embedding-3-small",
     )
     try:
-        await library.put_paper(paper)
-        await library.put_paper_structure_tree(structure)
-        evidence = await retrieve(
+        await library.put_paper_structure_tree(
+            paper.source_revision,
             structure,
-            "What are the main method and limitations?",
+        )
+        retriever = StructureRetriever(
             library=library,
             cfg=RetrievalCfg(model="gpt-4o-mini", grain="agentic"),
+        )
+        evidence = await retriever.retrieve(
+            structure,
+            "What are the main method and limitations?",
         )
         for item in evidence:
             pages = sorted(

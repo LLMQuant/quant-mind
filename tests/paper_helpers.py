@@ -140,10 +140,10 @@ def build_paper_structure_tree(
     producer = PaperStructureProducer(
         model=model,
         prompt_version="test-v1",
-        input_chunk_set_id=result.chunk_set.id,
         instructions_hash=hashlib.sha256(
             b"test structure instructions"
         ).hexdigest(),
+        page_text_chars=1_200,
         max_output_tokens=512,
         max_depth=4,
         max_nodes=16,
@@ -153,23 +153,26 @@ def build_paper_structure_tree(
         root=PaperStructureNodeDraft(
             title="Attention Is All You Need",
             summary="The complete paper structure.",
-            chunk_indices=(0, 1, 2),
+            start_page=1,
+            end_page=2,
             children=(
                 PaperStructureNodeDraft(
                     title="Architecture",
                     summary="The recurrence-free architecture.",
-                    chunk_indices=(0,),
+                    start_page=1,
+                    end_page=1,
                 ),
                 PaperStructureNodeDraft(
                     title="Attention and results",
                     summary="Multi-head attention and reported results.",
-                    chunk_indices=(1, 2),
+                    start_page=2,
+                    end_page=2,
                 ),
             ),
         ),
     )
     return PaperStructureTree.from_draft(
-        result.chunk_set,
+        result.source_revision,
         producer=producer,
         draft=draft,
     )

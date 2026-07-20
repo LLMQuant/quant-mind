@@ -1,4 +1,4 @@
-"""Single-pass draft structuring for a paper chunk set."""
+"""Single-pass draft structuring for an exact paper source revision."""
 
 import asyncio
 import hashlib
@@ -8,16 +8,16 @@ from typing import Any, Protocol
 
 from agents import Agent, ModelSettings
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperStructureCfg
 from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import PaperChunkSet, PaperStructureTreeDraft
+from quantmind.knowledge import PaperSourceRevision, PaperStructureTreeDraft
 from quantmind.preprocess import OutlineSignals
 
 _STRUCTURE_INSTRUCTIONS = """\
 Act as a paper structure specialist. Return one hierarchy draft and a quality
-rating. Use only the supplied outline signals and ordered chunk summaries.
-Every node must name one or more zero-based chunk indices; a parent must include
-all physical pages included by its children. The root must cover every chunk.
+rating. Use only the supplied outline signals and ordered physical-page text.
+Every node must name one inclusive physical-page span; a parent must include
+all physical pages included by its children. The root must cover every page.
 Use titles and concise summaries for reasoning. Do not invent UUIDs, parent
 links, citations, source text, or canonical identity. If the evidence does not
 support a reliable hierarchy, set quality to low so code can build a safe flat
@@ -35,30 +35,31 @@ class _PaperStructureProvider(Protocol):
     async def structure(
         self,
         signals: OutlineSignals,
-        chunk_set: PaperChunkSet,
+        source: PaperSourceRevision,
         *,
-        cfg: PaperFlowCfg,
+        cfg: PaperStructureCfg,
     ) -> PaperStructureTreeDraft:
         """Create one bounded hierarchy draft without canonical identity."""
         ...
 
 
-def _structure_instructions(cfg: PaperFlowCfg) -> str:
-    if cfg.structure_instructions is None:
+def _structure_instructions(cfg: PaperStructureCfg) -> str:
+    if cfg.instructions is None:
         return _STRUCTURE_INSTRUCTIONS
     return (
         f"{_STRUCTURE_INSTRUCTIONS}\n\nAdditional structure requirements:\n"
-        f"{cfg.structure_instructions}"
+        f"{cfg.instructions}"
     )
 
 
-def _structure_instructions_hash(cfg: PaperFlowCfg) -> str:
+def _structure_instructions_hash(cfg: PaperStructureCfg) -> str:
     payload = json.dumps(
         {
             "instructions": _structure_instructions(cfg),
-            "max_depth": cfg.structure_max_depth,
-            "max_nodes": cfg.structure_max_nodes,
-            "max_output_tokens": cfg.max_structure_output_tokens,
+            "max_depth": cfg.max_depth,
+            "max_nodes": cfg.max_nodes,
+            "max_output_tokens": cfg.max_output_tokens,
+            "page_text_chars": cfg.page_text_chars,
             "orchestration": "single-pass-v1",
         },
         ensure_ascii=False,
@@ -68,19 +69,19 @@ def _structure_instructions_hash(cfg: PaperFlowCfg) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _structure_model_settings(cfg: PaperFlowCfg) -> ModelSettings:
+def _structure_model_settings(cfg: PaperStructureCfg) -> ModelSettings:
     settings = cfg.model_settings or ModelSettings()
-    configured = settings.max_tokens or cfg.max_structure_output_tokens
+    configured = settings.max_tokens or cfg.max_output_tokens
     return replace(
         settings,
-        max_tokens=min(configured, cfg.max_structure_output_tokens),
+        max_tokens=min(configured, cfg.max_output_tokens),
     )
 
 
 def _structure_payload(
     signals: OutlineSignals,
-    chunk_set: PaperChunkSet,
-    cfg: PaperFlowCfg,
+    source: PaperSourceRevision,
+    cfg: PaperStructureCfg,
 ) -> str:
     return json.dumps(
         {
@@ -96,15 +97,12 @@ def _structure_payload(
                     for heading in signals.headings
                 ],
             },
-            "chunks": [
+            "pages": [
                 {
-                    "chunk_index": chunk.position,
-                    "pages": sorted(
-                        {span.page_number for span in chunk.source_spans}
-                    ),
-                    "summary": chunk.text[: cfg.structure_chunk_summary_chars],
+                    "page_number": page.page_number,
+                    "text": page.text[: cfg.page_text_chars],
                 }
-                for chunk in chunk_set.chunks
+                for page in source.parsed.pages
             ],
         },
         ensure_ascii=False,
@@ -117,9 +115,9 @@ class _AgentsPaperStructureProvider:
     async def structure(
         self,
         signals: OutlineSignals,
-        chunk_set: PaperChunkSet,
+        source: PaperSourceRevision,
         *,
-        cfg: PaperFlowCfg,
+        cfg: PaperStructureCfg,
     ) -> PaperStructureTreeDraft:
         agent: Agent[Any] = Agent(
             name="paper_structure_builder",
@@ -132,7 +130,7 @@ class _AgentsPaperStructureProvider:
             output = await asyncio.wait_for(
                 run_with_observability(
                     agent,
-                    _structure_payload(signals, chunk_set, cfg),
+                    _structure_payload(signals, source, cfg),
                     cfg=cfg,
                     memory=None,
                     extra_run_hooks=[],

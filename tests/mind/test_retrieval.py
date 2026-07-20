@@ -17,7 +17,7 @@ from quantmind.knowledge import (
     StructureTree,
 )
 from quantmind.library import LocalKnowledgeLibrary
-from quantmind.mind import RetrievalError, retrieve
+from quantmind.mind import RetrievalError, StructureRetriever
 from quantmind.mind.retrieval import _serialize_structure
 from tests.paper_helpers import build_paper_result, build_paper_structure_tree
 
@@ -50,8 +50,14 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             embedding_dimensions=2,
             _embedding_provider=_FakeEmbeddingProvider(),
         )
-        await self.library.put_paper(self.result)
-        await self.library.put_paper_structure_tree(self.tree)
+        await self.library.put_paper_structure_tree(
+            self.result.source_revision,
+            self.tree,
+        )
+        self.retriever = StructureRetriever(
+            library=self.library,
+            cfg=RetrievalCfg(),
+        )
         self.node = next(
             value
             for value in self.tree.nodes.values()
@@ -72,18 +78,22 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         cfg = RetrievalCfg(model="litellm/anthropic/test-model")
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await retrieve(
-                self.tree,
-                "How does multi-head attention work?",
+            evidence = await StructureRetriever(
                 library=self.library,
                 cfg=cfg,
+            ).retrieve(
+                self.tree,
+                "How does multi-head attention work?",
             )
 
         run_mock.assert_awaited_once()
-        agent = run_mock.await_args.args[0]
+        call = run_mock.await_args
+        self.assertIsNotNone(call)
+        assert call is not None
+        agent = call.args[0]
         self.assertEqual(agent.model, cfg.model)
-        self.assertEqual(run_mock.await_args.kwargs["max_turns"], 1)
-        model_input = run_mock.await_args.args[1]
+        self.assertEqual(call.kwargs["max_turns"], 1)
+        model_input = call.args[1]
         self.assertNotIn(self.result.chunk_set.chunks[1].text, model_input)
         self.assertEqual(len(evidence), 1)
         self.assertEqual(evidence[0].locator.member_id, self.node.node_id)
@@ -113,19 +123,23 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         cfg = RetrievalCfg(grain="agentic", max_turns=6)
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await retrieve(
-                self.tree,
-                "Find the attention evidence.",
+            evidence = await StructureRetriever(
                 library=self.library,
                 cfg=cfg,
+            ).retrieve(
+                self.tree,
+                "Find the attention evidence.",
             )
 
-        agent = run_mock.await_args.args[0]
+        call = run_mock.await_args
+        self.assertIsNotNone(call)
+        assert call is not None
+        agent = call.args[0]
         self.assertEqual(
             {tool.name for tool in agent.tools},
             {"get_document_structure", "get_node_content"},
         )
-        self.assertEqual(run_mock.await_args.kwargs["max_turns"], 6)
+        self.assertEqual(call.kwargs["max_turns"], 6)
         self.assertEqual(evidence[0].locator.member_id, self.node.node_id)
 
     async def test_matching_seed_is_forwarded_but_mismatch_is_rejected(
@@ -143,14 +157,15 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            await retrieve(
+            await self.retriever.retrieve(
                 self.tree,
                 "Find attention.",
-                library=self.library,
-                cfg=RetrievalCfg(),
                 seed_locators=[seed],
             )
-        payload = json.loads(run_mock.await_args.args[1])
+        call = run_mock.await_args
+        self.assertIsNotNone(call)
+        assert call is not None
+        payload = json.loads(call.args[1])
         self.assertEqual(payload["seed_node_ids"], [str(self.node.node_id)])
 
         mismatched = seed.model_copy(update={"artifact_id": uuid4()})
@@ -159,14 +174,51 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(),
         ) as rejected_run:
             with self.assertRaisesRegex(ValueError, "selected structure tree"):
-                await retrieve(
+                await self.retriever.retrieve(
                     self.tree,
                     "Find attention.",
-                    library=self.library,
-                    cfg=RetrievalCfg(),
                     seed_locators=[mismatched],
                 )
         rejected_run.assert_not_awaited()
+
+    async def test_instance_is_reusable_across_distinct_trees(self) -> None:
+        other_tree = build_paper_structure_tree(model="other-structure")
+        await self.library.put_paper_structure_tree(
+            self.result.source_revision,
+            other_tree,
+        )
+        other_node = next(
+            value
+            for value in other_tree.nodes.values()
+            if value.title == "Attention and results"
+        )
+        run_mock = AsyncMock(
+            side_effect=(
+                SimpleNamespace(
+                    final_output={"node_ids": [str(self.node.node_id)]}
+                ),
+                SimpleNamespace(
+                    final_output={"node_ids": [str(other_node.node_id)]}
+                ),
+            )
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            first = await self.retriever.retrieve(
+                self.tree,
+                "Find attention in the first structure.",
+            )
+            second = await self.retriever.retrieve(
+                other_tree,
+                "Find attention in the second structure.",
+            )
+
+        self.assertEqual(run_mock.await_count, 2)
+        self.assertEqual(first[0].locator.artifact_id, self.tree.id)
+        self.assertEqual(first[0].locator.member_id, self.node.node_id)
+        self.assertEqual(second[0].locator.artifact_id, other_tree.id)
+        self.assertEqual(second[0].locator.member_id, other_node.node_id)
+        self.assertNotEqual(first[0].locator, second[0].locator)
 
     async def test_unknown_selection_and_evidence_bound_are_rejected(
         self,
@@ -180,11 +232,9 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             with self.assertRaisesRegex(ValueError, "unknown structure node"):
-                await retrieve(
+                await self.retriever.retrieve(
                     self.tree,
                     "Find attention.",
-                    library=self.library,
-                    cfg=RetrievalCfg(),
                 )
 
         child_ids = [node.node_id for node in self.tree.walk_dfs()]
@@ -202,22 +252,21 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
                 RetrievalError,
                 "max_evidence_nodes",
             ):
-                await retrieve(
-                    self.tree,
-                    "Find all evidence.",
+                await StructureRetriever(
                     library=self.library,
                     cfg=RetrievalCfg(max_evidence_nodes=1),
+                ).retrieve(
+                    self.tree,
+                    "Find all evidence.",
                 )
 
     async def test_blank_question_unbound_base_and_timeout_fail_closed(
         self,
     ) -> None:
         with self.assertRaisesRegex(ValueError, "must not be blank"):
-            await retrieve(
+            await self.retriever.retrieve(
                 self.tree,
                 "   ",
-                library=self.library,
-                cfg=RetrievalCfg(),
             )
 
         unbound = StructureTree(
@@ -225,11 +274,9 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             nodes=self.tree.nodes,
         )
         with self.assertRaisesRegex(TypeError, "must expose"):
-            await retrieve(
+            await self.retriever.retrieve(
                 unbound,
                 "Find attention.",
-                library=self.library,
-                cfg=RetrievalCfg(),
             )
 
         async def slow_run(*args, **kwargs):
@@ -241,11 +288,12 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(side_effect=slow_run),
         ):
             with self.assertRaisesRegex(RetrievalError, "timeout_seconds"):
-                await retrieve(
-                    self.tree,
-                    "Find attention.",
+                await StructureRetriever(
                     library=self.library,
                     cfg=RetrievalCfg(timeout_seconds=0.01),
+                ).retrieve(
+                    self.tree,
+                    "Find attention.",
                 )
 
     def test_structure_serialization_is_bounded_and_strips_content(

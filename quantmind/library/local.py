@@ -233,14 +233,15 @@ class LocalKnowledgeLibrary:
 
     async def put_paper_structure_tree(
         self,
+        source: PaperSourceRevision,
         tree: PaperStructureTree,
     ) -> None:
-        """Persist a validated paper structure tree without embeddings."""
+        """Persist an exact source and its structure tree without embeddings."""
         async with self._lock:
             store = self._store
             if store is None:
                 raise RuntimeError("LocalKnowledgeLibrary is closed")
-            prepared = store.prepare_put_paper_structure_tree(tree)
+            prepared = store.prepare_put_paper_structure_tree(source, tree)
             store.put_paper_structure_tree(prepared)
             self._index = None
 

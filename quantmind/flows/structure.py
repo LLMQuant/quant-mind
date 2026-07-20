@@ -1,6 +1,6 @@
 """Build page-preserving paper structure artifacts."""
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperStructureCfg
 from quantmind.flows._paper_structure import (
     PaperStructureError,
     _AgentsPaperStructureProvider,
@@ -8,60 +8,109 @@ from quantmind.flows._paper_structure import (
     _structure_instructions_hash,
 )
 from quantmind.knowledge import (
-    PaperChunkSet,
+    PaperSourceRevision,
     PaperStructureProducer,
     PaperStructureTree,
 )
-from quantmind.preprocess import ParsedDocument, extract_outline_signals
+from quantmind.preprocess import (
+    BoundingBox,
+    ParsedDocument,
+    ParsedPage,
+    TextBlock,
+    extract_outline_signals,
+)
 
-__all__ = ["PaperStructureError", "build_paper_structure_tree"]
+__all__ = ["PaperStructureBuilder", "PaperStructureError"]
 
 
-async def build_paper_structure_tree(
-    document: ParsedDocument,
-    chunk_set: PaperChunkSet,
-    *,
-    cfg: PaperFlowCfg | None = None,
-    _structure_provider: _PaperStructureProvider | None = None,
-) -> PaperStructureTree:
-    """Build one independently versioned structure tree without persisting it.
+class PaperStructureBuilder:
+    """Reuse one source-native paper structuring policy across documents.
 
-    Args:
-        document: Page-aware deterministic parser result for the paper.
-        chunk_set: Canonical ordered chunks derived from the same source.
-        cfg: Model, prompt, runtime, and tree-size bounds.
-
-    Returns:
-        A code-identified and validated paper structure-tree artifact.
-
-    Raises:
-        ValueError: If a chunk cites a physical page absent from the document.
-        PaperStructureError: If the single model call exceeds its timeout.
+    The builder owns only reusable model and provider policy. Each ``build``
+    call receives an exact source revision and returns an immutable artifact;
+    the builder never retains a current source or tree.
     """
-    cfg = cfg or PaperFlowCfg()
-    physical_pages = {page.page_number for page in document.pages}
-    if any(
-        span.page_number not in physical_pages
-        for chunk in chunk_set.chunks
-        for span in chunk.source_spans
-    ):
-        raise ValueError(
-            "paper chunk set cites a page absent from the document"
+
+    __slots__ = ("_cfg", "_provider")
+
+    def __init__(
+        self,
+        cfg: PaperStructureCfg | None = None,
+        *,
+        _structure_provider: _PaperStructureProvider | None = None,
+    ) -> None:
+        self._cfg = (
+            cfg.model_copy(deep=True)
+            if cfg is not None
+            else PaperStructureCfg()
         )
-    signals = extract_outline_signals(document)
-    provider = _structure_provider or _AgentsPaperStructureProvider()
-    draft = await provider.structure(signals, chunk_set, cfg=cfg)
-    producer = PaperStructureProducer(
-        model=cfg.model,
-        prompt_version=cfg.structure_prompt_version,
-        input_chunk_set_id=chunk_set.id,
-        instructions_hash=_structure_instructions_hash(cfg),
-        max_output_tokens=cfg.max_structure_output_tokens,
-        max_depth=cfg.structure_max_depth,
-        max_nodes=cfg.structure_max_nodes,
-    )
-    return PaperStructureTree.from_draft(
-        chunk_set,
-        producer=producer,
-        draft=draft,
+        self._provider = _structure_provider or _AgentsPaperStructureProvider()
+
+    async def build(self, source: PaperSourceRevision) -> PaperStructureTree:
+        """Build one validated structure tree from an exact source revision.
+
+        Args:
+            source: Immutable page-preserving paper source revision.
+
+        Returns:
+            A code-identified tree whose nodes cite physical source pages.
+
+        Raises:
+            PaperStructureError: If the model call exceeds its timeout.
+            StructureTreeValidationError: If the proposed page tree is invalid.
+        """
+        signals = extract_outline_signals(_parsed_document(source))
+        draft = await self._provider.structure(
+            signals,
+            source,
+            cfg=self._cfg,
+        )
+        producer = PaperStructureProducer(
+            model=self._cfg.model,
+            prompt_version=self._cfg.prompt_version,
+            instructions_hash=_structure_instructions_hash(self._cfg),
+            page_text_chars=self._cfg.page_text_chars,
+            max_output_tokens=self._cfg.max_output_tokens,
+            max_depth=self._cfg.max_depth,
+            max_nodes=self._cfg.max_nodes,
+        )
+        return PaperStructureTree.from_draft(
+            source,
+            producer=producer,
+            draft=draft,
+        )
+
+
+def _parsed_document(source: PaperSourceRevision) -> ParsedDocument:
+    """Project a canonical source manifest into outline extraction input."""
+    return ParsedDocument(
+        source_hash=source.parsed.source_hash,
+        parser_name=source.parsed.parser_name,
+        parser_version=source.parsed.parser_version,
+        cleanup_version=source.parsed.cleanup_version,
+        pages=tuple(
+            ParsedPage(
+                page_number=page.page_number,
+                width=page.width,
+                height=page.height,
+                text=page.text,
+                blocks=tuple(
+                    TextBlock(
+                        text=block.text,
+                        page_number=page.page_number,
+                        bbox=BoundingBox(
+                            x0=block.bbox.x0,
+                            y0=block.bbox.y0,
+                            x1=block.bbox.x1,
+                            y1=block.bbox.y1,
+                        ),
+                        font_name=block.font_name,
+                        font_size=block.font_size,
+                        confidence=block.confidence,
+                    )
+                    for block in page.blocks
+                ),
+            )
+            for page in source.parsed.pages
+        ),
     )

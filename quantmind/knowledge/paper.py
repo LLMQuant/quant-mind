@@ -676,7 +676,8 @@ class PaperStructureNodeDraft(BaseModel):
 
     title: str = Field(min_length=1)
     summary: str = Field(min_length=1)
-    chunk_indices: tuple[int, ...] = Field(min_length=1)
+    start_page: int = Field(ge=1)
+    end_page: int = Field(ge=1)
     children: tuple["PaperStructureNodeDraft", ...] = ()
 
     @field_validator("title", "summary")
@@ -686,6 +687,12 @@ class PaperStructureNodeDraft(BaseModel):
         if not stripped:
             raise ValueError("paper structure draft text must not be blank")
         return stripped
+
+    @model_validator(mode="after")
+    def _page_span_is_ordered(self) -> "PaperStructureNodeDraft":
+        if self.end_page < self.start_page:
+            raise ValueError("paper structure draft page span must be ordered")
+        return self
 
 
 class PaperStructureTreeDraft(BaseModel):
@@ -698,15 +705,15 @@ class PaperStructureTreeDraft(BaseModel):
 
 
 class PaperStructureProducer(BaseModel):
-    """Exact model, prompt, input, and bounds used to structure a paper."""
+    """Exact model, prompt, page-input, and bounds used to structure a paper."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str
     prompt_version: str
     orchestration: Literal["single-pass-v1"] = "single-pass-v1"
-    input_chunk_set_id: UUID
     instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    page_text_chars: int = Field(ge=80)
     max_output_tokens: int = Field(gt=0)
     max_depth: int = Field(ge=1)
     max_nodes: int = Field(ge=1)
@@ -741,7 +748,7 @@ def _paper_structure_content_hash(
 
 
 class PaperStructureTree(StructureTree):
-    """Page-preserving structure derived from one exact paper chunk set."""
+    """Page-preserving structure derived from one exact source revision."""
 
     id: UUID
     artifact_kind: Literal[PaperArtifactKind.STRUCTURE_TREE] = (
@@ -752,7 +759,6 @@ class PaperStructureTree(StructureTree):
     producer: PaperStructureProducer
     producer_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    derived_from: tuple[ArtifactLocator, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_artifact(self) -> "PaperStructureTree":
@@ -779,51 +785,31 @@ class PaperStructureTree(StructureTree):
             raise ValueError("paper structure-tree nodes must not copy content")
         if any(not node.citations for node in self.nodes.values()):
             raise ValueError("paper structure-tree nodes require citations")
-        if any(
-            locator.source_revision_id != self.source_revision_id
-            or locator.member_id is not None
-            for locator in self.derived_from
-        ):
-            raise ValueError(
-                "paper structure-tree lineage has an invalid locator"
-            )
-        if not any(
-            locator.artifact_kind == PaperArtifactKind.CHUNK_SET
-            and locator.artifact_id == self.producer.input_chunk_set_id
-            for locator in self.derived_from
-        ):
-            raise ValueError(
-                "paper structure-tree producer input is missing from lineage"
-            )
         self.validate()
         return self
 
     @classmethod
     def from_draft(
         cls,
-        chunk_set: PaperChunkSet,
+        source: PaperSourceRevision,
         *,
         producer: PaperStructureProducer,
         draft: PaperStructureTreeDraft,
     ) -> "PaperStructureTree":
-        """Mint canonical identity, links, and citations from a model draft.
+        """Mint canonical identity, links, and page citations from a draft.
 
-        A low-quality draft is replaced with a deterministic flat tree over
-        the ordered chunks. Otherwise draft positions and chunk coordinates are
-        retained, while every UUID, link, and citation is owned by code.
+        A low-quality draft is replaced with a bounded, deterministic flat tree
+        over physical source pages. Otherwise draft positions and page spans
+        are retained, while every UUID, link, and citation is owned by code.
         """
-        if producer.input_chunk_set_id != chunk_set.id:
-            raise ValueError(
-                "structure-tree producer input does not match chunk set"
-            )
         producer_hash = _stable_hash(producer.model_dump(mode="json"))
         artifact_id = _paper_artifact_id(
-            chunk_set.source_revision_id,
+            source.id,
             PaperArtifactKind.STRUCTURE_TREE,
             producer_hash,
         )
         root_draft = (
-            cls._flat_fallback(chunk_set, draft.root)
+            cls._flat_fallback(source, draft.root, max_nodes=producer.max_nodes)
             if draft.quality == "low"
             else draft.root
         )
@@ -863,10 +849,7 @@ class PaperStructureTree(StructureTree):
                 )
                 for child_position, child in enumerate(value.children)
             ]
-            citations = cls._resolve_structure_citations(
-                chunk_set,
-                value.chunk_indices,
-            )
+            citations = cls._resolve_structure_citations(source, value)
             nodes[node_id] = TreeNode(
                 node_id=node_id,
                 parent_id=parent_id,
@@ -888,119 +871,94 @@ class PaperStructureTree(StructureTree):
         )
         tree = cls(
             id=artifact_id,
-            source_revision_id=chunk_set.source_revision_id,
+            source_revision_id=source.id,
             producer=producer,
             producer_config_hash=producer_hash,
             content_hash=_paper_structure_content_hash(root_node_id, nodes),
-            derived_from=(
-                ArtifactLocator(
-                    source_revision_id=chunk_set.source_revision_id,
-                    artifact_id=chunk_set.id,
-                    artifact_kind=PaperArtifactKind.CHUNK_SET,
-                ),
-            ),
             root_node_id=root_node_id,
             nodes=nodes,
         )
-        tree.validate(
-            source_pages={
-                span.page_number
-                for chunk in chunk_set.chunks
-                for span in chunk.source_spans
-            }
-        )
+        _validate_structure_tree_source(tree, source)
         return tree
 
     @staticmethod
     def _resolve_structure_citations(
-        chunk_set: PaperChunkSet,
-        chunk_indices: Sequence[int],
+        source: PaperSourceRevision,
+        draft: PaperStructureNodeDraft,
     ) -> list[Citation]:
-        citations: list[Citation] = []
-        seen: set[tuple[UUID, int]] = set()
-        for index in chunk_indices:
-            if index < 0 or index >= len(chunk_set.chunks):
-                raise StructureTreeValidationError(
-                    "paper structure draft cites an unknown chunk index"
-                )
-            chunk = chunk_set.chunks[index]
-            for page in sorted(
-                {span.page_number for span in chunk.source_spans}
-            ):
-                key = (chunk.chunk_id, page)
-                if key in seen:
-                    continue
-                seen.add(key)
-                citations.append(
-                    Citation(
-                        source_id=str(chunk_set.source_revision_id),
-                        page=page,
-                        tree_id=chunk_set.id,
-                        node_id=chunk.chunk_id,
-                    )
-                )
-        return citations
+        source_pages = {page.page_number for page in source.parsed.pages}
+        pages = set(range(draft.start_page, draft.end_page + 1))
+        if not pages.issubset(source_pages):
+            raise StructureTreeValidationError(
+                "paper structure draft cites a page outside its source"
+            )
+        return [
+            Citation(source_id=str(source.id), page=page)
+            for page in sorted(pages)
+        ]
 
     @staticmethod
     def _flat_fallback(
-        chunk_set: PaperChunkSet,
+        source: PaperSourceRevision,
         proposed_root: PaperStructureNodeDraft,
+        *,
+        max_nodes: int,
     ) -> PaperStructureNodeDraft:
+        pages = tuple(page.page_number for page in source.parsed.pages)
+        leaf_count = min(len(pages), max(0, max_nodes - 1))
+        leaves: list[PaperStructureNodeDraft] = []
+        if leaf_count:
+            group_size = (len(pages) + leaf_count - 1) // leaf_count
+            for offset in range(0, len(pages), group_size):
+                group = pages[offset : offset + group_size]
+                leaves.append(
+                    PaperStructureNodeDraft(
+                        title=(
+                            f"Page {group[0]}"
+                            if len(group) == 1
+                            else f"Pages {group[0]}-{group[-1]}"
+                        ),
+                        summary="Source pages retained in canonical storage.",
+                        start_page=group[0],
+                        end_page=group[-1],
+                    )
+                )
         return PaperStructureNodeDraft(
             title=proposed_root.title,
             summary=(
                 "Flat source-order structure used because hierarchy quality "
                 "was low."
             ),
-            chunk_indices=tuple(range(len(chunk_set.chunks))),
-            children=tuple(
-                PaperStructureNodeDraft(
-                    title=(
-                        f"Page {chunk.source_spans[0].page_number}, "
-                        f"chunk {chunk.position + 1}"
-                    ),
-                    summary="Source content retained in canonical chunk storage.",
-                    chunk_indices=(chunk.position,),
-                )
-                for chunk in chunk_set.chunks
-            ),
+            start_page=pages[0],
+            end_page=pages[-1],
+            children=tuple(leaves),
         )
 
 
-def _validate_structure_tree_chunk_set(
+def _validate_structure_tree_source(
     tree: PaperStructureTree,
-    chunk_set: PaperChunkSet,
+    source: PaperSourceRevision,
 ) -> None:
-    """Validate tree citations and lineage against an exact chunk set."""
-    if (
-        tree.source_revision_id != chunk_set.source_revision_id
-        or tree.producer.input_chunk_set_id != chunk_set.id
-    ):
-        raise ValueError("paper structure tree belongs to another chunk set")
-    chunks = {chunk.chunk_id: chunk for chunk in chunk_set.chunks}
-    source_pages = {
-        span.page_number
-        for chunk in chunk_set.chunks
-        for span in chunk.source_spans
-    }
+    """Validate every tree page citation against its exact source revision."""
+    if tree.source_revision_id != source.id:
+        raise ValueError("paper structure tree belongs to another source")
+    source_pages = {page.page_number for page in source.parsed.pages}
     tree.validate(source_pages=source_pages)
     for node in tree.nodes.values():
         for citation in node.citations:
-            if citation.node_id is None or citation.page is None:
-                raise ValueError(
-                    "paper structure-tree citation is missing chunk coordinates"
-                )
-            chunk = chunks.get(citation.node_id)
             if (
-                citation.source_id != str(chunk_set.source_revision_id)
-                or citation.tree_id != chunk_set.id
-                or chunk is None
-                or citation.page
-                not in {span.page_number for span in chunk.source_spans}
+                citation.source_id != str(source.id)
+                or citation.page not in source_pages
+                or citation.tree_id is not None
+                or citation.node_id is not None
             ):
                 raise ValueError(
-                    "paper structure-tree citation does not resolve to its chunk"
+                    "paper structure-tree citation does not resolve to its source"
                 )
+    if {citation.page for citation in tree.root().citations} != source_pages:
+        raise ValueError(
+            "paper structure-tree root must cover every source page"
+        )
 
 
 class PaperCitation(BaseModel):

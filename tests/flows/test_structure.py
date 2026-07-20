@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 from agents import ModelSettings
 
-from quantmind.configs import PaperFlowCfg
-from quantmind.flows import build_paper_structure_tree
+from quantmind.configs import PaperStructureCfg
+from quantmind.flows import PaperStructureBuilder
 from quantmind.flows._paper_structure import (
     PaperStructureError,
     _AgentsPaperStructureProvider,
@@ -17,28 +17,8 @@ from quantmind.knowledge import (
     PaperStructureNodeDraft,
     PaperStructureTreeDraft,
 )
-from quantmind.preprocess import OutlineSignals, ParsedDocument, ParsedPage
+from quantmind.preprocess import OutlineSignals
 from tests.paper_helpers import build_paper_result
-
-
-def _document() -> ParsedDocument:
-    result = build_paper_result()
-    return ParsedDocument(
-        source_hash=result.source_revision.parsed.source_hash,
-        parser_name="fixture",
-        parser_version="1",
-        cleanup_version="1",
-        pages=tuple(
-            ParsedPage(
-                page_number=page.page_number,
-                width=page.width,
-                height=page.height,
-                text=page.text,
-                blocks=(),
-            )
-            for page in result.source_revision.parsed.pages
-        ),
-    )
 
 
 def _draft() -> PaperStructureTreeDraft:
@@ -46,17 +26,20 @@ def _draft() -> PaperStructureTreeDraft:
         root=PaperStructureNodeDraft(
             title="Attention Is All You Need",
             summary="The complete paper.",
-            chunk_indices=(0, 1, 2),
+            start_page=1,
+            end_page=2,
             children=(
                 PaperStructureNodeDraft(
                     title="Architecture",
                     summary="The architecture.",
-                    chunk_indices=(0,),
+                    start_page=1,
+                    end_page=1,
                 ),
                 PaperStructureNodeDraft(
                     title="Attention and results",
                     summary="The attention mechanism and results.",
-                    chunk_indices=(1, 2),
+                    start_page=2,
+                    end_page=2,
                 ),
             ),
         )
@@ -75,8 +58,8 @@ class _FakeStructureProvider:
     def __init__(self) -> None:
         self.calls = []
 
-    async def structure(self, signals, chunk_set, *, cfg):
-        self.calls.append((signals, chunk_set, cfg))
+    async def structure(self, signals, source, *, cfg):
+        self.calls.append((signals, source, cfg))
         return _draft()
 
 
@@ -84,47 +67,56 @@ class PaperStructureBuildTests(unittest.IsolatedAsyncioTestCase):
     async def test_build_uses_one_draft_and_keeps_model_identity(self) -> None:
         result = build_paper_result()
         provider = _FakeStructureProvider()
-        cfg = PaperFlowCfg(model="litellm/anthropic/claude-test")
+        cfg = PaperStructureCfg(model="litellm/anthropic/claude-test")
 
-        tree = await build_paper_structure_tree(
-            _document(),
-            result.chunk_set,
-            cfg=cfg,
+        tree = await PaperStructureBuilder(
+            cfg,
             _structure_provider=provider,
-        )
+        ).build(result.source_revision)
 
         self.assertEqual(len(provider.calls), 1)
-        self.assertIs(provider.calls[0][1], result.chunk_set)
+        self.assertIs(provider.calls[0][1], result.source_revision)
         self.assertEqual(tree.producer.model, cfg.model)
-        self.assertEqual(tree.producer.input_chunk_set_id, result.chunk_set.id)
+        self.assertEqual(tree.source_revision_id, result.source_revision.id)
         self.assertEqual(len(tree.nodes), 3)
         self.assertTrue(
             all(node.content is None for node in tree.nodes.values())
         )
 
-    async def test_chunk_page_absent_from_document_is_rejected(self) -> None:
-        result = build_paper_result()
-        one_page = _document()
-        one_page = ParsedDocument(
-            source_hash=one_page.source_hash,
-            parser_name=one_page.parser_name,
-            parser_version=one_page.parser_version,
-            cleanup_version=one_page.cleanup_version,
-            pages=one_page.pages[:1],
+    async def test_tree_identity_is_independent_of_chunk_configuration(
+        self,
+    ) -> None:
+        first = build_paper_result(chunk_size=64)
+        second = build_paper_result(chunk_size=256)
+        builder = PaperStructureBuilder(
+            _structure_provider=_FakeStructureProvider()
         )
 
-        with self.assertRaisesRegex(ValueError, "absent from the document"):
-            await build_paper_structure_tree(
-                one_page,
-                result.chunk_set,
-                _structure_provider=_FakeStructureProvider(),
-            )
+        first_tree = await builder.build(first.source_revision)
+        second_tree = await builder.build(second.source_revision)
+
+        self.assertNotEqual(first.chunk_set.id, second.chunk_set.id)
+        self.assertEqual(first_tree.id, second_tree.id)
+        self.assertEqual(first_tree.nodes, second_tree.nodes)
+
+    async def test_builder_copies_reusable_configuration(self) -> None:
+        result = build_paper_result()
+        cfg = PaperStructureCfg(model="stable-model")
+        builder = PaperStructureBuilder(
+            cfg,
+            _structure_provider=_FakeStructureProvider(),
+        )
+        cfg.model = "mutated-model"
+
+        tree = await builder.build(result.source_revision)
+
+        self.assertEqual(tree.producer.model, "stable-model")
 
 
 class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
     async def test_provider_runs_one_structured_output_agent(self) -> None:
         result = build_paper_result()
-        cfg = PaperFlowCfg(model="litellm/openrouter/test-model")
+        cfg = PaperStructureCfg(model="litellm/openrouter/test-model")
         run_mock = AsyncMock(return_value=_draft())
         with patch(
             "quantmind.flows._paper_structure.run_with_observability",
@@ -132,7 +124,7 @@ class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
         ):
             draft = await _AgentsPaperStructureProvider().structure(
                 signals=_empty_signals(),
-                chunk_set=result.chunk_set,
+                source=result.source_revision,
                 cfg=cfg,
             )
 
@@ -156,20 +148,20 @@ class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(PaperStructureError):
                 await _AgentsPaperStructureProvider().structure(
                     signals=_empty_signals(),
-                    chunk_set=result.chunk_set,
-                    cfg=PaperFlowCfg(timeout_seconds=0.01),
+                    source=result.source_revision,
+                    cfg=PaperStructureCfg(timeout_seconds=0.01),
                 )
 
     def test_output_token_limit_uses_the_stricter_bound(self) -> None:
         capped = _structure_model_settings(
-            PaperFlowCfg(
-                max_structure_output_tokens=256,
+            PaperStructureCfg(
+                max_output_tokens=256,
                 model_settings=ModelSettings(max_tokens=1024),
             )
         )
         lower = _structure_model_settings(
-            PaperFlowCfg(
-                max_structure_output_tokens=256,
+            PaperStructureCfg(
+                max_output_tokens=256,
                 model_settings=ModelSettings(max_tokens=128),
             )
         )

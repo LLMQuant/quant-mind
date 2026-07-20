@@ -75,8 +75,11 @@ the user explicitly authorizes it — fix the underlying issue instead.
 
 ## Architecture Constraints (stable)
 
-1. **Library, not framework** — functions over classes, `Protocol` over ABC,
-   no plugin registries, no hook discovery, no CLI.
+1. **Library, not framework** — use functions for self-contained stateless
+   transformations and small service classes when operations share reusable
+   dependencies, policy, or lifecycle. Keep canonical values free of runtime
+   service state; use `Protocol` over ABC, with no framework-style class
+   hierarchies, plugin registries, hook discovery, or CLI.
 2. **RAG data plane, not framework** — use LlamaIndex directly inside
    `quantmind.rag`; keep upstream types private and do not add retriever,
    vector-store, provider, or backend registries.

@@ -28,14 +28,19 @@ Putting the same result again is safe and reuses valid vectors. A changed splitt
 
 ## Store and Resolve a Structure Tree
 
-After explicitly building a `PaperStructureTree`, persist it against the source and chunk set already written by `put_paper()`:
+After building a `PaperStructureTree` from an exact source revision, persist the source and tree together without creating chunk, summary, or embedding projections:
 
 ```python
-await library.put_paper(paper_result)
-await library.put_paper_structure_tree(structure)
+builder = PaperStructureBuilder(PaperStructureCfg(model="gpt-4o-mini"))
+structure = await builder.build(paper_result.source_revision)
+
+await library.put_paper_structure_tree(
+    paper_result.source_revision,
+    structure,
+)
 ```
 
-The structure tree stores no embeddings or per-node search projections. Its normalized node members and chunk-set lineage are canonical; a node `ArtifactLocator` passed to `resolve()` returns a `TreeNode` whose `content` is assembled lazily from the cited chunks. Building node projections and semantic hybrid seeding are deferred to P2.
+The structure tree is derived only from the exact source pages and structuring producer configuration. Splitter settings and chunk-set versions do not affect its identity. Its normalized page-cited members are canonical; a node `ArtifactLocator` passed to `resolve()` returns a `TreeNode` whose `content` is assembled lazily from the cited source pages. Building node projections and semantic hybrid seeding are deferred to P2.
 
 ## Reopen, Search, and Resolve
 
@@ -71,7 +76,7 @@ finally:
     await library.close()
 ```
 
-A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `quantmind.mind.retrieve`, not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
+A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `StructureRetriever.retrieve()`, not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
 
 - `matched_text`, the exact library-owned projection used for ranking;
 - `projection`, the projection version, model, dimensions, and content hash;

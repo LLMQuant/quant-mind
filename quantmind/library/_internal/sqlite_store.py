@@ -31,7 +31,7 @@ from quantmind.knowledge import (
 )
 from quantmind.knowledge.paper import (
     _validate_chunk_set_source,
-    _validate_structure_tree_chunk_set,
+    _validate_structure_tree_source,
 )
 from quantmind.library._internal.llamaindex_retriever import _IndexRecord
 from quantmind.library._internal.retrieval_targets import (
@@ -138,6 +138,9 @@ class _PreparedPaperPut:
 class _PreparedPaperStructurePut:
     """Validated vectorless structure-tree write."""
 
+    source: PaperSourceRevision
+    source_payload: str
+    source_canonical_hash: str
     tree: PaperStructureTree
     canonical: _CanonicalPaperArtifact
 
@@ -256,6 +259,25 @@ def _canonical_paper_artifact(
         canonical_hash=canonical_hash,
         members=members,
     )
+
+
+def _prepare_paper_source(source: PaperSourceRevision) -> tuple[str, str]:
+    """Validate loaded source blobs and return its canonical payload/hash."""
+    for asset in source.assets:
+        blob = source.blobs.get(asset.content_hash)
+        if blob is None:
+            raise ValueError(
+                f"Paper source is missing blob for asset '{asset.asset_id}'"
+            )
+        if (
+            len(blob) != asset.size_bytes
+            or hashlib.sha256(blob).hexdigest() != asset.content_hash
+        ):
+            raise ValueError(
+                f"Paper source blob for asset '{asset.asset_id}' is invalid"
+            )
+    payload = _json_payload(source.model_dump(mode="json"))
+    return payload, hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _assemble_canonical_payload(
@@ -715,19 +737,7 @@ class _SQLiteStore:
     def prepare_put_paper(self, result: PaperFlowResult) -> _PreparedPaperPut:
         """Validate paper blobs and load projections eligible for reuse."""
         source = result.source_revision
-        for asset in source.assets:
-            blob = source.blobs.get(asset.content_hash)
-            if blob is None:
-                raise ValueError(
-                    f"Paper source is missing blob for asset '{asset.asset_id}'"
-                )
-            if (
-                len(blob) != asset.size_bytes
-                or hashlib.sha256(blob).hexdigest() != asset.content_hash
-            ):
-                raise ValueError(
-                    f"Paper source blob for asset '{asset.asset_id}' is invalid"
-                )
+        source_payload, source_canonical_hash = _prepare_paper_source(source)
         artifact_ids = (str(result.chunk_set.id), str(result.global_summary.id))
         rows = self._db.execute(
             """
@@ -749,19 +759,62 @@ class _SQLiteStore:
             )
             for row in rows
         }
-        source_payload = _json_payload(source.model_dump(mode="json"))
         return _PreparedPaperPut(
             result=result,
             source_payload=source_payload,
-            source_canonical_hash=hashlib.sha256(
-                source_payload.encode("utf-8")
-            ).hexdigest(),
+            source_canonical_hash=source_canonical_hash,
             artifacts=(
                 _canonical_paper_artifact(result.chunk_set),
                 _canonical_paper_artifact(result.global_summary),
             ),
             existing_embeddings=existing,
         )
+
+    def _put_paper_source(
+        self,
+        source: PaperSourceRevision,
+        *,
+        payload: str,
+        canonical_hash: str,
+    ) -> None:
+        """Write or reuse one exact source inside the active transaction."""
+        self._db.execute(
+            """
+            INSERT INTO paper_sources (
+                source_revision_id, schema_version, source_content_hash,
+                payload_json, canonical_hash, asset_count
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_revision_id) DO NOTHING
+            """,
+            (
+                str(source.id),
+                source.schema_version,
+                source.source.content_hash,
+                payload,
+                canonical_hash,
+                len(source.assets),
+            ),
+        )
+        for asset in source.assets:
+            self._db.execute(
+                """
+                INSERT INTO paper_source_assets (
+                    asset_id, source_revision_id, kind, page_number,
+                    media_type, content_hash, size_bytes, blob
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(asset_id) DO NOTHING
+                """,
+                (
+                    str(asset.asset_id),
+                    str(source.id),
+                    asset.kind,
+                    asset.page_number,
+                    asset.media_type,
+                    asset.content_hash,
+                    asset.size_bytes,
+                    source.blobs[asset.content_hash],
+                ),
+            )
 
     def put_paper(
         self,
@@ -786,43 +839,11 @@ class _SQLiteStore:
             raise ValueError("paper artifacts do not have complete projections")
         try:
             self._db.execute("BEGIN IMMEDIATE")
-            self._db.execute(
-                """
-                INSERT INTO paper_sources (
-                    source_revision_id, schema_version, source_content_hash,
-                    payload_json, canonical_hash, asset_count
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(source_revision_id) DO NOTHING
-                """,
-                (
-                    str(source.id),
-                    source.schema_version,
-                    source.source.content_hash,
-                    prepared.source_payload,
-                    prepared.source_canonical_hash,
-                    len(source.assets),
-                ),
+            self._put_paper_source(
+                source,
+                payload=prepared.source_payload,
+                canonical_hash=prepared.source_canonical_hash,
             )
-            for asset in source.assets:
-                self._db.execute(
-                    """
-                    INSERT INTO paper_source_assets (
-                        asset_id, source_revision_id, kind, page_number,
-                        media_type, content_hash, size_bytes, blob
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(asset_id) DO NOTHING
-                    """,
-                    (
-                        str(asset.asset_id),
-                        str(source.id),
-                        asset.kind,
-                        asset.page_number,
-                        asset.media_type,
-                        asset.content_hash,
-                        asset.size_bytes,
-                        source.blobs[asset.content_hash],
-                    ),
-                )
             for canonical in prepared.artifacts:
                 artifact = canonical.artifact
                 artifact_targets = targets_by_artifact[artifact.id]
@@ -954,20 +975,16 @@ class _SQLiteStore:
 
     def prepare_put_paper_structure_tree(
         self,
+        source: PaperSourceRevision,
         tree: PaperStructureTree,
     ) -> _PreparedPaperStructurePut:
-        """Validate a vectorless structure tree against stored inputs."""
-        source = self.get_paper_source(tree.source_revision_id)
-        input_artifact = self.get_paper_artifact(
-            tree.producer.input_chunk_set_id
-        )
-        if not isinstance(input_artifact, PaperChunkSet):
-            raise ValueError(
-                "paper structure-tree input is not a stored chunk set"
-            )
-        _validate_chunk_set_source(source, input_artifact)
-        _validate_structure_tree_chunk_set(tree, input_artifact)
+        """Validate a vectorless structure tree against its exact source."""
+        _validate_structure_tree_source(tree, source)
+        source_payload, source_canonical_hash = _prepare_paper_source(source)
         return _PreparedPaperStructurePut(
+            source=source,
+            source_payload=source_payload,
+            source_canonical_hash=source_canonical_hash,
             tree=tree,
             canonical=_canonical_paper_artifact(tree),
         )
@@ -976,11 +993,16 @@ class _SQLiteStore:
         self,
         prepared: _PreparedPaperStructurePut,
     ) -> None:
-        """Atomically persist one vectorless structure artifact and lineage."""
+        """Atomically persist one source and vectorless structure artifact."""
         tree = prepared.tree
         canonical = prepared.canonical
         try:
             self._db.execute("BEGIN IMMEDIATE")
+            self._put_paper_source(
+                prepared.source,
+                payload=prepared.source_payload,
+                canonical_hash=prepared.source_canonical_hash,
+            )
             self._db.execute(
                 """
                 INSERT INTO paper_artifacts (
@@ -1036,19 +1058,6 @@ class _SQLiteStore:
                         member.position,
                         member.payload,
                         member.content_hash,
-                    ),
-                )
-            for locator in tree.derived_from:
-                self._db.execute(
-                    """
-                    INSERT INTO paper_artifact_lineage (
-                        artifact_id, input_artifact_id, relation
-                    ) VALUES (?, ?, ?)
-                    """,
-                    (
-                        str(tree.id),
-                        str(locator.artifact_id),
-                        "generated_from",
                     ),
                 )
             self._db.execute("COMMIT")
@@ -1505,7 +1514,7 @@ class _SQLiteStore:
                 (str(locator.artifact_id), "generated_from")
                 for locator in artifact.derived_from
             }
-            if isinstance(artifact, (PaperGlobalSummary, PaperStructureTree))
+            if isinstance(artifact, PaperGlobalSummary)
             else set()
         )
         stored_lineage = {
@@ -1517,15 +1526,11 @@ class _SQLiteStore:
                 f"Stale paper artifact '{artifact_id}': lineage mismatch"
             )
         if isinstance(artifact, PaperStructureTree):
-            input_artifact = self.get_paper_artifact(
-                artifact.producer.input_chunk_set_id
-            )
-            if not isinstance(input_artifact, PaperChunkSet):
-                raise RuntimeError(
-                    f"Stale paper artifact '{artifact_id}': input type mismatch"
-                )
             try:
-                _validate_structure_tree_chunk_set(artifact, input_artifact)
+                _validate_structure_tree_source(
+                    artifact,
+                    self.get_paper_source(artifact.source_revision_id),
+                )
             except ValueError as exc:
                 raise RuntimeError(
                     f"Stale paper artifact '{artifact_id}': citation mismatch"
@@ -1602,27 +1607,23 @@ class _SQLiteStore:
                 raise KeyError(
                     f"Paper structure node '{locator.member_id}' not found"
                 ) from exc
-            input_artifact = self.get_paper_artifact(
-                artifact.producer.input_chunk_set_id
-            )
-            if not isinstance(input_artifact, PaperChunkSet):
-                raise RuntimeError(
-                    "Stored paper structure-tree input is not a chunk set"
-                )
-            chunks = {chunk.chunk_id: chunk for chunk in input_artifact.chunks}
+            source = self.get_paper_source(artifact.source_revision_id)
+            pages = {
+                page.page_number: page.text for page in source.parsed.pages
+            }
             content: list[str] = []
-            seen: set[UUID] = set()
+            seen: set[int] = set()
             for citation in node.citations:
-                chunk_id = citation.node_id
-                if chunk_id is None or chunk_id in seen:
+                page_number = citation.page
+                if page_number is None or page_number in seen:
                     continue
-                chunk = chunks.get(chunk_id)
-                if chunk is None:
+                page_text = pages.get(page_number)
+                if page_text is None:
                     raise RuntimeError(
                         "Stored paper structure-tree citation is unresolved"
                     )
-                seen.add(chunk_id)
-                content.append(chunk.text)
+                seen.add(page_number)
+                content.append(page_text)
             return node.model_copy(update={"content": "\n\n".join(content)})
         if not isinstance(artifact, PaperChunkSet):
             raise KeyError("Paper artifact does not have resolvable members")
