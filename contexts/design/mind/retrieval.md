@@ -108,7 +108,7 @@ flowchart TD
         OPENT["open_structure(id): deserialize same value"]
     end
     subgraph MND["mind — retrieve (pure value op, no library)"]
-        RET["Retrieve(cfg).retrieve(tree, question): agentic, evidence values"]
+        RET["AgenticRetriever(cfg).retrieve(tree, question): agentic, evidence values"]
     end
     IN --> OPEN --> OUT --> DRAFT --> BUILD
     BUILD -->|in-memory, use immediately| RET
@@ -125,7 +125,7 @@ flowchart TD
 | `quantmind.flows` (`PaperFlow`) | A **config-bound** flow: `PaperFlow(cfg)` binds the settings; `build(input)` fetches, parses, runs one draft-structuring agent, then calls the knowledge constructor and returns a **self-contained** `PaperStructureTree`. The cfg *type* selects the knowledge shape (`PaperStructureCfg` → tree today). No persistence, no retrieval, no library. |
 | `quantmind.knowledge` | Own the `StructureTree` structural base and the source-bound `PaperStructureTree` artifact. `from_draft` mints identity, resolves page citations, **and populates each node's `content` from the exact source pages**, then runs the integrity gate. The artifact is a complete value. |
 | `quantmind.library` | Dump a self-contained tree and load it back unchanged (`put` / `open_structure`). A tree is an **independent** artifact: its library need not contain a chunk set, and loading it never depends on refilling text from another artifact. |
-| `quantmind.mind` | `Retrieve(cfg)` binds the strategy config; `retrieve(tree, question)` reasons over one explicit tree value and returns evidence values with content already in them. It does **not** take or bind a library. |
+| `quantmind.mind` | `AgenticRetriever(cfg)` binds the strategy config; `retrieve(tree, question)` reasons over one explicit tree value and returns evidence values with content already in them. It does **not** take or bind a library. |
 
 `quantmind.rag` is unchanged: deterministic chunking and BM25, no LLM, no
 PageIndex producer.
@@ -241,14 +241,16 @@ tree2 = await library.open_structure(tree.id)    # load: identical value object
 ## Retrieval Returns Values, Not References
 
 Single-tree retrieval is a **pure value operation** over a self-contained tree.
-`Retrieve(cfg)` binds the retrieval strategy config; `retrieve(tree, question)`
-takes only the operand:
+`AgenticRetriever(cfg)` binds the retrieval config; `retrieve(retrievable, question)`
+takes only the operand — a `Retrievable` (a `StructureTree` today; it widens
+within `knowledge` to other reasoning-able shapes such as a graph, never to a
+vector store):
 
 ```python
-from quantmind.mind import Retrieve
-from quantmind.configs import AgenticRetrievalCfg
+from quantmind.mind import AgenticRetriever
+from quantmind.configs import RetrievalCfg
 
-retriever = Retrieve(AgenticRetrievalCfg(mode="tree", model_name="gpt-4o-mini"))
+retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
 evidence = await retriever.retrieve(tree, "What are the method and limitations?")
 for item in evidence:
     print(item.title, item.content)     # content is already here; no library
@@ -272,12 +274,14 @@ self-contained, retrieval reads `tree.nodes[id].content` directly and returns
 it. The `locator` is there for when a caller *wants* to fuse or re-open across
 artifacts — an optional capability, never the only way to see content.
 
-The strategy is selected by the **cfg type**. `AgenticRetrievalCfg(mode="tree")`
-is the one implemented shape today: agentic traversal that exposes two SDK
+There is one strategy: **agentic traversal**. The retriever exposes two SDK
 `@function_tool` functions — `get_document_structure()` (tree without leaf text)
 and `get_node_content(node_ids)` (leaf text read from `tree.nodes`, **not** a
 library) — and lets an Agent decide, turn by turn, which node to open. Content
-for a selected non-leaf node is assembled from its descendant leaves.
+for a selected non-leaf node is assembled from its descendant leaves. Mechanical
+retrieval (semantic vector search / BM25) is a different layer entirely
+(`library.search` / `rag`); `mind` never re-implements it, and a future hybrid
+path composes the two rather than adding a "semantic strategy" here.
 
 `retrieve` calls `agents.Runner.run(...)` with its own `RunConfig`; it does not
 import `flows._runner`. Serialization is bounded by a structure token budget.
@@ -290,16 +294,15 @@ Both public callables **bind their cfg** and take only the operand per call,
 following the repository's altitude rule
 ([operations/naming.md](../operations/naming.md)):
 
-- `Retrieve(cfg)` is a **class**, not a function. It binds the retrieval strategy
+- `AgenticRetriever(cfg)` is a **class**, not a function. It binds the retrieval
   config so a batch of queries runs under one fixed setting — reproducibility, not
   ceremony. (The earlier `StructureRetriever` bound a *library*; that binding is
   gone now that the tree is self-contained, but the *config* binding remains, so
   the class stays — an absent external dependency is not a reason to demote it.)
-  The cfg **type** selects the strategy: `AgenticRetrievalCfg` today,
-  `SemanticRetrievalCfg` / `HybridRetrievalCfg` later. This is one class with
-  typed dispatch — **not** the forbidden generic retriever / query-engine
-  hierarchy; the prohibition is on class trees and registries, not on branching
-  by cfg type.
+  It has a **single behavior** — an LLM agent reasons over the structure — so it
+  does no cfg-type dispatch. That is deliberate: `mind` is the reasoning layer,
+  and mechanical retrieval (semantic / BM25) stays in `library` / `rag`, never a
+  second strategy bolted onto this class.
 - `PaperFlow(cfg)` is a **class** for the same reason: it binds the build config
   once so a batch builds every input identically, and its cfg type selects the
   knowledge shape. It binds no source, no store, and no per-call state.
@@ -312,7 +315,7 @@ where single-tree value retrieval stops fitting in memory:
 1. select candidate documents using metadata, descriptions, or global-summary
    projections;
 2. `library.open_structure(...)` each candidate tree by identity;
-3. reuse one `Retrieve(cfg).retrieve(tree, question)` per explicit tree;
+3. reuse one `AgenticRetriever(cfg).retrieve(tree, question)` per explicit tree;
 4. fuse evidence using the full `(source_revision_id, artifact_id, node_id)`
    locator carried on each `RetrievalEvidence`.
 
@@ -365,7 +368,7 @@ idempotent re-runs; a tree persisted and reopened as an identical self-contained
 value **without any chunk set present**, with `as_of` / provenance preserved;
 agentic retrieval returning evidence **whose content comes from the tree, with
 no library involved**; a bound `PaperFlow(cfg)` producing a self-contained tree
-with the cfg *type* selecting the shape; `Retrieve(cfg)` binding the strategy
+with the cfg *type* selecting the shape; `AgenticRetriever(cfg)` binding its
 config; multi-model identity forwarding; and in-tree seed validation. P2 adds
 seeded semantic-shortlist tests once node projections exist.
 

@@ -18,7 +18,7 @@ apply throughout.
    immutable `cfg`/policy/dependency that must stay constant across calls; the
    operand is passed per call. Binding `cfg` for batch reproducibility alone
    justifies a class (`PaperFlow(cfg).build(input)`,
-   `Retrieve(cfg).retrieve(...)`), and the cfg *type* may select the
+   `AgenticRetriever(cfg).retrieve(...)`), and the cfg *type* may select the
    shape/strategy (typed dispatch, not a hierarchy). Do not add a class only as a
    namespace, and do not store an implicit mutable "current input" or "current
    result". Use `Protocol` over ABC and avoid framework-style class hierarchies.
@@ -118,17 +118,17 @@ apply throughout.
 - **Memory**: backends implement the `Memory` Protocol with granular `tools()`,
   `mcp_servers()`, `run_hooks()`, `reset()` — each may return an empty list; do
   not force MCP on every implementation.
-- **Retrieval**: `Retrieve(cfg)` binds the retrieval strategy config;
-  `retrieve(tree, question)` reasons over one **self-contained** `StructureTree`
-  value and returns `RetrievalEvidence` values whose `content` comes from the
-  tree — no `library`, no query-time refill. The `locator` field is optional
-  provenance for cross-artifact fusion, never the path to the content. The cfg
-  *type* selects the strategy: `AgenticRetrievalCfg` today (with `mode="tree"`),
-  `SemanticRetrievalCfg` / `HybridRetrievalCfg` later as documented
-  `NotImplementedError` seams. Use the Agents SDK directly (`Agent`,
-  `@function_tool`, `output_type=`, its own `RunConfig`); do not import
-  `flows._runner`, and do not build a retriever/query-engine hierarchy — one
-  class with typed cfg dispatch is the rule. See
+- **Retrieval (pure agentic)**: `AgenticRetriever(RetrievalCfg)` reasons over one
+  **self-contained** structure (`Retrievable`, a `StructureTree` today) with an
+  LLM agent and returns `RetrievalEvidence` values whose `content` comes from the
+  structure — no `library`, no query-time refill. The `locator` field is optional
+  provenance for cross-artifact fusion, never the path to the content. `mind` is
+  the **reasoning** layer; **mechanical** retrieval (semantic vector search /
+  BM25) is `quantmind.library` / `quantmind.rag`, and a future hybrid path
+  composes them (a semantic shortlist seeding this reasoning pass). Use the Agents
+  SDK directly (`Agent`, `@function_tool`, `output_type=`, its own `RunConfig`);
+  do not import `flows._runner`, and do not build a retriever/query-engine
+  hierarchy — one agentic strategy, no strategy registry. See
   `contexts/design/mind/retrieval.md`.
 
 ### `quantmind/utils/`

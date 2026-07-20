@@ -74,7 +74,7 @@ finally:
     await library.close()
 ```
 
-A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `Retrieve(AgenticRetrievalCfg(...)).retrieve()` in `quantmind.mind`, not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
+A `paper_summary` hit resolves to `PaperGlobalSummary`. A `paper_chunk_set` hit has a member ID and resolves to the exact `PaperChunk`, including source-page spans. Structure trees are retrieved by reasoning over titles and summaries through `AgenticRetriever(RetrievalCfg(...)).retrieve()` in `quantmind.mind` — an LLM agent traverses the structure — not by semantic search in the vectorless MVP. Every `SemanticHit` also includes:
 
 - `matched_text`, the exact library-owned projection used for ranking;
 - `projection`, the projection version, model, dimensions, and content hash;

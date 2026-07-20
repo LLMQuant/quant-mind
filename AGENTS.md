@@ -39,7 +39,7 @@ handoff all come from `openai-agents`.
 | `quantmind/rag/` | Opinionated LlamaIndex document chunking and retrieval — depends only on `preprocess` |
 | `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
-| `quantmind/mind/` | Cognitive layer for memory and reasoning-based structure retrieval |
+| `quantmind/mind/` | Pure-agentic reasoning layer — memory + agentic (reasoning-based) retrieval where an LLM decides; mechanical retrieval (similarity / BM25) lives in `rag` / `library` |
 | `quantmind/utils/` | Logger only — keep it that way |
 
 The pre-migration agent runtime was removed and archived on the
@@ -79,7 +79,7 @@ the user explicitly authorizes it — fix the underlying issue instead.
    immutable `cfg`/policy/dependency that must stay constant across calls; the
    runtime operand is passed per call. Binding `cfg` for batch reproducibility
    alone justifies a class (`PaperFlow(cfg).build(input)`,
-   `Retrieve(cfg).retrieve(tree, q)`), and the cfg *type* may select the
+   `AgenticRetriever(cfg).retrieve(structure, q)`), and the cfg *type* may select the
    shape/strategy (typed dispatch, not a class hierarchy). Keep canonical values
    free of runtime service state; use `Protocol` over ABC, with no
    framework-style class hierarchies, plugin registries, hook discovery, or CLI.

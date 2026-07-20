@@ -69,8 +69,8 @@ on method arguments and return values rather than mutable instance state.
   implementation.
 - **Config binding alone justifies a class.** A class earns its keep by binding
   the immutable `cfg` that must stay constant across a batch, even with no store
-  or provider to hold. `Retrieve(AgenticRetrievalCfg(...))` binds the retrieval
-  strategy config once; `retrieve(tree, question)` takes only the operand. Do not
+  or provider to hold. `AgenticRetriever(RetrievalCfg(...))` binds the retrieval
+  config once; `retrieve(structure, question)` takes only the operand. Do not
   demote such a class to a function just because it holds no external dependency.
 
 ## Config-Bound Flow Patterns
@@ -108,10 +108,11 @@ input, so a batch runs under one unified, reproducible setting:
 - `PaperFlow(cfg)` is the config-bound paper flow; `build(input)` produces a
   knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg`
   → `PaperStructureTree` today). `Flow` as a noun here is deliberate and allowed.
-- `Retrieve(cfg)` is the structure-retrieval service in `quantmind.mind`;
-  `retrieve(tree, question)` returns evidence values. The cfg *type*
-  (`AgenticRetrievalCfg`, later `SemanticRetrievalCfg` / `HybridRetrievalCfg`)
-  selects the strategy — one class with typed dispatch, not a hierarchy.
+- `AgenticRetriever(cfg)` is the reasoning-retrieval service in `quantmind.mind`;
+  `retrieve(structure, question)` returns evidence values. It has one behavior —
+  an LLM agent reasons over the structure — so it binds `RetrievalCfg` but does
+  no cfg-type dispatch. Mechanical semantic search is `quantmind.library.search`,
+  a different layer, not a strategy here.
 
 The current `quantmind.flows` package continues to contain public operations in
 this release. Renaming it to `operations` or adding a separate `pipelines`

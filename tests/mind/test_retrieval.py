@@ -1,6 +1,6 @@
 """Offline tests for library-free reasoning-based retrieval.
 
-Every test drives ``Retrieve(AgenticRetrievalCfg(...)).retrieve(tree, question)``
+Every test drives ``AgenticRetriever(RetrievalCfg(...)).retrieve(tree, question)``
 over an in-memory, self-contained structure tree built by
 ``tests.paper_helpers``. No library is opened or mocked; the only fake is the
 SDK ``Runner.run`` call, which stands in for the model.
@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from quantmind.configs import AgenticRetrievalCfg, RetrievalCfg
+from quantmind.configs import RetrievalCfg
 from quantmind.knowledge import PaperStructureTree, StructureTree
-from quantmind.mind import RetrievalError, RetrievalEvidence, Retrieve
+from quantmind.mind import AgenticRetriever, RetrievalError, RetrievalEvidence
 from quantmind.mind.retrieval import _node_text, _serialize_structure
 from tests.paper_helpers import build_paper_structure_tree
 
@@ -42,12 +42,10 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         run_mock = AsyncMock(return_value=_selection(self.leaf.node_id))
-        cfg = AgenticRetrievalCfg(
-            model="litellm/anthropic/test-model", max_turns=6
-        )
+        cfg = RetrievalCfg(model="litellm/anthropic/test-model", max_turns=6)
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await Retrieve(cfg).retrieve(
+            evidence = await AgenticRetriever(cfg).retrieve(
                 self.tree,
                 "How does multi-head attention work?",
             )
@@ -102,7 +100,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         run_mock = AsyncMock(side_effect=fake_run)
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await Retrieve(AgenticRetrievalCfg()).retrieve(
+            evidence = await AgenticRetriever(RetrievalCfg()).retrieve(
                 self.tree,
                 "Find the attention evidence.",
             )
@@ -113,12 +111,12 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         run_mock = AsyncMock(return_value=_selection(self.leaf.node_id))
-        cfg = AgenticRetrievalCfg(
+        cfg = RetrievalCfg(
             extra_instruction="Prefer the limitations discussion."
         )
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            await Retrieve(cfg).retrieve(self.tree, "Find attention.")
+            await AgenticRetriever(cfg).retrieve(self.tree, "Find attention.")
 
         call = run_mock.await_args
         assert call is not None
@@ -131,7 +129,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         run_mock = AsyncMock(return_value=_selection(self.root.node_id))
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await Retrieve(AgenticRetrievalCfg()).retrieve(
+            evidence = await AgenticRetriever(RetrievalCfg()).retrieve(
                 self.tree, "Summarize the whole paper."
             )
 
@@ -156,7 +154,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         run_mock = AsyncMock(return_value=_selection(self.leaf.node_id))
 
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            evidence = await Retrieve(AgenticRetrievalCfg()).retrieve(
+            evidence = await AgenticRetriever(RetrievalCfg()).retrieve(
                 plain, "How does attention work?"
             )
 
@@ -169,7 +167,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         run_mock = AsyncMock(return_value=_selection(self.leaf.node_id))
         with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            await Retrieve(AgenticRetrievalCfg()).retrieve(
+            await AgenticRetriever(RetrievalCfg()).retrieve(
                 self.tree,
                 "Find attention.",
                 seed_node_ids=[self.leaf.node_id],
@@ -186,7 +184,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(
                 ValueError, "address nodes in the tree"
             ):
-                await Retrieve(AgenticRetrievalCfg()).retrieve(
+                await AgenticRetriever(RetrievalCfg()).retrieve(
                     self.tree,
                     "Find attention.",
                     seed_node_ids=[uuid4()],
@@ -201,7 +199,7 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(return_value=_selection(uuid4())),
         ):
             with self.assertRaisesRegex(ValueError, "unknown structure node"):
-                await Retrieve(AgenticRetrievalCfg()).retrieve(
+                await AgenticRetriever(RetrievalCfg()).retrieve(
                     self.tree, "Find attention."
                 )
 
@@ -211,13 +209,13 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(return_value=_selection(*all_ids)),
         ):
             with self.assertRaisesRegex(RetrievalError, "max_evidence_nodes"):
-                await Retrieve(
-                    AgenticRetrievalCfg(max_evidence_nodes=1)
+                await AgenticRetriever(
+                    RetrievalCfg(max_evidence_nodes=1)
                 ).retrieve(self.tree, "Find all evidence.")
 
     async def test_blank_question_and_timeout_fail_closed(self) -> None:
         with self.assertRaisesRegex(ValueError, "must not be blank"):
-            await Retrieve(AgenticRetrievalCfg()).retrieve(self.tree, "   ")
+            await AgenticRetriever(RetrievalCfg()).retrieve(self.tree, "   ")
 
         async def slow_run(*args, **kwargs):
             del args, kwargs
@@ -228,24 +226,13 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(side_effect=slow_run),
         ):
             with self.assertRaisesRegex(RetrievalError, "timeout_seconds"):
-                await Retrieve(
-                    AgenticRetrievalCfg(timeout_seconds=0.01)
+                await AgenticRetriever(
+                    RetrievalCfg(timeout_seconds=0.01)
                 ).retrieve(self.tree, "Find attention.")
 
-    async def test_non_agentic_cfg_raises_not_implemented(self) -> None:
-        # A bare RetrievalCfg (or any future semantic/hybrid cfg type) names no
-        # implemented strategy: dispatch is on the cfg *type*.
-        run_mock = AsyncMock()
-        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
-            with self.assertRaises(NotImplementedError):
-                await Retrieve(RetrievalCfg()).retrieve(
-                    self.tree, "Find attention."
-                )
-        run_mock.assert_not_awaited()
-
     async def test_bound_cfg_is_an_immutable_copy(self) -> None:
-        cfg = AgenticRetrievalCfg(max_evidence_nodes=1)
-        retriever = Retrieve(cfg)
+        cfg = RetrievalCfg(max_evidence_nodes=1)
+        retriever = AgenticRetriever(cfg)
         # Mutating the caller's cfg after binding must not affect the retriever:
         # the retriever keeps enforcing the bound-time value (1), so selecting
         # every node still exceeds it despite the caller's later relaxation.

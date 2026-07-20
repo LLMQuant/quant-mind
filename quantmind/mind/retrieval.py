@@ -1,17 +1,21 @@
-"""Vectorless reasoning-based retrieval over a self-contained structure tree.
+"""Pure-agentic reasoning retrieval over a self-contained structure.
 
-Single-tree retrieval is a pure value operation: the tree carries its own node
-content, so ``Retrieve.retrieve`` reads evidence text straight from
-``tree.nodes`` and returns evidence *values*. It binds no library and imports
-none. The reference (``ArtifactLocator``) rides along only as optional
+``mind`` is the reasoning layer: an LLM agent reads a knowledge structure
+(titles + summaries), decides which branches to open, and drills down to
+page-cited evidence — relevance by *reasoning*, not by similarity. Mechanical
+retrieval (semantic vector search / BM25) is a different altitude and lives in
+``quantmind.library`` / ``quantmind.rag``; a future hybrid path composes the two
+(a semantic shortlist seeding this reasoning pass) rather than merging them.
+
+Single-structure retrieval is a pure value operation: the structure carries its
+own node content, so ``AgenticRetriever.retrieve`` reads evidence text straight
+from ``retrievable.nodes`` and returns evidence *values*. It binds no library and
+imports none. The reference (``ArtifactLocator``) rides along only as optional
 provenance for future cross-artifact fusion, never as the path a consumer must
 resolve to see content.
 
-``Retrieve`` binds an immutable copy of the retrieval-strategy cfg once, so a
-batch of queries runs under one fixed setting (reproducibility). The cfg *type*
-selects the strategy — ``AgenticRetrievalCfg`` runs the agentic traversal today;
-any other ``RetrievalCfg`` (semantic / hybrid seams) raises
-``NotImplementedError``. This is typed dispatch, not a class hierarchy.
+``AgenticRetriever`` binds an immutable copy of ``RetrievalCfg`` once, so a batch
+of queries runs under one fixed setting (reproducibility).
 """
 
 import asyncio
@@ -22,7 +26,7 @@ from uuid import UUID
 from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from quantmind.configs import AgenticRetrievalCfg, RetrievalCfg
+from quantmind.configs import RetrievalCfg
 from quantmind.knowledge import (
     ArtifactLocator,
     Citation,
@@ -71,81 +75,82 @@ class _ResolvableStructure(Protocol):
     artifact_kind: str
 
 
-class Retrieve:
-    """Config-bound reasoning retriever over self-contained structure trees.
+Retrievable = StructureTree
+"""A knowledge structure an ``AgenticRetriever`` can reason over.
 
-    ``Retrieve(cfg)`` binds an immutable copy of the retrieval-strategy cfg so a
-    batch of queries runs under one fixed, reproducible setting. The cfg *type*
-    selects the strategy: an ``AgenticRetrievalCfg`` runs the agentic traversal;
-    any other ``RetrievalCfg`` (the semantic / hybrid seams) raises
-    ``NotImplementedError``. This is typed dispatch, deliberately **not** a
-    generic retriever / query-engine class hierarchy.
+Today a ``StructureTree`` (e.g. a ``PaperStructureTree``). This alias is the
+extension seam: it widens *within* ``quantmind.knowledge`` to other
+reasoning-able shapes (``GraphKnowledge``) as they land — never to a vector
+store. Mechanical semantic search is ``quantmind.library.search``, not this
+operation, so a library is never a ``Retrievable``.
+"""
+
+
+class AgenticRetriever:
+    """Pure-agentic reasoning retriever over a self-contained structure.
+
+    An LLM agent reads the structure, decides which branches to open, and drills
+    down to page-cited leaf evidence — relevance by reasoning, not similarity.
+    ``AgenticRetriever(cfg)`` binds an immutable ``RetrievalCfg`` once so a batch
+    of queries runs under one fixed, reproducible setting. It binds no library:
+    single-structure retrieval is a pure value operation reading node content
+    from the structure itself.
+
+    This is the whole of ``mind`` retrieval — one strategy, agentic. Mechanical
+    retrieval (semantic / BM25) is ``quantmind.library`` / ``quantmind.rag``, and
+    a future hybrid path composes the two rather than adding a strategy here.
 
     Example:
-        >>> retriever = Retrieve(AgenticRetrievalCfg(mode="tree"))
+        >>> retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
         >>> evidence = await retriever.retrieve(tree, "What is the method?")
     """
 
     def __init__(self, cfg: RetrievalCfg) -> None:
-        """Bind an immutable copy of the retrieval-strategy cfg.
-
-        Args:
-            cfg: A ``RetrievalCfg`` subclass whose *type* selects the strategy.
-                ``AgenticRetrievalCfg`` is the one implemented today.
-        """
+        """Bind an immutable copy of the retrieval cfg."""
         self._cfg = cfg.model_copy(deep=True)
 
     async def retrieve(
         self,
-        tree: StructureTree,
+        retrievable: Retrievable,
         question: str,
         *,
         seed_node_ids: list[UUID] | None = None,
     ) -> list[RetrievalEvidence]:
-        """Select and read page-cited evidence from one self-contained tree.
+        """Reason over one self-contained structure and read page-cited evidence.
 
-        This is a library-free pure value operation: node content is read from
-        the tree itself (see ``_node_text``), so every returned evidence value
+        A library-free pure value operation: node content is read from the
+        structure itself (see ``_node_text``), so every returned evidence value
         carries its own content and needs no downstream resolution. When the
-        tree is identity-bearing (e.g. a ``PaperStructureTree``), each evidence
-        value also carries an ``ArtifactLocator`` for optional cross-artifact
-        fusion; otherwise ``locator`` is ``None`` and content is still present.
+        structure is identity-bearing (e.g. a ``PaperStructureTree``), each
+        evidence value also carries an ``ArtifactLocator`` for optional
+        cross-artifact fusion; otherwise ``locator`` is ``None`` and content is
+        still present.
 
-        Strategy is dispatched on the bound cfg *type*:
-
-        - ``AgenticRetrievalCfg``: expose ``get_document_structure()`` and
-          ``get_node_content(node_ids)`` tools that read the in-memory tree, and
-          let an Agent traverse turn by turn; content for a selected non-leaf
-          node is assembled from its descendant leaves.
-        - any other ``RetrievalCfg``: the semantic / hybrid seams are not
-          implemented, so ``NotImplementedError`` is raised.
+        An Agent traverses turn by turn via ``get_document_structure()`` and
+        ``get_node_content(node_ids)`` tools that read the in-memory structure;
+        content for a selected non-leaf node is assembled from its descendant
+        leaves.
 
         Args:
-            tree: Validated self-contained structure tree whose leaf nodes carry
-                their own source content.
+            retrievable: Validated self-contained structure whose leaf nodes
+                carry their own source content (a ``StructureTree`` today).
             question: Evidence need used for relevance reasoning.
             seed_node_ids: Optional in-tree node hints (validated against
-                ``tree.nodes``) reserved for a later semantic shortlist. This
-                operation performs no semantic search and takes no library seeds.
+                ``retrievable.nodes``) reserved for a later hybrid shortlist.
+                This operation performs no semantic search and takes no library
+                seeds.
 
         Returns:
             Selected node evidence with self-contained content and optional
             provenance.
 
         Raises:
-            NotImplementedError: If the bound cfg selects an unimplemented
-                (semantic / hybrid) strategy.
             ValueError: If the question, seeds, or selected node IDs are invalid.
             RetrievalError: If runtime or evidence bounds are exceeded, or a
                 selected node yields no content.
         """
         cfg = self._cfg
-        if not isinstance(cfg, AgenticRetrievalCfg):
-            raise NotImplementedError(
-                "Retrieve implements agentic-over-tree retrieval only; "
-                f"{type(cfg).__name__} selects an unimplemented strategy "
-                "(semantic / hybrid seams are reserved for a later release)"
-            )
+        tree = retrievable
         normalized_question = question.strip()
         if not normalized_question:
             raise ValueError("retrieval question must not be blank")
@@ -281,7 +286,7 @@ async def _agentic_select(
     question: str,
     serialized: str,
     seed_ids: tuple[UUID, ...],
-    cfg: AgenticRetrievalCfg,
+    cfg: RetrievalCfg,
 ) -> _RetrievalSelectionDraft:
     @function_tool
     async def get_document_structure() -> str:

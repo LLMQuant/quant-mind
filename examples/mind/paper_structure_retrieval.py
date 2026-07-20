@@ -3,7 +3,7 @@
 The core path needs no library. ``PaperFlow`` binds a build config once;
 ``build(input)`` fetches and parses the PDF and returns a self-contained
 ``PaperStructureTree`` whose leaf nodes carry their own page-cited text.
-``Retrieve`` binds a retrieval-strategy config; ``retrieve(tree, question)``
+``AgenticRetriever`` binds a retrieval config; ``retrieve(tree, question)``
 reasons over that tree value and returns evidence with the content already in
 it — no library round-trip.
 
@@ -20,11 +20,11 @@ import asyncio
 import sys
 from pathlib import Path
 
-from quantmind.configs import AgenticRetrievalCfg, PaperStructureCfg
+from quantmind.configs import PaperStructureCfg, RetrievalCfg
 from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow
 from quantmind.knowledge import PaperStructureTree
-from quantmind.mind import Retrieve
+from quantmind.mind import AgenticRetriever
 
 _QUESTION = "What are the main method and limitations?"
 
@@ -36,9 +36,9 @@ async def main(pdf_path: Path) -> None:
     flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))
     tree = await flow.build(LocalFilePath(path=pdf_path))
 
-    # Bind the retrieval strategy config once; retrieve(tree, question) takes
-    # only the operands. Evidence carries content directly — no library.
-    retriever = Retrieve(AgenticRetrievalCfg(mode="tree", model="gpt-4o-mini"))
+    # Bind the retrieval config once; retrieve(tree, question) takes only the
+    # operands. Evidence carries content directly — no library.
+    retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
     evidence = await retriever.retrieve(tree, _QUESTION)
     for item in evidence:
         print(item.title, "—", item.content[:500])
@@ -65,9 +65,7 @@ async def _optional_persist_reopen(tree: PaperStructureTree) -> None:
         await library.put(tree)  # standalone: no source revision required
         reopened = await library.open_structure(tree.id)  # identical value
 
-        retriever = Retrieve(
-            AgenticRetrievalCfg(mode="tree", model="gpt-4o-mini")
-        )
+        retriever = AgenticRetriever(RetrievalCfg(model="gpt-4o-mini"))
         evidence = await retriever.retrieve(reopened, _QUESTION)
         for item in evidence:
             print(item.title, "—", item.content[:500])
