@@ -1,4 +1,4 @@
-"""Vectorless persistence tests for paper structure trees."""
+"""Source-free persistence tests for self-contained paper structure trees."""
 
 import hashlib
 import sqlite3
@@ -57,20 +57,25 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
             _embedding_provider=provider,
         )
 
-    async def test_put_reopen_get_and_idempotency_without_projections(
+    async def test_put_reopen_get_and_idempotency_without_source_or_chunks(
         self,
     ) -> None:
-        result = build_paper_result()
         tree = build_paper_structure_tree()
         provider = _FakeEmbeddingProvider()
         library = await self._open(provider)
-        await library.put_paper_structure_tree(result.source_revision, tree)
-        await library.put_paper_structure_tree(result.source_revision, tree)
+        await library.put(tree)
+        await library.put(tree)
         await library.close()
 
         self.assertEqual(provider.calls, [])
         with sqlite3.connect(self.db_path) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 5)
+            # A self-contained tree is stored on its own: no source revision and
+            # no chunk set are required or present.
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM paper_sources").fetchone()[0],
+                0,
+            )
             self.assertEqual(
                 db.execute("SELECT COUNT(*) FROM paper_artifacts").fetchone()[
                     0
@@ -99,11 +104,16 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         try:
             restored = await reopened.get_artifact(tree.id)
             self.assertIsInstance(restored, PaperStructureTree)
-            # The reopened tree is an identical self-contained value: every
-            # leaf node keeps its own text through dump/load, with no chunk
-            # set present.
+            # The reopened tree is an identical self-contained value: every leaf
+            # node keeps its own text and the provenance metadata survives, with
+            # no chunk set present.
             self.assertEqual(restored, tree)
             assert isinstance(restored, PaperStructureTree)
+            self.assertEqual(restored.as_of, tree.as_of)
+            self.assertEqual(restored.source, tree.source)
+            self.assertEqual(
+                restored.source_content_hash, tree.source_content_hash
+            )
             for node in restored.nodes.values():
                 if node.children_ids:
                     self.assertIsNone(node.content)
@@ -122,14 +132,18 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
             await reopened.close()
 
     async def test_open_structure_returns_self_contained_tree(self) -> None:
-        result = build_paper_result()
         tree = build_paper_structure_tree()
         library = await self._open(_FakeEmbeddingProvider())
         try:
-            await library.put_paper_structure_tree(result.source_revision, tree)
+            await library.put(tree)
             loaded = await library.open_structure(tree.id)
             self.assertIsInstance(loaded, PaperStructureTree)
             self.assertEqual(loaded, tree)
+            assert isinstance(loaded, PaperStructureTree)
+            self.assertEqual(loaded.as_of, tree.as_of)
+            self.assertEqual(
+                loaded.source_content_hash, tree.source_content_hash
+            )
             leaf = next(
                 node for node in loaded.nodes.values() if not node.children_ids
             )
@@ -144,10 +158,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         tree = build_paper_structure_tree()
         library = await self._open(_FakeEmbeddingProvider())
         try:
-            await library.put_paper_structure_tree(
-                result.source_revision,
-                tree,
-            )
+            await library.put(tree)
             node = next(
                 value
                 for value in tree.nodes.values()
@@ -178,7 +189,32 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await library.close()
 
-    async def test_put_rejects_a_tree_for_another_source(self) -> None:
+    async def test_put_rejects_a_tampered_tree_and_writes_nothing(self) -> None:
+        tree = build_paper_structure_tree()
+        # Mutating source_revision_id without re-minting identity yields an
+        # internally inconsistent tree; the standalone put must fail closed
+        # before any row is written.
+        tampered = tree.model_copy(update={"source_revision_id": uuid4()})
+        library = await self._open(_FakeEmbeddingProvider())
+        try:
+            with self.assertRaisesRegex(
+                ValueError, "does not match its producer"
+            ):
+                await library.put(tampered)
+        finally:
+            await library.close()
+
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM paper_artifacts").fetchone()[
+                    0
+                ],
+                0,
+            )
+
+    async def test_put_paper_structure_tree_rejects_a_tree_for_another_source(
+        self,
+    ) -> None:
         result = build_paper_result()
         tree = build_paper_structure_tree()
         mismatched = tree.model_copy(update={"source_revision_id": uuid4()})
@@ -203,10 +239,9 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
     async def test_rehydrate_fails_closed_on_member_metadata_drift(
         self,
     ) -> None:
-        result = build_paper_result()
         tree = build_paper_structure_tree()
         library = await self._open(_FakeEmbeddingProvider())
-        await library.put_paper_structure_tree(result.source_revision, tree)
+        await library.put(tree)
         await library.close()
 
         node = next(value for value in tree.nodes.values() if value.parent_id)
@@ -230,7 +265,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_version_three_adds_vectorless_and_parent_member_support(
+    async def test_version_three_migrates_to_source_free_artifacts(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -282,7 +317,7 @@ class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
             with sqlite3.connect(path) as db:
                 self.assertEqual(
                     db.execute("PRAGMA user_version").fetchone()[0],
-                    4,
+                    5,
                 )
                 columns = {
                     row[1]
@@ -291,11 +326,9 @@ class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
                     ).fetchall()
                 }
                 self.assertIn("parent_id", columns)
-                source_id = "source"
-                db.execute(
-                    "INSERT INTO paper_sources(source_revision_id) VALUES (?)",
-                    (source_id,),
-                )
+                # After v5 a self-contained artifact stores with no source row:
+                # the paper_artifacts -> paper_sources foreign key is gone.
+                db.execute("PRAGMA foreign_keys = ON")
                 db.execute(
                     """
                     INSERT INTO paper_artifacts (
@@ -306,13 +339,25 @@ class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
                     """,
                     (
                         "tree",
-                        source_id,
+                        "orphan-source",
                         PaperArtifactKind.STRUCTURE_TREE,
                         "1.0",
                         "a" * 64,
                         "{}",
                         hashlib.sha256(b"{}").hexdigest(),
                     ),
+                )
+                self.assertEqual(
+                    db.execute(
+                        "SELECT COUNT(*) FROM paper_artifacts"
+                    ).fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    db.execute("SELECT COUNT(*) FROM paper_sources").fetchone()[
+                        0
+                    ],
+                    0,
                 )
 
 

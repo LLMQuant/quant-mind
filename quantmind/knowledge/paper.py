@@ -18,7 +18,7 @@ from pydantic import (
     model_validator,
 )
 
-from quantmind.knowledge._base import Citation, SourceRef
+from quantmind.knowledge._base import ArtifactMeta, Citation, SourceRef
 from quantmind.knowledge._tree import (
     StructureTree,
     StructureTreeValidationError,
@@ -747,8 +747,15 @@ def _paper_structure_content_hash(
     )
 
 
-class PaperStructureTree(StructureTree):
-    """Page-preserving structure derived from one exact source revision."""
+class PaperStructureTree(ArtifactMeta, StructureTree):
+    """Page-preserving structure derived from one exact source revision.
+
+    Self-contained: leaf nodes carry their own page-cited text and the tree
+    mixes in ``ArtifactMeta`` provenance (``as_of`` / source ref /
+    ``source_content_hash``). That provenance lets the library persist the tree
+    on its own, yet stays out of ``id`` and ``content_hash`` so a rebuild at a
+    different wall-clock time yields the identical artifact.
+    """
 
     id: UUID
     artifact_kind: Literal[PaperArtifactKind.STRUCTURE_TREE] = (
@@ -781,6 +788,13 @@ class PaperStructureTree(StructureTree):
             self.nodes,
         ):
             raise ValueError("paper structure-tree content hash mismatch")
+        if (
+            self.source.content_hash is not None
+            and self.source.content_hash != self.source_content_hash
+        ):
+            raise ValueError(
+                "paper structure-tree provenance source hash is inconsistent"
+            )
         for node in self.nodes.values():
             if node.children_ids:
                 if node.content is not None:
@@ -890,6 +904,9 @@ class PaperStructureTree(StructureTree):
             path=(0,),
             depth=1,
         )
+        source_content_hash = source.source.content_hash
+        if source_content_hash is None:
+            raise ValueError("paper source revision is missing a content hash")
         tree = cls(
             id=artifact_id,
             source_revision_id=source.id,
@@ -898,6 +915,12 @@ class PaperStructureTree(StructureTree):
             content_hash=_paper_structure_content_hash(root_node_id, nodes),
             root_node_id=root_node_id,
             nodes=nodes,
+            # Provenance metadata (not identity): copied from the exact source
+            # revision so the tree can be stored and time-queried standalone.
+            as_of=source.as_of,
+            source=source.source,
+            source_title=source.title,
+            source_content_hash=source_content_hash,
         )
         _validate_structure_tree_source(tree, source)
         return tree

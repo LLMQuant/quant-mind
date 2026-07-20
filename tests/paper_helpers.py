@@ -47,8 +47,14 @@ def build_paper_result(
         "encoder-decoder attention architecture, uses multi-head attention, "
         "and improves translation quality with efficient training."
     ),
+    when: datetime = _WHEN,
 ) -> PaperFlowResult:
-    """Build one valid two-page result without parsing, network, or models."""
+    """Build one valid two-page result without parsing, network, or models.
+
+    ``when`` drives the source revision timestamps (and therefore the derived
+    structure tree's ``as_of`` provenance) without changing the source bytes, so
+    tests can rebuild the same artifact at a different wall-clock time.
+    """
     source_hash = hashlib.sha256(_RAW_BYTES).hexdigest()
     source = PaperSourceRevision.from_parsed(
         facts=PaperSourceFacts(
@@ -56,9 +62,9 @@ def build_paper_result(
             uri="https://arxiv.org/pdf/1706.03762v7.pdf",
             media_type="application/pdf",
             raw_bytes=_RAW_BYTES,
-            fetched_at=_WHEN,
-            available_at=_WHEN,
-            published_at=_WHEN,
+            fetched_at=when,
+            available_at=when,
+            published_at=when,
             arxiv_id="1706.03762v7",
             title="Attention Is All You Need",
             authors=("Ashish Vaswani",),
@@ -134,9 +140,15 @@ def build_paper_structure_tree(
     *,
     model: str = "fake-structure",
     quality: Literal["low", "medium", "high"] = "high",
+    when: datetime = _WHEN,
 ) -> PaperStructureTree:
-    """Build one valid cited structure tree through its smart constructor."""
-    result = build_paper_result()
+    """Build one valid cited structure tree through its smart constructor.
+
+    The tree carries its own provenance metadata (``as_of`` copied from the
+    source's ``when``, a source ref, and the source content hash), so downstream
+    fixtures get a self-contained, standalone-storable value.
+    """
+    result = build_paper_result(when=when)
     producer = PaperStructureProducer(
         model=model,
         prompt_version="test-v1",

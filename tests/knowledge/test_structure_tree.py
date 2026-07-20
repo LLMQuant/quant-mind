@@ -2,6 +2,7 @@
 
 import hashlib
 import unittest
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from quantmind.knowledge import (
@@ -58,6 +59,43 @@ class PaperStructureTreeTests(unittest.TestCase):
                 for citation in node.citations
             )
         )
+
+    def test_from_draft_populates_provenance_metadata(self) -> None:
+        source = build_paper_result().source_revision
+        tree = build_paper_structure_tree()
+
+        # Light provenance is copied from the exact source revision so the tree
+        # can be stored and time-queried standalone.
+        self.assertEqual(tree.as_of, source.as_of)
+        self.assertEqual(tree.source, source.source)
+        self.assertEqual(tree.source_title, source.title)
+        self.assertEqual(tree.source_content_hash, source.source.content_hash)
+        self.assertEqual(
+            tree.source.uri, "https://arxiv.org/pdf/1706.03762v7.pdf"
+        )
+
+    def test_provenance_is_metadata_not_identity(self) -> None:
+        # Same source bytes rebuilt at a different wall-clock time: the source
+        # revision differs only in its timestamps, so identity and content hash
+        # must be identical while the provenance ``as_of`` differs.
+        early = build_paper_structure_tree()
+        late = build_paper_structure_tree(
+            when=datetime(2020, 1, 1, tzinfo=timezone.utc)
+        )
+
+        self.assertEqual(early.id, late.id)
+        self.assertEqual(early.content_hash, late.content_hash)
+        self.assertEqual(early.root_node_id, late.root_node_id)
+        self.assertEqual(early.nodes, late.nodes)
+        self.assertNotEqual(early.as_of, late.as_of)
+
+        # Mutating only the provenance also leaves identity and content hash
+        # untouched: these fields never enter ``id`` / ``content_hash``.
+        shifted = early.model_copy(
+            update={"as_of": datetime(1999, 1, 1, tzinfo=timezone.utc)}
+        )
+        self.assertEqual(shifted.id, early.id)
+        self.assertEqual(shifted.content_hash, early.content_hash)
 
     def test_multi_page_leaf_joins_cited_page_text_in_order(self) -> None:
         result = build_paper_result()

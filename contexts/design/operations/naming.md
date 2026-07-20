@@ -12,7 +12,7 @@
 - [Scope](#scope)
 - [Name Patterns](#name-patterns)
 - [Service Class Patterns](#service-class-patterns)
-- [Document-Scoped Handle Patterns](#document-scoped-handle-patterns)
+- [Config-Bound Flow Patterns](#config-bound-flow-patterns)
 - [Type Names](#type-names)
 - [Current API](#current-api)
 - [Review Checklist](#review-checklist)
@@ -45,13 +45,12 @@ Start a public function name with a verb that describes its result:
 result precisely, or use `*_pipeline` when the function combines multiple public
 operations.
 
-`Flow` as a **noun**, on a domain object that groups several finished pipelines
-over one input, is allowed and preferred there: `PaperFlow` is a
-document-scoped handle (`PaperFlow.open(input)` parses once; `build_structure()`
-and `extract_knowledge()` are pipelines over that immutable source). The object
-reads as "the paper's workflows," and its *methods* still use intent verbs
-(`build_structure`, `extract_knowledge`). What stays banned is `flow` as a verb
-or a `do_x_flow()` function name.
+`Flow` as a **noun**, on a domain object that binds a config and applies the
+finished pipeline to each input, is allowed and preferred there: `PaperFlow(cfg)`
+binds the settings once; `build(input)` applies them to each input. The object
+reads as "the paper's workflow," its *method* uses an intent verb (`build`), and
+the cfg *type* selects which knowledge shape it produces. What stays banned is
+`flow` as a verb or a `do_x_flow()` function name.
 
 ## Service Class Patterns
 
@@ -68,24 +67,25 @@ on method arguments and return values rather than mutable instance state.
   artifacts; services consume and return those canonical values.
 - Do not add a base service, registry, or manager hierarchy around one concrete
   implementation.
-- **Demote when the binding disappears.** A class justified only by a bound
-  dependency should become a function when that dependency is removed. Structure
-  retrieval was `StructureRetriever(library=...)`; once the tree became
-  self-contained and retrieval bound no library, it is the function
-  `retrieve(tree, question, *, cfg)`.
+- **Config binding alone justifies a class.** A class earns its keep by binding
+  the immutable `cfg` that must stay constant across a batch, even with no store
+  or provider to hold. `Retrieve(AgenticRetrievalCfg(...))` binds the retrieval
+  strategy config once; `retrieve(tree, question)` takes only the operand. Do not
+  demote such a class to a function just because it holds no external dependency.
 
-## Document-Scoped Handle Patterns
+## Config-Bound Flow Patterns
 
-A document-scoped handle is a service variant whose bound state is an
-**immutable** input set once at an `open()` classmethod, with methods that are
-pure derivations sharing one expensive step (fetch + parse):
+A domain flow binds an immutable `cfg` at construction and applies it to each
+input, so a batch runs under one unified, reproducible setting:
 
-- Name it `<Domain>Flow` when it groups several finished pipelines over that
-  input (`PaperFlow`). `Flow` here is a noun for "the domain's workflows."
-- Use `open()` for the async factory that does the shared work; use intent verbs
-  for the pipeline methods (`build_structure()`, `extract_knowledge()`).
-- The handle binds no store and performs no persistence or retrieval — those are
-  downstream of the pipelines it exposes.
+- Name it `<Domain>Flow` (`PaperFlow`). `Flow` here is a noun for "the domain's
+  workflow"; the cfg *type* selects which knowledge shape it builds.
+- Construct with the cfg (`PaperFlow(PaperStructureCfg(...))`); the build method
+  takes only the input (`build(input)`), never a per-call cfg.
+- Use an intent verb for the method (`build`). The flow binds no store and does
+  no persistence or retrieval — those are downstream of the artifact it returns.
+- `batch_run(flow.build, inputs)` is the intended batch shape: one bound cfg,
+  many inputs, one setting.
 
 ## Type Names
 
@@ -102,15 +102,16 @@ pure derivations sharing one expensive step (fetch + parse):
 
 - `collect_news` is a collection operation and follows these naming rules.
 - `batch_run` is a generic batch helper, not a news or paper operation.
-- `paper_flow` is an existing extraction **function** with an old name; it stays
-  as a thin compatibility wrapper over `PaperFlow.open(...).extract_knowledge()`.
-  Do not copy the `*_flow` function pattern for new operations.
-- `PaperFlow` is the document-scoped handle grouping the finished paper
-  pipelines (`open`, `build_structure`, `extract_knowledge`). `Flow` as a noun on
-  this object is deliberate and allowed.
-- `retrieve(tree, question, *, cfg)` is the structure-retrieval function in
-  `quantmind.mind` (formerly the `StructureRetriever` class, demoted once the
-  self-contained tree removed its library binding).
+- `paper_flow` is an existing extraction **function** with an old name; keep it
+  as a thin compatibility wrapper. Do not copy the `*_flow` function pattern for
+  new operations.
+- `PaperFlow(cfg)` is the config-bound paper flow; `build(input)` produces a
+  knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg`
+  → `PaperStructureTree` today). `Flow` as a noun here is deliberate and allowed.
+- `Retrieve(cfg)` is the structure-retrieval service in `quantmind.mind`;
+  `retrieve(tree, question)` returns evidence values. The cfg *type*
+  (`AgenticRetrievalCfg`, later `SemanticRetrievalCfg` / `HybridRetrievalCfg`)
+  selects the strategy — one class with typed dispatch, not a hierarchy.
 
 The current `quantmind.flows` package continues to contain public operations in
 this release. Renaming it to `operations` or adding a separate `pipelines`

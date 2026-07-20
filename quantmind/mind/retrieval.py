@@ -1,10 +1,17 @@
 """Vectorless reasoning-based retrieval over a self-contained structure tree.
 
 Single-tree retrieval is a pure value operation: the tree carries its own node
-content, so ``retrieve`` reads evidence text straight from ``tree.nodes`` and
-returns evidence *values*. It binds no library and imports none. The reference
-(``ArtifactLocator``) rides along only as optional provenance for future
-cross-artifact fusion, never as the path a consumer must resolve to see content.
+content, so ``Retrieve.retrieve`` reads evidence text straight from
+``tree.nodes`` and returns evidence *values*. It binds no library and imports
+none. The reference (``ArtifactLocator``) rides along only as optional
+provenance for future cross-artifact fusion, never as the path a consumer must
+resolve to see content.
+
+``Retrieve`` binds an immutable copy of the retrieval-strategy cfg once, so a
+batch of queries runs under one fixed setting (reproducibility). The cfg *type*
+selects the strategy — ``AgenticRetrievalCfg`` runs the agentic traversal today;
+any other ``RetrievalCfg`` (semantic / hybrid seams) raises
+``NotImplementedError``. This is typed dispatch, not a class hierarchy.
 """
 
 import asyncio
@@ -15,20 +22,12 @@ from uuid import UUID
 from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
 from pydantic import BaseModel, ConfigDict, Field
 
-from quantmind.configs import RetrievalCfg
+from quantmind.configs import AgenticRetrievalCfg, RetrievalCfg
 from quantmind.knowledge import (
     ArtifactLocator,
     Citation,
     StructureTree,
 )
-
-_SINGLE_PASS_INSTRUCTIONS = """\
-Select the structure-tree nodes that contain evidence relevant to the question.
-Reason only over the supplied titles, summaries, hierarchy, and optional seed
-nodes. Prefer leaf nodes, which carry the actual source text; an internal node
-stands in only for the union of its leaves. Return node UUIDs, not an answer.
-Prefer the smallest sufficient set and never invent an ID.
-"""
 
 _AGENTIC_INSTRUCTIONS = """\
 Retrieve evidence relevant to the question by inspecting the document structure
@@ -72,85 +71,100 @@ class _ResolvableStructure(Protocol):
     artifact_kind: str
 
 
-async def retrieve(
-    tree: StructureTree,
-    question: str,
-    *,
-    cfg: RetrievalCfg | None = None,
-    seed_node_ids: list[UUID] | None = None,
-) -> list[RetrievalEvidence]:
-    """Select and read page-cited evidence from one self-contained tree.
+class Retrieve:
+    """Config-bound reasoning retriever over self-contained structure trees.
 
-    This is a library-free pure value operation: node content is read from the
-    tree itself (see ``_node_text``), so every returned evidence value carries
-    its own content and needs no downstream resolution. When the tree is
-    identity-bearing (e.g. a ``PaperStructureTree``), each evidence value also
-    carries an ``ArtifactLocator`` for optional cross-artifact fusion; otherwise
-    ``locator`` is ``None`` and content is still present.
+    ``Retrieve(cfg)`` binds an immutable copy of the retrieval-strategy cfg so a
+    batch of queries runs under one fixed, reproducible setting. The cfg *type*
+    selects the strategy: an ``AgenticRetrievalCfg`` runs the agentic traversal;
+    any other ``RetrievalCfg`` (the semantic / hybrid seams) raises
+    ``NotImplementedError``. This is typed dispatch, deliberately **not** a
+    generic retriever / query-engine class hierarchy.
 
-    Dispatch is on ``cfg.grain`` today:
-
-    - ``single-pass``: serialize the tree (ids, titles, summaries, hierarchy —
-      leaf text stripped for the token budget), make one model call for the
-      relevant node ids, then read those nodes' content from the tree.
-    - ``agentic``: expose ``get_document_structure()`` and
-      ``get_node_content(node_ids)`` tools that read the in-memory tree, and let
-      an Agent traverse turn by turn.
-
-    Future seam: a widened ``retrieve`` is intended to also dispatch to
-    ``semantic`` search over a vector-backed knowledge shape and to ``hybrid``
-    (semantic shortlist, then agentic reasoning over it) when both are
-    available. Those grains are deliberately not implemented here; a single
-    function that branches on cfg/knowledge kind is internal dispatch, not the
-    forbidden generic retriever/query-engine hierarchy.
-
-    Args:
-        tree: Validated self-contained structure tree whose leaf nodes carry
-            their own source content.
-        question: Evidence need used for relevance reasoning.
-        cfg: Model, retrieval grain, and structure/evidence bounds. A default
-            ``RetrievalCfg`` is used when omitted.
-        seed_node_ids: Optional in-tree node hints (validated against
-            ``tree.nodes``) reserved for a later semantic shortlist. This
-            operation performs no semantic search and takes no library seeds.
-
-    Returns:
-        Selected node evidence with self-contained content and optional
-        provenance.
-
-    Raises:
-        ValueError: If the question, seeds, or selected node IDs are invalid.
-        RetrievalError: If runtime or evidence bounds are exceeded, or a
-            selected node yields no content.
+    Example:
+        >>> retriever = Retrieve(AgenticRetrievalCfg(mode="tree"))
+        >>> evidence = await retriever.retrieve(tree, "What is the method?")
     """
-    active_cfg = (cfg or RetrievalCfg()).model_copy(deep=True)
-    normalized_question = question.strip()
-    if not normalized_question:
-        raise ValueError("retrieval question must not be blank")
-    tree.validate()
-    seed_ids = _validate_seed_node_ids(tree, seed_node_ids or [])
-    serialized = _serialize_structure(
-        tree,
-        token_budget=active_cfg.structure_token_budget,
-        seed_ids=set(seed_ids),
-    )
-    if active_cfg.grain == "single-pass":
-        selection = await _single_pass_select(
-            normalized_question,
-            serialized,
-            seed_ids,
-            active_cfg,
+
+    def __init__(self, cfg: RetrievalCfg) -> None:
+        """Bind an immutable copy of the retrieval-strategy cfg.
+
+        Args:
+            cfg: A ``RetrievalCfg`` subclass whose *type* selects the strategy.
+                ``AgenticRetrievalCfg`` is the one implemented today.
+        """
+        self._cfg = cfg.model_copy(deep=True)
+
+    async def retrieve(
+        self,
+        tree: StructureTree,
+        question: str,
+        *,
+        seed_node_ids: list[UUID] | None = None,
+    ) -> list[RetrievalEvidence]:
+        """Select and read page-cited evidence from one self-contained tree.
+
+        This is a library-free pure value operation: node content is read from
+        the tree itself (see ``_node_text``), so every returned evidence value
+        carries its own content and needs no downstream resolution. When the
+        tree is identity-bearing (e.g. a ``PaperStructureTree``), each evidence
+        value also carries an ``ArtifactLocator`` for optional cross-artifact
+        fusion; otherwise ``locator`` is ``None`` and content is still present.
+
+        Strategy is dispatched on the bound cfg *type*:
+
+        - ``AgenticRetrievalCfg``: expose ``get_document_structure()`` and
+          ``get_node_content(node_ids)`` tools that read the in-memory tree, and
+          let an Agent traverse turn by turn; content for a selected non-leaf
+          node is assembled from its descendant leaves.
+        - any other ``RetrievalCfg``: the semantic / hybrid seams are not
+          implemented, so ``NotImplementedError`` is raised.
+
+        Args:
+            tree: Validated self-contained structure tree whose leaf nodes carry
+                their own source content.
+            question: Evidence need used for relevance reasoning.
+            seed_node_ids: Optional in-tree node hints (validated against
+                ``tree.nodes``) reserved for a later semantic shortlist. This
+                operation performs no semantic search and takes no library seeds.
+
+        Returns:
+            Selected node evidence with self-contained content and optional
+            provenance.
+
+        Raises:
+            NotImplementedError: If the bound cfg selects an unimplemented
+                (semantic / hybrid) strategy.
+            ValueError: If the question, seeds, or selected node IDs are invalid.
+            RetrievalError: If runtime or evidence bounds are exceeded, or a
+                selected node yields no content.
+        """
+        cfg = self._cfg
+        if not isinstance(cfg, AgenticRetrievalCfg):
+            raise NotImplementedError(
+                "Retrieve implements agentic-over-tree retrieval only; "
+                f"{type(cfg).__name__} selects an unimplemented strategy "
+                "(semantic / hybrid seams are reserved for a later release)"
+            )
+        normalized_question = question.strip()
+        if not normalized_question:
+            raise ValueError("retrieval question must not be blank")
+        tree.validate()
+        seed_ids = _validate_seed_node_ids(tree, seed_node_ids or [])
+        serialized = _serialize_structure(
+            tree,
+            token_budget=cfg.structure_token_budget,
+            seed_ids=set(seed_ids),
         )
-    else:
         selection = await _agentic_select(
             tree,
             normalized_question,
             serialized,
             seed_ids,
-            active_cfg,
+            cfg,
         )
-    node_ids = _validate_selection(tree, selection, active_cfg)
-    return [_node_evidence(tree, node_id) for node_id in node_ids]
+        node_ids = _validate_selection(tree, selection, cfg)
+        return [_node_evidence(tree, node_id) for node_id in node_ids]
 
 
 def _validate_seed_node_ids(
@@ -262,50 +276,12 @@ def _run_config(cfg: RetrievalCfg) -> RunConfig:
     )
 
 
-async def _single_pass_select(
-    question: str,
-    serialized: str,
-    seed_ids: tuple[UUID, ...],
-    cfg: RetrievalCfg,
-) -> _RetrievalSelectionDraft:
-    agent = Agent(
-        name="structure_single_pass_retriever",
-        instructions=_SINGLE_PASS_INSTRUCTIONS,
-        model=cfg.model,
-        model_settings=cfg.model_settings or ModelSettings(),
-        output_type=_RetrievalSelectionDraft,
-    )
-    input_value = json.dumps(
-        {
-            "question": question,
-            "seed_node_ids": [str(value) for value in seed_ids],
-            "structure": json.loads(serialized),
-        },
-        ensure_ascii=False,
-    )
-    try:
-        result = await asyncio.wait_for(
-            Runner.run(
-                agent,
-                input_value,
-                run_config=_run_config(cfg),
-                max_turns=1,
-            ),
-            timeout=cfg.timeout_seconds,
-        )
-    except asyncio.TimeoutError as exc:
-        raise RetrievalError(
-            "single-pass retrieval exceeded timeout_seconds"
-        ) from exc
-    return _RetrievalSelectionDraft.model_validate(result.final_output)
-
-
 async def _agentic_select(
     tree: StructureTree,
     question: str,
     serialized: str,
     seed_ids: tuple[UUID, ...],
-    cfg: RetrievalCfg,
+    cfg: AgenticRetrievalCfg,
 ) -> _RetrievalSelectionDraft:
     @function_tool
     async def get_document_structure() -> str:
@@ -334,9 +310,13 @@ async def _agentic_select(
             values.append(_node_evidence(tree, node_id).model_dump(mode="json"))
         return json.dumps(values, ensure_ascii=False)
 
+    instructions = _AGENTIC_INSTRUCTIONS
+    if cfg.extra_instruction:
+        instructions = f"{instructions}\n{cfg.extra_instruction}"
+
     agent = Agent(
         name="structure_agentic_retriever",
-        instructions=_AGENTIC_INSTRUCTIONS,
+        instructions=instructions,
         model=cfg.model,
         model_settings=cfg.model_settings or ModelSettings(),
         tools=[get_document_structure, get_node_content],

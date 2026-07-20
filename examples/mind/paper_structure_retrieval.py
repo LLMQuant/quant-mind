@@ -1,57 +1,59 @@
 """Build a self-contained structure tree and retrieve evidence in memory.
 
-The core path needs no library: ``PaperFlow`` opens the PDF (fetch + parse
-once), ``build_structure`` returns a self-contained ``PaperStructureTree`` whose
-leaf nodes carry their own page-cited text, and ``retrieve`` reasons over that
-tree value and returns evidence with the content already in it.
+The core path needs no library. ``PaperFlow`` binds a build config once;
+``build(input)`` fetches and parses the PDF and returns a self-contained
+``PaperStructureTree`` whose leaf nodes carry their own page-cited text.
+``Retrieve`` binds a retrieval-strategy config; ``retrieve(tree, question)``
+reasons over that tree value and returns evidence with the content already in
+it — no library round-trip.
 
 The clearly-labeled OPTIONAL section then shows dump/load symmetry: a library
-stores the tree and reopens it as an identical self-contained value, over which
-``retrieve`` behaves exactly the same. It is not needed to retrieve.
+stores the tree standalone (no source object needed) and reopens it as an
+identical self-contained value, over which ``retrieve`` behaves exactly the
+same. It is not needed to retrieve.
+
+Running this end to end needs network access (a model provider). The example is
+written so it imports and type-checks offline.
 """
 
 import asyncio
 import sys
 from pathlib import Path
 
-from quantmind.configs import PaperStructureCfg, RetrievalCfg
+from quantmind.configs import AgenticRetrievalCfg, PaperStructureCfg
 from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow
 from quantmind.knowledge import PaperStructureTree
-from quantmind.mind import retrieve
+from quantmind.mind import Retrieve
 
 _QUESTION = "What are the main method and limitations?"
 
 
 async def main(pdf_path: Path) -> None:
     """Build a structure tree and retrieve from it in memory (no library)."""
-    paper = await PaperFlow.open(LocalFilePath(path=pdf_path))
-    tree = await paper.build_structure(
-        cfg=PaperStructureCfg(model="gpt-4o-mini")
-    )
+    # Bind the build config once; build(input) applies it per input. A batch
+    # would call batch_run(flow.build, inputs) under this one setting.
+    flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))
+    tree = await flow.build(LocalFilePath(path=pdf_path))
 
-    evidence = await retrieve(
-        tree,
-        _QUESTION,
-        cfg=RetrievalCfg(model="gpt-4o-mini", grain="agentic"),
-    )
+    # Bind the retrieval strategy config once; retrieve(tree, question) takes
+    # only the operands. Evidence carries content directly — no library.
+    retriever = Retrieve(AgenticRetrievalCfg(mode="tree", model="gpt-4o-mini"))
+    evidence = await retriever.retrieve(tree, _QUESTION)
     for item in evidence:
         print(item.title, "—", item.content[:500])
 
-    await _optional_persist_reopen(paper, tree)
+    await _optional_persist_reopen(tree)
 
 
-async def _optional_persist_reopen(
-    paper: PaperFlow,
-    tree: PaperStructureTree,
-) -> None:
+async def _optional_persist_reopen(tree: PaperStructureTree) -> None:
     """OPTIONAL: dump the tree to a library and reopen an identical value.
 
     This section is not required to retrieve — the tree built above is already
-    self-contained. It exists only to demonstrate that
-    ``put_paper_structure_tree`` / ``open_structure`` round-trip to the same
-    value, over which ``retrieve`` behaves identically. Delete it if you only
-    need in-memory retrieval.
+    self-contained. It exists only to demonstrate that ``library.put(tree)`` /
+    ``library.open_structure(tree.id)`` round-trip to the same value (the tree
+    is stored standalone; no source object is needed), over which ``retrieve``
+    behaves identically. Delete it if you only need in-memory retrieval.
     """
     from quantmind.library import LocalKnowledgeLibrary
 
@@ -60,13 +62,13 @@ async def _optional_persist_reopen(
         embedding_model="text-embedding-3-small",
     )
     try:
-        await library.put_paper_structure_tree(paper.source, tree)
+        await library.put(tree)  # standalone: no source revision required
         reopened = await library.open_structure(tree.id)  # identical value
-        evidence = await retrieve(
-            reopened,
-            _QUESTION,
-            cfg=RetrievalCfg(model="gpt-4o-mini", grain="agentic"),
+
+        retriever = Retrieve(
+            AgenticRetrievalCfg(mode="tree", model="gpt-4o-mini")
         )
+        evidence = await retriever.retrieve(reopened, _QUESTION)
         for item in evidence:
             print(item.title, "—", item.content[:500])
     finally:

@@ -65,6 +65,30 @@ class ExtractionRef(BaseModel):
     extracted_at: datetime
 
 
+class ArtifactMeta(BaseModel):
+    """Minimal provenance for a derived, self-contained artifact.
+
+    A derived artifact (for example a page-preserving structure tree) is not
+    canonical ``BaseKnowledge``: it is rebuildable from its source. It still
+    needs the light provenance carried here to be stored and time-queried on its
+    own — an information cutoff (``as_of``), a typed light source reference, and
+    the exact content hash of the source revision it was derived from. Kept
+    deliberately small so several artifact shapes can mix it in without
+    inheriting the full canonical-knowledge field set.
+
+    This provenance is metadata, never identity: it must stay out of an
+    artifact's ``id`` and ``content_hash`` so a rebuild at a different wall-clock
+    time yields the identical artifact.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    as_of: datetime = Field(..., description="Information cutoff time.")
+    source: SourceRef
+    source_title: str | None = None
+    source_content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class BaseKnowledge(BaseModel):
     """Root of every quantmind knowledge type.
 

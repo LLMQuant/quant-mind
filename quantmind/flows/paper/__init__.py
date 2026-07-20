@@ -1,27 +1,33 @@
-"""PaperFlow — a document-scoped handle grouping the paper pipelines.
+"""PaperFlow — a config-bound flow producing paper knowledge artifacts.
 
-``PaperFlow`` binds one immutable parsed source at ``open`` (fetch + parse run
-exactly once) and exposes the finished paper pipelines over it:
+``PaperFlow`` binds an immutable build config at construction and applies it to
+each input, so a batch runs under one unified, reproducible setting:
 
-- ``build_structure`` returns a self-contained ``PaperStructureTree`` whose leaf
-  nodes carry their own page-cited text.
-- ``extract_knowledge`` returns a page-aware chunk set and one cited global
-  summary (``PaperFlowResult``).
+    tree_flow = PaperFlow(PaperStructureCfg(model="gpt-4o-mini"))  # bind cfg once
+    tree = await tree_flow.build(input)                            # -> tree
+    trees = await batch_run(tree_flow.build, inputs)               # one setting
 
-Every method is a pure ``-> artifact`` derivation of the immutable source; no
-method mutates it and nothing accumulates between calls. The handle binds no
-library, persists nothing, and retrieves nothing — persistence (``library``)
-and retrieval (``mind``) are downstream concerns a caller wires itself.
+``build(input)`` takes only the operand and dispatches on the cfg **type**: a
+``PaperStructureCfg`` selects the self-contained ``PaperStructureTree`` shape
+(fetch + parse, deterministic outline signals, one draft-structuring agent, then
+the knowledge-layer ``from_draft`` constructor that mints identity and populates
+each leaf node's page-cited text). Any other cfg type raises
+``NotImplementedError`` — the chunk/summary (card) shape is not wired through
+``build`` yet; it stays in the ``paper_flow`` compatibility function.
 
-The module keeps only what genuinely needs both the preprocess/rag value
-objects and IO: fetching bytes, parsing the PDF, reading page-asset bytes off
-disk, and mapping those ephemeral, path-based artifacts into knowledge-native
-inputs. All identity (IDs, content and producer hashes, citation resolution)
-lives on the knowledge models' ``from_*`` constructors, so this module imports
-no private ID helpers and computes no paper ID itself.
+``build`` fetches and parses **per call**: the flow binds no source, no library,
+persists nothing, and retrieves nothing. Persistence (``library``) and retrieval
+(``mind``) are downstream concerns a caller wires itself.
 
-``paper_flow`` remains as a thin compatibility function delegating to
-``PaperFlow.open(...).extract_knowledge(...)``.
+The module keeps only what genuinely needs both the preprocess/rag value objects
+and IO: fetching bytes, parsing the PDF, reading page-asset bytes off disk, and
+mapping those ephemeral, path-based artifacts into knowledge-native inputs. All
+identity (IDs, content and producer hashes, citation resolution) lives on the
+knowledge models' ``from_*`` constructors, so this module imports no private ID
+helpers and computes no paper ID itself.
+
+``paper_flow`` remains as a thin compatibility function for the semantic
+chunk/summary shape (``PaperFlowResult``).
 """
 
 import mimetypes
@@ -31,7 +37,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
 
-from quantmind.configs import PaperFlowCfg, PaperStructureCfg
+from quantmind.configs import BaseFlowCfg, PaperFlowCfg, PaperStructureCfg
 from quantmind.configs.paper import (
     ArxivIdentifier,
     DoiIdentifier,
@@ -103,113 +109,84 @@ class UnsupportedContentTypeError(ValueError):
 
 
 class PaperFlow:
-    """Document-scoped handle grouping the finished paper pipelines.
+    """Config-bound flow producing a paper knowledge artifact per input.
 
-    ``open`` performs the one expensive step the pipelines share — fetch and
-    parse — exactly once and binds the resulting immutable source revision (and
-    the parsed document that chunking needs). Every pipeline method is a pure
-    ``-> artifact`` derivation of that immutable state; the handle binds no
-    library, persists nothing, and retrieves nothing.
+    ``PaperFlow(cfg)`` binds an immutable copy of the build config; ``build``
+    applies it to each input, so a batch runs under one unified, reproducible
+    setting and a config can never drift mid-run. The cfg **type** selects the
+    knowledge shape: ``PaperStructureCfg`` builds a self-contained
+    ``PaperStructureTree`` today. The flow binds no source, no library, and no
+    per-call state; ``build`` fetches and parses per call.
     """
 
     __slots__ = (
-        "_parsed",
-        "_source",
+        "_cfg",
         "_structure_provider",
-        "_summary_provider",
     )
 
     def __init__(
         self,
+        cfg: BaseFlowCfg,
         *,
-        source: PaperSourceRevision,
-        parsed: ParsedDocument,
-        structure_provider: _PaperStructureProvider | None = None,
-        summary_provider: _PaperSummaryProvider | None = None,
-    ) -> None:
-        self._source = source
-        self._parsed = parsed
-        self._structure_provider = structure_provider
-        self._summary_provider = summary_provider
-
-    @classmethod
-    async def open(
-        cls,
-        input: PaperInput,
-        *,
-        output_dir: str | None = None,
         _structure_provider: _PaperStructureProvider | None = None,
-        _summary_provider: _PaperSummaryProvider | None = None,
-    ) -> "PaperFlow":
-        """Fetch and parse one source exactly once, returning a bound handle.
+    ) -> None:
+        """Bind an immutable copy of the build config.
 
-        The parsed document and the exact ``PaperSourceRevision`` are stored as
-        immutable instance state; no later method re-fetches or re-parses.
+        Args:
+            cfg: The build config. Its **type** selects the knowledge shape
+                ``build`` produces (``PaperStructureCfg`` → structure tree).
+            _structure_provider: Optional test seam for the structure draft.
+        """
+        self._cfg: BaseFlowCfg = cfg.model_copy(deep=True)
+        self._structure_provider = _structure_provider
+
+    async def build(self, input: PaperInput) -> PaperStructureTree:
+        """Build one self-contained knowledge artifact for ``input``.
+
+        Dispatches on the bound cfg **type**. A ``PaperStructureCfg`` runs the
+        structure pipeline: fetch and parse the input, extract deterministic
+        outline signals, seed a single draft-structuring agent, then call the
+        knowledge-layer constructor, which mints identity, resolves page
+        citations, and populates each leaf node's ``content`` from its cited
+        source pages. The returned tree is self-contained: it yields node text
+        without the source revision or a chunk set.
+
+        Fetch and parse run **per call**; the flow keeps no shared source state.
 
         Args:
             input: Typed paper source. V1 requires a PDF-backed input.
-            output_dir: Directory for parser-written page assets, forwarded to
-                ``parse_pdf``.
-            _structure_provider: Optional test seam for the structure draft.
-            _summary_provider: Optional test seam for the summary draft.
 
         Returns:
-            A handle bound to the immutable parsed source.
+            A code-identified ``PaperStructureTree`` whose leaf nodes carry
+            cited page text.
 
         Raises:
+            NotImplementedError: If the bound cfg is not a ``PaperStructureCfg``
+                (the chunk/summary shape stays in ``paper_flow``).
             UnsupportedContentTypeError: If the resolved content is not a PDF.
-            NotImplementedError: If a DOI input has no exact open PDF resolver.
-        """
-        facts = await _fetch_paper_source(input)
-        parsed = await parse_pdf(facts.raw_bytes, artifact_dir=output_dir)
-        source = PaperSourceRevision.from_parsed(
-            facts=facts,
-            source_hash=parsed.source_hash,
-            parser_name=parsed.parser_name,
-            parser_version=parsed.parser_version,
-            cleanup_version=parsed.cleanup_version,
-            pages=_adapt_pages(parsed),
-        )
-        return cls(
-            source=source,
-            parsed=parsed,
-            structure_provider=_structure_provider,
-            summary_provider=_summary_provider,
-        )
-
-    @property
-    def source(self) -> PaperSourceRevision:
-        """The immutable source revision fetched and parsed at ``open``."""
-        return self._source
-
-    async def build_structure(
-        self,
-        *,
-        cfg: PaperStructureCfg | None = None,
-    ) -> PaperStructureTree:
-        """Build one self-contained page-preserving structure tree.
-
-        Deterministic outline signals seed a single draft-structuring agent;
-        code then mints identity, resolves page citations, and — inside the
-        knowledge-layer constructor — populates each leaf node's ``content``
-        from its cited source pages. The returned tree is self-contained: it
-        yields node text without the source revision or a chunk set.
-
-        Args:
-            cfg: Model, prompt, input, and tree bounds. A default
-                ``PaperStructureCfg`` is used when omitted.
-
-        Returns:
-            A code-identified tree whose leaf nodes carry cited page text.
-
-        Raises:
             PaperStructureError: If the model call exceeds its timeout.
             StructureTreeValidationError: If the proposed page tree is invalid.
         """
-        cfg = cfg or PaperStructureCfg()
+        cfg = self._cfg
+        if isinstance(cfg, PaperStructureCfg):
+            return await self._build_structure(input, cfg)
+        raise NotImplementedError(
+            "PaperFlow.build does not support cfg type "
+            f"{type(cfg).__name__!r}; only PaperStructureCfg (structure-tree "
+            "shape) is wired today. The chunk/summary shape stays in the "
+            "paper_flow() compatibility function."
+        )
+
+    async def _build_structure(
+        self,
+        input: PaperInput,
+        cfg: PaperStructureCfg,
+    ) -> PaperStructureTree:
+        """Fetch, parse, and structure one input into a self-contained tree."""
+        source, _ = await _open_source(input, output_dir=cfg.output_dir)
         provider = self._structure_provider or _AgentsPaperStructureProvider()
-        signals = extract_outline_signals(_parsed_document(self._source))
-        draft = await provider.structure(signals, self._source, cfg=cfg)
+        signals = extract_outline_signals(_parsed_document(source))
+        draft = await provider.structure(signals, source, cfg=cfg)
         producer = PaperStructureProducer(
             model=cfg.model,
             prompt_version=cfg.prompt_version,
@@ -220,60 +197,9 @@ class PaperFlow:
             max_nodes=cfg.max_nodes,
         )
         return PaperStructureTree.from_draft(
-            self._source,
+            source,
             producer=producer,
             draft=draft,
-        )
-
-    async def extract_knowledge(
-        self,
-        *,
-        cfg: PaperFlowCfg | None = None,
-    ) -> PaperFlowResult:
-        """Build a page-aware chunk set and one cited global summary.
-
-        IDs, source metadata, artifact membership, lineage, and citation links
-        are minted and validated by the knowledge-layer constructors. The model
-        returns only summary prose and chunk/page coordinates through a bounded
-        seam.
-
-        Args:
-            cfg: Splitter, summary model, and usage/runtime limits. A default
-                ``PaperFlowCfg`` is used when omitted.
-
-        Returns:
-            The exact source revision, one chunk-set artifact, and one cited
-            global-summary artifact.
-
-        Raises:
-            PaperCitationValidationError: If generated citations are invalid or
-                do not meet the configured source-coverage policy.
-        """
-        cfg = cfg or PaperFlowCfg()
-        parsed_chunks = chunk_parsed_document(
-            self._parsed,
-            config=SentenceSplitterConfig(
-                chunk_size=cfg.chunk_size,
-                chunk_overlap=cfg.chunk_overlap,
-            ),
-        )
-        producer = PaperChunkingConfig(
-            splitter_version=version("llama-index-core"),
-            chunk_size=cfg.chunk_size,
-            chunk_overlap=cfg.chunk_overlap,
-        )
-        chunk_set = PaperChunkSet.from_parsed_chunks(
-            self._source,
-            _adapt_chunks(parsed_chunks, self._source),
-            producer=producer,
-        )
-        provider = self._summary_provider or _AgentsPaperSummaryProvider()
-        draft = await provider.summarize(self._source, chunk_set, cfg=cfg)
-        summary = _build_summary(chunk_set, draft, cfg)
-        return PaperFlowResult(
-            source_revision=self._source,
-            chunk_set=chunk_set,
-            global_summary=summary,
         )
 
 
@@ -285,9 +211,15 @@ async def paper_flow(
 ) -> PaperFlowResult:
     """Build a page-aware chunk set and one cited global summary.
 
-    Thin compatibility wrapper over the ``PaperFlow`` handle: it opens the
-    document (fetch + parse once) and runs the knowledge-extraction pipeline.
-    New code should call ``PaperFlow.open(...).extract_knowledge(...)`` directly.
+    Thin compatibility function for the semantic (chunk + summary) shape: it
+    fetches and parses the document once, chunks it, and runs the deterministic
+    map-reduce summary pipeline. IDs, source metadata, artifact membership,
+    lineage, and citation links are minted and validated by the knowledge-layer
+    constructors; the model returns only summary prose and chunk/page
+    coordinates through a bounded seam.
+
+    ``PaperFlow(cfg).build(input)`` is the config-bound entry point for the
+    structure-tree shape; the chunk/summary shape is not wired through it yet.
 
     Args:
         input: Typed paper source. V1 requires a PDF-backed input.
@@ -305,12 +237,55 @@ async def paper_flow(
         NotImplementedError: If a DOI input has no exact open PDF resolver.
     """
     cfg = cfg or PaperFlowCfg()
-    paper = await PaperFlow.open(
-        input,
-        output_dir=cfg.output_dir,
-        _summary_provider=_summary_provider,
+    source, parsed = await _open_source(input, output_dir=cfg.output_dir)
+    parsed_chunks = chunk_parsed_document(
+        parsed,
+        config=SentenceSplitterConfig(
+            chunk_size=cfg.chunk_size,
+            chunk_overlap=cfg.chunk_overlap,
+        ),
     )
-    return await paper.extract_knowledge(cfg=cfg)
+    producer = PaperChunkingConfig(
+        splitter_version=version("llama-index-core"),
+        chunk_size=cfg.chunk_size,
+        chunk_overlap=cfg.chunk_overlap,
+    )
+    chunk_set = PaperChunkSet.from_parsed_chunks(
+        source,
+        _adapt_chunks(parsed_chunks, source),
+        producer=producer,
+    )
+    provider = _summary_provider or _AgentsPaperSummaryProvider()
+    draft = await provider.summarize(source, chunk_set, cfg=cfg)
+    summary = _build_summary(chunk_set, draft, cfg)
+    return PaperFlowResult(
+        source_revision=source,
+        chunk_set=chunk_set,
+        global_summary=summary,
+    )
+
+
+async def _open_source(
+    input: PaperInput,
+    *,
+    output_dir: str | None,
+) -> tuple[PaperSourceRevision, ParsedDocument]:
+    """Fetch, parse, and mint the immutable source revision for one input (IO).
+
+    The single expensive step both shapes share. It performs no LLM call and
+    keeps no state; callers invoke it once per build.
+    """
+    facts = await _fetch_paper_source(input)
+    parsed = await parse_pdf(facts.raw_bytes, artifact_dir=output_dir)
+    source = PaperSourceRevision.from_parsed(
+        facts=facts,
+        source_hash=parsed.source_hash,
+        parser_name=parsed.parser_name,
+        parser_version=parsed.parser_version,
+        cleanup_version=parsed.cleanup_version,
+        pages=_adapt_pages(parsed),
+    )
+    return source, parsed
 
 
 def _aware_or_now(value: datetime | None) -> datetime:

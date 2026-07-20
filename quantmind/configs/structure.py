@@ -6,7 +6,12 @@ from quantmind.configs.base import BaseFlowCfg
 
 
 class PaperStructureCfg(BaseFlowCfg):
-    """Model, prompt, input, and tree bounds for ``PaperFlow.build_structure``."""
+    """Model, prompt, input, and tree bounds for ``PaperFlow(cfg).build``.
+
+    ``PaperFlow.build`` dispatches on the cfg **type**: constructing
+    ``PaperFlow`` with a ``PaperStructureCfg`` selects the self-contained
+    ``PaperStructureTree`` shape.
+    """
 
     model: str = "gpt-4o-mini"
     prompt_version: str = "paper-structure-v2"

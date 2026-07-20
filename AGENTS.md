@@ -75,13 +75,14 @@ the user explicitly authorizes it — fix the underlying issue instead.
 ## Architecture Constraints (stable)
 
 1. **Library, not framework** — use functions for self-contained stateless
-   transformations, small service classes when operations share a reusable
-   construction-time dependency, and document-scoped handles bound to one
-   immutable input (`PaperFlow.open(...)`) whose methods are pure derivations of
-   it. Demote a class back to a function when its only bound dependency
-   disappears. Keep canonical values free of runtime service state; use
-   `Protocol` over ABC, with no framework-style class hierarchies, plugin
-   registries, hook discovery, or CLI.
+   transformations and small service classes that bind, at construction, the
+   immutable `cfg`/policy/dependency that must stay constant across calls; the
+   runtime operand is passed per call. Binding `cfg` for batch reproducibility
+   alone justifies a class (`PaperFlow(cfg).build(input)`,
+   `Retrieve(cfg).retrieve(tree, q)`), and the cfg *type* may select the
+   shape/strategy (typed dispatch, not a class hierarchy). Keep canonical values
+   free of runtime service state; use `Protocol` over ABC, with no
+   framework-style class hierarchies, plugin registries, hook discovery, or CLI.
 2. **RAG data plane, not framework** — use LlamaIndex directly inside
    `quantmind.rag`; keep upstream types private and do not add retriever,
    vector-store, provider, or backend registries.
@@ -103,14 +104,18 @@ the user explicitly authorizes it — fix the underlying issue instead.
    `*_flow` function name is banned; `Flow` as a noun on a document handle
    (`PaperFlow`) is allowed.
 9. **Pipelines produce self-contained artifacts** — a `flows` pipeline is pure
-   processing (`input → artifact`) and returns a value usable without a store; it
-   does not bind a `library`, persist, or retrieve. `library` only dumps and
-   loads (`put` / `open_*`, round-tripping to an identical value); `mind` only
-   retrieves, returning evidence **values** (content included) with any locator
-   as optional provenance. A self-contained artifact carries its own text (and
-   any embeddings), not a reference refilled from a store; accept modest
-   redundancy to keep it self-contained. Half-finished intermediates stay
-   component seams, not public flows. See
+   processing (`input → artifact`) and returns a value usable *and storable*
+   without a store; it does not bind a `library`, persist, or retrieve.
+   `library` only dumps and loads (`put(artifact)` / `open_*`, round-tripping to
+   an identical value); `mind` only retrieves, returning evidence **values**
+   (content included) with any locator as optional provenance. A self-contained
+   artifact carries its own text (and any embeddings) plus the minimal
+   provenance metadata (`as_of` + a light source ref) needed to persist and
+   time-query it standalone — never a reference refilled from a store. Keep that
+   provenance metadata out of the artifact's `id` / `content_hash` (identity
+   stays reproducible); share it via a light provenance base, not full
+   `BaseKnowledge`. Accept modest redundancy to keep artifacts self-contained.
+   Half-finished intermediates stay component seams, not public flows. See
    `contexts/design/operations/orchestration.md`.
 
 ## Tests and Examples

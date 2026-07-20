@@ -13,6 +13,7 @@ text and vectors remain rebuildable library-owned data.
 """
 
 from quantmind.knowledge._base import (
+    ArtifactMeta,
     BaseKnowledge,
     Citation,
     ExtractionRef,
@@ -64,6 +65,7 @@ from quantmind.knowledge.thesis import Thesis
 
 __all__ = [
     # Base
+    "ArtifactMeta",
     "BaseKnowledge",
     "Citation",
     "ExtractionRef",

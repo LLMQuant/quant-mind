@@ -13,7 +13,7 @@
 - [Principle 1: Identity vs Translation Altitude](#principle-1-identity-vs-translation-altitude)
 - [Principle 2: Agentic vs Deterministic Orchestration](#principle-2-agentic-vs-deterministic-orchestration)
 - [Principle 3: Pipeline vs Component Altitude](#principle-3-pipeline-vs-component-altitude)
-- [Callable Shape: Function, Service, or Document Handle](#callable-shape-function-service-or-document-handle)
+- [Callable Shape: Bind Config, Pass the Operand](#callable-shape-bind-config-pass-the-operand)
 - [Worked Example: Paper Flow V1](#worked-example-paper-flow-v1)
 - [Checklist](#checklist)
 
@@ -25,7 +25,7 @@ The first two principles came from one observation: a flow file had become large
 2. **Agentic vs deterministic orchestration** — whether a model decides *how* the work is decomposed, or code does.
 3. **Pipeline vs component altitude** — what a finished pipeline owns (pure processing to a complete artifact) versus what stays a downstream concern (persistence, retrieval).
 
-These principles do not require every operation to have the same callable shape — see [Callable Shape](#callable-shape-function-service-or-document-handle) below.
+These principles do not require every operation to have the same callable shape — see [Callable Shape](#callable-shape-bind-config-pass-the-operand) below.
 
 ## Principle 1: Identity vs Translation Altitude
 
@@ -62,15 +62,13 @@ Using the SDK does **not** force the agentic pattern. Single-agent `Runner.run(a
 
 **Do not build a framework for it.** The fan-out primitive is a function, not a base class: `asyncio.gather` over code-computed items with a `Semaphore`. Keep it inline until a second flow needs it; only then extract a small `map_reduce(items, map_fn, reduce_fn, *, concurrency)` helper. A `BaseFlow`/`ParallelWorkflow` base class is the framework this project explicitly avoids.
 
-Likewise, a small service or document handle may bind a genuinely shared
-dependency (a model policy, a provider seam, or an immutable parsed source)
-without introducing a generic workflow hierarchy — see
-[Callable Shape](#callable-shape-function-service-or-document-handle). But when
-the bound dependency disappears (a self-contained artifact removes the store a
-retriever used to hold), demote the class back to a function rather than keep an
-empty shell. Canonical knowledge artifacts remain frozen values and do not
-acquire `build()`, `retrieve()`, persistence, or provider state merely to make
-call sites look object-oriented.
+Likewise, a small service may bind a genuinely shared construction-time thing —
+a model policy, a provider seam, or (most often) the immutable **config** that
+must stay constant across a batch — without introducing a generic workflow
+hierarchy; see [Callable Shape](#callable-shape-bind-config-pass-the-operand).
+Canonical knowledge artifacts remain frozen values and do not acquire
+`build()`, `retrieve()`, persistence, or provider state merely to make call
+sites look object-oriented.
 
 ## Principle 3: Pipeline vs Component Altitude
 
@@ -88,13 +86,14 @@ Three rules keep the two altitudes honest:
 
 **Smell test.** If a "pipeline" takes a `library` argument, writes to a store, or returns something you must resolve before you can read it, it has absorbed a downstream concern. Split the pure-processing part out and let the caller persist/retrieve.
 
-## Callable Shape: Function, Service, or Document Handle
+## Callable Shape: Bind Config, Pass the Operand
 
-The same operation can be a function, a small service, or a document handle. Pick by what is genuinely shared, not by taste:
+Pick the shape by one question: **what must stay constant across repeated calls, and what varies?** Bind the constant at construction; pass only the varying operand per call.
 
-- **Function** — a self-contained transformation with no reusable construction-time dependency. `retrieve(tree, question, *, cfg)` is a function: once a tree is self-contained, retrieval binds nothing, so a class would be ceremony. When the only reason a class existed (a bound library, a bound provider) disappears, demote it to a function.
-- **Small service class** — repeated calls share a genuine construction-time dependency (a store, a provider seam, a model policy). Methods still take the active input explicitly and return the result; no mutable "current input/result" state. A single service (or function) that dispatches on a `cfg` field or artifact kind is **not** a forbidden hierarchy — the prohibition is on class trees, registries, and managers, not on internal branching.
-- **Document-scoped handle** — a distinct, blessed category: an object bound once to an **immutable** input (e.g. `PaperFlow.open(input)` fetch-and-parses once) whose methods are pure derivations of it (`build_structure()`, `extract_knowledge()`). This is *not* the mutable current-work state the service rule forbids: the bound state never changes, methods share one expensive step, and nothing accumulates between calls. It is also *not* a canonical value gaining behavior — a frozen `knowledge` artifact still never grows `build()`/`retrieve()`/persistence.
+- **Bind the config, not the operand.** An operation that will run over a batch binds its `cfg` at construction as immutable policy; each call passes only the runtime operand. `PaperFlow(cfg).build(input)` and `Retrieve(cfg).retrieve(tree, question)` bind `cfg` once so `batch_run(flow.build, inputs)` applies one unified setting to every input. This is a **reproducibility** requirement, not ergonomics: a config changed between or during calls silently yields results under mixed settings. Binding `cfg` is itself sufficient reason to be a class — an external dependency (a store, a provider) is *not* required, and its absence is *not* a reason to demote to a function.
+- **Function** — fine for a genuinely one-off transform where nothing must stay constant across calls and passing `cfg` per call carries no reproducibility risk. If a batch would want one fixed setting, prefer a config-bound class instead.
+- **The cfg *type* selects the behavior (typed dispatch).** One configured callable picks its shape or strategy from the **type** of the cfg it was built with: `PaperFlow(PaperStructureCfg).build(input)` builds tree-shaped knowledge; `Retrieve(AgenticRetrievalCfg).retrieve(...)` runs agentic traversal. cfg types may share a base cfg. This is internal typed dispatch and is explicitly **not** the forbidden retriever/flow class hierarchy or registry — the prohibition is on class trees, managers, and registries, not on one class branching by cfg type.
+- **No mutable current-work state.** A config-bound service never stores a "current input" or "current result"; the operand goes in as an argument and the artifact comes out as a return value. A frozen `knowledge` artifact still never grows `build()`/`retrieve()`/persistence.
 
 ## Worked Example: Paper Flow V1
 
@@ -115,5 +114,6 @@ When adding a flow that turns preprocess/rag values into knowledge models:
 - [ ] Does the pipeline return a **self-contained** artifact (usable without a store), and does it avoid taking a `library`, persisting, or retrieving?
 - [ ] Are persistence and retrieval left to the caller (`library` dump/load, `mind` retrieve), rather than folded into the pipeline?
 - [ ] Does retrieval return evidence **values** (content included), with any locator as optional provenance — not a bare reference?
-- [ ] If a service class binds only a dependency that a self-contained artifact has removed, should it be a function instead?
+- [ ] Is `cfg` bound at construction (immutable) so a batch runs one unified setting, with only the operand passed per call?
+- [ ] Does the callable pick its shape/strategy from the cfg **type** (typed dispatch), not from a class hierarchy or registry?
 - [ ] Are you exposing a half-finished intermediate as a public flow? If so, keep it a component seam.

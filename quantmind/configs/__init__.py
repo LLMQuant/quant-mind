@@ -12,10 +12,11 @@ from quantmind.configs.base import BaseFlowCfg, BaseInput
 from quantmind.configs.earnings import EarningsFlowCfg, EarningsInput
 from quantmind.configs.news import NewsCollectionCfg, NewsWindow
 from quantmind.configs.paper import PaperFlowCfg, PaperInput
-from quantmind.configs.retrieval import RetrievalCfg
+from quantmind.configs.retrieval import AgenticRetrievalCfg, RetrievalCfg
 from quantmind.configs.structure import PaperStructureCfg
 
 __all__ = [
+    "AgenticRetrievalCfg",
     "BaseFlowCfg",
     "BaseInput",
     "EarningsFlowCfg",

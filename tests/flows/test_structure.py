@@ -1,4 +1,4 @@
-"""Offline tests for the ``PaperFlow`` structure pipeline."""
+"""Offline tests for the config-bound ``PaperFlow.build`` structure shape."""
 
 import asyncio
 import unittest
@@ -10,10 +10,6 @@ from agents import ModelSettings
 from quantmind.configs import PaperFlowCfg, PaperStructureCfg
 from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow, PaperStructureError
-from quantmind.flows._paper_summary import (
-    PaperSummaryCitationDraft,
-    PaperSummaryDraft,
-)
 from quantmind.flows.paper._structure import (
     _AgentsPaperStructureProvider,
     _structure_model_settings,
@@ -92,89 +88,73 @@ class _RaisingStructureProvider:
         )
 
 
-class _FakeSummaryProvider:
-    def __init__(self) -> None:
-        self.calls = []
-
-    async def summarize(self, source, chunk_set, *, cfg):
-        self.calls.append((source, chunk_set, cfg))
-        selected = []
-        pages: set[int] = set()
-        for chunk in chunk_set.chunks:
-            page = chunk.source_spans[0].page_number
-            if page not in pages or len(selected) < cfg.min_summary_citations:
-                selected.append((chunk, page))
-                pages.add(page)
-            if (
-                len(selected) >= cfg.min_summary_citations
-                and len(pages) >= cfg.min_summary_pages
-            ):
-                break
-        return PaperSummaryDraft(
-            summary="A deterministic offline summary across physical pages.",
-            citations=tuple(
-                PaperSummaryCitationDraft(
-                    chunk_index=chunk.position,
-                    page_number=page,
-                )
-                for chunk, page in selected
-            ),
-        )
-
-
-class PaperFlowStructureTests(unittest.IsolatedAsyncioTestCase):
-    async def test_open_parses_once_and_pipelines_reuse_source(self) -> None:
-        structure_provider = _FakeStructureProvider()
-        summary_provider = _FakeSummaryProvider()
+class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
+    async def test_build_returns_self_contained_tree_per_call(self) -> None:
+        provider = _FakeStructureProvider()
         parse_spy = AsyncMock(side_effect=parse_pdf)
+        cfg = PaperStructureCfg(model="litellm/anthropic/claude-test")
+
+        flow = PaperFlow(cfg, _structure_provider=provider)
+        # Mutating the caller's cfg after construction must not leak in:
+        # PaperFlow binds an immutable copy.
+        cfg.model = "mutated-after-bind"
 
         with patch("quantmind.flows.paper.parse_pdf", new=parse_spy):
-            paper = await PaperFlow.open(
-                LocalFilePath(path=_FIXTURE),
-                _structure_provider=structure_provider,
-                _summary_provider=summary_provider,
-            )
-            self.assertEqual(parse_spy.await_count, 1)
+            tree_one = await flow.build(LocalFilePath(path=_FIXTURE))
+            tree_two = await flow.build(LocalFilePath(path=_FIXTURE))
 
-            tree = await paper.build_structure(
-                cfg=PaperStructureCfg(model="litellm/anthropic/claude-test")
-            )
-            result = await paper.extract_knowledge(
-                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32)
-            )
-            # No pipeline re-parses: the source is bound once at open().
-            self.assertEqual(parse_spy.await_count, 1)
+        # Binding cfg once and calling build twice re-parses per call: no
+        # hidden shared/open source state survives across calls.
+        self.assertEqual(parse_spy.await_count, 2)
+        self.assertEqual(len(provider.calls), 2)
+        self.assertIsNot(provider.calls[0][1], provider.calls[1][1])
 
-        # Both pipelines saw the one immutable source revision.
-        self.assertEqual(len(structure_provider.calls), 1)
-        self.assertIs(structure_provider.calls[0][1], paper.source)
-        self.assertEqual(len(summary_provider.calls), 1)
-        self.assertIs(summary_provider.calls[0][0], paper.source)
-        self.assertIs(result.source_revision, paper.source)
+        # The bound (copied) cfg is used, not the mutated original.
+        self.assertEqual(
+            tree_one.producer.model, "litellm/anthropic/claude-test"
+        )
 
         # The tree is self-contained: leaves carry content, internals do not.
-        self.assertEqual(tree.source_revision_id, paper.source.id)
-        self.assertEqual(tree.producer.model, "litellm/anthropic/claude-test")
-        leaves = [node for node in tree.nodes.values() if not node.children_ids]
-        internals = [node for node in tree.nodes.values() if node.children_ids]
+        leaves = [
+            node for node in tree_one.nodes.values() if not node.children_ids
+        ]
+        internals = [
+            node for node in tree_one.nodes.values() if node.children_ids
+        ]
         self.assertTrue(leaves)
+        self.assertTrue(internals)
         self.assertTrue(all(node.content for node in leaves))
         self.assertTrue(all(node.content is None for node in internals))
 
-    async def test_build_structure_propagates_structure_error(self) -> None:
+        # Same input + bound cfg yields the same code-owned identity.
+        self.assertEqual(tree_one.id, tree_two.id)
+        self.assertEqual(
+            tree_one.source_revision_id, tree_two.source_revision_id
+        )
+
+    async def test_build_propagates_structure_error(self) -> None:
         provider = _RaisingStructureProvider()
         parse_spy = AsyncMock(side_effect=parse_pdf)
 
+        flow = PaperFlow(PaperStructureCfg(), _structure_provider=provider)
         with patch("quantmind.flows.paper.parse_pdf", new=parse_spy):
-            paper = await PaperFlow.open(
-                LocalFilePath(path=_FIXTURE),
-                _structure_provider=provider,
-            )
             with self.assertRaises(PaperStructureError):
-                await paper.build_structure()
+                await flow.build(LocalFilePath(path=_FIXTURE))
 
+        # Fetch + parse ran for this call before the provider raised.
         self.assertEqual(parse_spy.await_count, 1)
         self.assertEqual(provider.calls, 1)
+
+    async def test_non_structure_cfg_raises_not_implemented(self) -> None:
+        # A non-PaperStructureCfg selects an unwired shape: build must reject
+        # it by cfg type, before any fetch or parse.
+        flow = PaperFlow(PaperFlowCfg())
+        with patch(
+            "quantmind.flows.paper.parse_pdf",
+            new=AsyncMock(side_effect=AssertionError("must not parse")),
+        ):
+            with self.assertRaises(NotImplementedError):
+                await flow.build(LocalFilePath(path=_FIXTURE))
 
 
 class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):

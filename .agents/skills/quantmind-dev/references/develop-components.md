@@ -14,18 +14,17 @@ apply throughout.
    forbidden import, the design is wrong — restructure, do not work around
    the contract.
 3. **Implement small and flat.** Use functions for self-contained stateless
-   transformations. Use a small service class when operations share a reusable
-   construction-time dependency; do not add a class only as a namespace, and do
-   not store an implicit mutable "current input" or "current result". A
-   document-scoped handle bound to one **immutable** input (`PaperFlow.open()`),
-   with pure-derivation methods, is an allowed variant — the bound state never
-   mutates. Demote a class back to a function when its only bound dependency
-   disappears (`StructureRetriever(library=...)` became `retrieve(tree, ...)`
-   once the tree was self-contained). Use `Protocol` over ABC and avoid
-   framework-style class hierarchies. No meaningless wrappers (a method must add
-   logic, abstraction, or a side effect beyond the call it wraps). No premature
-   abstractions — extract shared code when the second real caller appears, not
-   before.
+   transformations. Use a small service class to bind, at construction, the
+   immutable `cfg`/policy/dependency that must stay constant across calls; the
+   operand is passed per call. Binding `cfg` for batch reproducibility alone
+   justifies a class (`PaperFlow(cfg).build(input)`,
+   `Retrieve(cfg).retrieve(...)`), and the cfg *type* may select the
+   shape/strategy (typed dispatch, not a hierarchy). Do not add a class only as a
+   namespace, and do not store an implicit mutable "current input" or "current
+   result". Use `Protocol` over ABC and avoid framework-style class hierarchies.
+   No meaningless wrappers (a method must add logic, abstraction, or a side effect
+   beyond the call it wraps). No premature abstractions — extract shared code when
+   the second real caller appears, not before.
 4. **Add the unit test and the example** (sections below).
 5. **Update the public surface** if needed: package exports, the relevant
    design or guide, and the catalog in `docs/README.md`. Update the root
@@ -86,12 +85,12 @@ apply throughout.
 
 ### `quantmind/flows/` and `quantmind/magic.py` — apex layer
 
-- Public operations are intent-oriented async callables. Prefer a function for
-  one self-contained operation; use a small service class when its constructor
-  binds dependencies or policy reused across calls; use a document-scoped handle
-  (`PaperFlow.open(...)`) to group several pipelines over one immutable input.
-  Instances must not hide the active input or result as mutable state, and side
-  effects stay explicit.
+- Public operations are intent-oriented async callables. Prefer a function for a
+  one-off transform; use a config-bound service class when a batch must run under
+  one fixed setting — bind `cfg` at construction (`PaperFlow(cfg)`), pass only the
+  operand per call (`build(input)`), and let the cfg *type* select the knowledge
+  shape. Instances must not hide the active input or result as mutable state, and
+  side effects stay explicit.
 - **A pipeline is pure processing: `input → self-contained artifact`.** It does
   not bind a `library`, persist, or retrieve. Producing the artifact fully —
   including any embeddings it carries — is the whole job. Persistence (`library`
@@ -119,16 +118,18 @@ apply throughout.
 - **Memory**: backends implement the `Memory` Protocol with granular `tools()`,
   `mcp_servers()`, `run_hooks()`, `reset()` — each may return an empty list; do
   not force MCP on every implementation.
-- **Retrieval**: `retrieve(tree, question, *, cfg)` reasons over one
-  **self-contained** `StructureTree` value and returns `RetrievalEvidence`
-  values whose `content` comes from the tree — no `library`, no query-time
-  refill. The `locator` field is optional provenance for cross-artifact fusion,
-  never the path to the content. Dispatch grains on `cfg` (`single-pass` /
-  `agentic`); leave `semantic` / `hybrid` as documented `NotImplementedError`
-  seams. Use the Agents SDK directly (`Agent`, `@function_tool`, `output_type=`,
-  its own `RunConfig`); do not import `flows._runner`, and do not build a
-  retriever/query-engine hierarchy — internal cfg/kind dispatch is fine.
-  See `contexts/design/mind/retrieval.md`.
+- **Retrieval**: `Retrieve(cfg)` binds the retrieval strategy config;
+  `retrieve(tree, question)` reasons over one **self-contained** `StructureTree`
+  value and returns `RetrievalEvidence` values whose `content` comes from the
+  tree — no `library`, no query-time refill. The `locator` field is optional
+  provenance for cross-artifact fusion, never the path to the content. The cfg
+  *type* selects the strategy: `AgenticRetrievalCfg` today (with `mode="tree"`),
+  `SemanticRetrievalCfg` / `HybridRetrievalCfg` later as documented
+  `NotImplementedError` seams. Use the Agents SDK directly (`Agent`,
+  `@function_tool`, `output_type=`, its own `RunConfig`); do not import
+  `flows._runner`, and do not build a retriever/query-engine hierarchy — one
+  class with typed cfg dispatch is the rule. See
+  `contexts/design/mind/retrieval.md`.
 
 ### `quantmind/utils/`
 

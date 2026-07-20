@@ -29,17 +29,14 @@ from quantmind.knowledge import (
     Thesis,
     TreeKnowledge,
 )
-from quantmind.knowledge.paper import (
-    _validate_chunk_set_source,
-    _validate_structure_tree_source,
-)
+from quantmind.knowledge.paper import _validate_chunk_set_source
 from quantmind.library._internal.llamaindex_retriever import _IndexRecord
 from quantmind.library._internal.retrieval_targets import (
     _PROJECTION_SCHEMA_VERSION,
     _RetrievalTarget,
 )
 
-_DATABASE_SCHEMA_VERSION = 4
+_DATABASE_SCHEMA_VERSION = 5
 
 _KNOWLEDGE_CLASSES: dict[str, type[BaseKnowledge]] = {
     f"{knowledge_type.__module__}:{knowledge_type.__qualname__}": knowledge_type
@@ -135,12 +132,9 @@ class _PreparedPaperPut:
 
 
 @dataclass(frozen=True)
-class _PreparedPaperStructurePut:
-    """Validated vectorless structure-tree write."""
+class _PreparedStructureTreePut:
+    """Validated self-contained structure-tree write with no source revision."""
 
-    source: PaperSourceRevision
-    source_payload: str
-    source_canonical_hash: str
     tree: PaperStructureTree
     canonical: _CanonicalPaperArtifact
 
@@ -416,6 +410,10 @@ CREATE TABLE paper_source_assets (
         ON DELETE CASCADE
 );
 
+-- A derived artifact (e.g. a self-contained structure tree) can be stored
+-- without its source revision, so ``source_revision_id`` is a metadata pointer
+-- with no foreign key to ``paper_sources``. Chunk-set and summary artifacts
+-- still write their source first via ``put_paper``.
 CREATE TABLE paper_artifacts (
     artifact_id TEXT PRIMARY KEY,
     source_revision_id TEXT NOT NULL,
@@ -426,9 +424,7 @@ CREATE TABLE paper_artifacts (
     canonical_hash TEXT NOT NULL,
     member_count INTEGER NOT NULL CHECK (member_count >= 0),
     target_count INTEGER NOT NULL CHECK (target_count >= 0),
-    UNIQUE (source_revision_id, artifact_kind, producer_config_hash),
-    FOREIGN KEY (source_revision_id) REFERENCES paper_sources(source_revision_id)
-        ON DELETE CASCADE
+    UNIQUE (source_revision_id, artifact_kind, producer_config_hash)
 );
 
 CREATE TABLE paper_artifact_members (
@@ -572,19 +568,67 @@ def _migrate_schema_v3_to_v4(db: sqlite3.Connection) -> None:
         db.execute("PRAGMA foreign_keys = ON")
 
 
+def _migrate_schema_v4_to_v5(db: sqlite3.Connection) -> None:
+    """Decouple derived artifacts from a stored source revision.
+
+    A self-contained structure tree is stored without its source, so the
+    ``paper_artifacts -> paper_sources`` foreign key is dropped. The
+    ``source_revision_id`` column and every other paper relationship are
+    preserved; chunk-set and summary writes still persist their source first.
+    """
+    db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        db.executescript(
+            """
+            BEGIN IMMEDIATE;
+
+            CREATE TABLE paper_artifacts_v5 (
+                artifact_id TEXT PRIMARY KEY,
+                source_revision_id TEXT NOT NULL,
+                artifact_kind TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                producer_config_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                canonical_hash TEXT NOT NULL,
+                member_count INTEGER NOT NULL CHECK (member_count >= 0),
+                target_count INTEGER NOT NULL CHECK (target_count >= 0),
+                UNIQUE (source_revision_id, artifact_kind, producer_config_hash)
+            );
+
+            INSERT INTO paper_artifacts_v5 SELECT * FROM paper_artifacts;
+
+            DROP TABLE paper_artifacts;
+            ALTER TABLE paper_artifacts_v5 RENAME TO paper_artifacts;
+
+            CREATE INDEX paper_artifacts_source_kind
+                ON paper_artifacts(source_revision_id, artifact_kind);
+
+            PRAGMA user_version = 5;
+            COMMIT;
+            """
+        )
+        if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError(
+                "Stale knowledge library schema: v4 migration broke links"
+            )
+    except Exception:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+    finally:
+        db.execute("PRAGMA foreign_keys = ON")
+
+
 def _initialize_schema(db: sqlite3.Connection) -> None:
     """Create the current schema or reject an incompatible local database."""
     version_row = db.execute("PRAGMA user_version").fetchone()
     version = int(version_row[0])
-    if version not in (0, 2, 3, _DATABASE_SCHEMA_VERSION):
+    if version not in (0, 2, 3, 4, _DATABASE_SCHEMA_VERSION):
         raise RuntimeError(
             "Stale knowledge library schema: database version "
             f"{version}, expected {_DATABASE_SCHEMA_VERSION}"
         )
     if version == _DATABASE_SCHEMA_VERSION:
-        return
-    if version == 3:
-        _migrate_schema_v3_to_v4(db)
         return
     if version == 2:
         migration_sql = _PAPER_TABLES_SQL.replace(
@@ -593,6 +637,12 @@ def _initialize_schema(db: sqlite3.Connection) -> None:
         db.executescript(
             f"{migration_sql}\nPRAGMA user_version = {_DATABASE_SCHEMA_VERSION};"
         )
+        return
+    if version == 3:
+        _migrate_schema_v3_to_v4(db)
+        version = 4
+    if version == 4:
+        _migrate_schema_v4_to_v5(db)
         return
     db.executescript(
         f"""
@@ -973,36 +1023,35 @@ class _SQLiteStore:
                 self._db.execute("ROLLBACK")
             raise
 
-    def prepare_put_paper_structure_tree(
+    def prepare_structure_tree(
         self,
-        source: PaperSourceRevision,
         tree: PaperStructureTree,
-    ) -> _PreparedPaperStructurePut:
-        """Validate a vectorless structure tree against its exact source."""
-        _validate_structure_tree_source(tree, source)
-        source_payload, source_canonical_hash = _prepare_paper_source(source)
-        return _PreparedPaperStructurePut(
-            source=source,
-            source_payload=source_payload,
-            source_canonical_hash=source_canonical_hash,
-            tree=tree,
-            canonical=_canonical_paper_artifact(tree),
+    ) -> _PreparedStructureTreePut:
+        """Re-run a self-contained tree's integrity gate before storing it.
+
+        The tree is persisted on its own, reading ``as_of`` / source ref /
+        ``source_content_hash`` from its own provenance metadata; no source
+        revision or chunk set is required. Re-validating from the tree's own
+        dump makes a bypassed (for example ``model_copy``-mutated) tree fail
+        closed before any row is written.
+        """
+        validated = PaperStructureTree.model_validate(
+            tree.model_dump(mode="json")
+        )
+        return _PreparedStructureTreePut(
+            tree=validated,
+            canonical=_canonical_paper_artifact(validated),
         )
 
-    def put_paper_structure_tree(
+    def put_structure_tree(
         self,
-        prepared: _PreparedPaperStructurePut,
+        prepared: _PreparedStructureTreePut,
     ) -> None:
-        """Atomically persist one source and vectorless structure artifact."""
+        """Atomically persist one self-contained structure tree with no source."""
         tree = prepared.tree
         canonical = prepared.canonical
         try:
             self._db.execute("BEGIN IMMEDIATE")
-            self._put_paper_source(
-                prepared.source,
-                payload=prepared.source_payload,
-                canonical_hash=prepared.source_canonical_hash,
-            )
             self._db.execute(
                 """
                 INSERT INTO paper_artifacts (
@@ -1525,16 +1574,9 @@ class _SQLiteStore:
             raise RuntimeError(
                 f"Stale paper artifact '{artifact_id}': lineage mismatch"
             )
-        if isinstance(artifact, PaperStructureTree):
-            try:
-                _validate_structure_tree_source(
-                    artifact,
-                    self.get_paper_source(artifact.source_revision_id),
-                )
-            except ValueError as exc:
-                raise RuntimeError(
-                    f"Stale paper artifact '{artifact_id}': citation mismatch"
-                ) from exc
+        # A structure tree is self-contained: ``model_validate`` above already
+        # ran its full integrity gate (topology, leaf content, citations) from
+        # the tree's own value. Loading it never depends on a stored source.
         return artifact
 
     def get_paper_result(
