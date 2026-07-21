@@ -52,3 +52,10 @@ implementation must preserve.
 - Use code and tests to check current behavior. Keep `docs/` focused on
   user-facing guides, examples, and catalogs; those pages may link here but
   must not maintain a second copy of a design.
+- Keep Mermaid diagrams compact. Pick the direction by the diagram's story, not
+  the screen: `LR` for a linear pipeline or ladder, `TD` for layered or
+  hierarchical structures (a subgraph-per-layer map). Keep node text short and
+  push detail to edge labels or the prose; split anything past ~15–20 nodes.
+  GitHub scrolls a wide diagram horizontally, but a tall `TD` diagram pushes the
+  page down several screens, so prefer `LR` whenever the flow is essentially
+  linear.

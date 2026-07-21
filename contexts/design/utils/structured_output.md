@@ -35,16 +35,14 @@ code. This must stay invisible to callers, who pass only `cfg.model`.
 `run_structured(output_type, *, build_agent, run)` runs one strict-first ladder:
 
 ```mermaid
-flowchart TD
-    S["run_structured(output_type, build_agent, run)"]
-    S --> A["build_agent(False): output_type set → strict json_schema"]
+flowchart LR
+    S["run_structured()"] --> A["strict: output_type → json_schema"]
     A --> R1{"run(agent)"}
-    R1 -->|success| OK["validate locally → return model"]
-    R1 -->|BadRequestError| Q{"message names response_format / json_schema?"}
-    Q -->|no| RE["re-raise unchanged (never masked)"]
-    Q -->|yes| B["build_agent(True): no output_type · schema in prompt · response_format = json_object"]
-    B --> R2["run(agent) → raw string"]
-    R2 --> OK
+    R1 -->|success| OK["validate → return model"]
+    R1 -->|BadRequestError| Q{"response_format rejected?"}
+    Q -->|no| RE["re-raise unchanged"]
+    Q -->|yes| B["fallback: json_object + schema in prompt"]
+    B --> R2["run → raw string"] --> OK
 ```
 
 1. Run the agent from `build_agent(False)` — it carries `output_type=`, so the
