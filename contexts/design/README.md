@@ -33,6 +33,7 @@ implementation must preserve.
 | Mind | [Build and retrieve from a page-preserving structure tree](mind/retrieval.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 | Operations | [Orchestration and construction altitude](operations/orchestration.md) |
+| Utils | [Cross-provider structured output](utils/structured_output.md) |
 
 ## Organization Rules
 

@@ -28,7 +28,7 @@ rule instead of treating this page as a replacement for it.
 | Public operation and source catalog | [`docs/README.md`](../../docs/README.md) |
 | Public operation naming | [Operation naming rules](../design/operations/naming.md) |
 | Component designs | [Design index](../design/README.md) |
-| Test patterns and coverage | [`tests/`](../../tests/) |
+| How to write tests (standards + change→test obligations) | [Writing tests](../../.agents/skills/quantmind-dev/references/tests.md) |
 | Focused runnable examples | [`examples/`](../../examples/) |
 | All local checks | [`scripts/verify.sh`](../../scripts/verify.sh) |
 
