@@ -12,6 +12,12 @@ from quantmind.configs import PaperStructureCfg
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import PaperSourceRevision, PaperStructureTreeDraft
 from quantmind.preprocess import OutlineSignals
+from quantmind.utils.structured_output import (
+    json_object_instructions,
+    json_object_model_settings,
+    requires_json_object_mode,
+    validate_json_object,
+)
 
 _STRUCTURE_INSTRUCTIONS = """\
 Act as a paper structure specialist. Return one hierarchy draft and a quality
@@ -119,13 +125,25 @@ class _AgentsPaperStructureProvider:
         *,
         cfg: PaperStructureCfg,
     ) -> PaperStructureTreeDraft:
-        agent: Agent[Any] = Agent(
-            name="paper_structure_builder",
-            instructions=_structure_instructions(cfg),
-            model=cfg.model,
-            model_settings=_structure_model_settings(cfg),
-            output_type=PaperStructureTreeDraft,
-        )
+        uses_json_object = requires_json_object_mode(cfg.model)
+        instructions = _structure_instructions(cfg)
+        model_settings = _structure_model_settings(cfg)
+        if uses_json_object:
+            instructions = json_object_instructions(
+                instructions,
+                PaperStructureTreeDraft,
+            )
+            model_settings = json_object_model_settings(model_settings)
+
+        agent_kwargs: dict[str, Any] = {
+            "name": "paper_structure_builder",
+            "instructions": instructions,
+            "model": cfg.model,
+            "model_settings": model_settings,
+        }
+        if not uses_json_object:
+            agent_kwargs["output_type"] = PaperStructureTreeDraft
+        agent: Agent[Any] = Agent(**agent_kwargs)
         try:
             output = await asyncio.wait_for(
                 run_with_observability(
@@ -141,4 +159,6 @@ class _AgentsPaperStructureProvider:
             raise PaperStructureError(
                 "paper structure build exceeded timeout_seconds"
             ) from exc
+        if uses_json_object:
+            return validate_json_object(output, PaperStructureTreeDraft)
         return PaperStructureTreeDraft.model_validate(output)

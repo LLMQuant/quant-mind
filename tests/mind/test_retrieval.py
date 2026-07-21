@@ -107,6 +107,132 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(evidence[0].content, self.leaf.content)
 
+    async def test_litellm_uses_json_object_mode_after_tool_calls(self) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output=(
+                    "```json\n"
+                    f"{json.dumps({'node_ids': [str(self.leaf.node_id)]})}\n"
+                    "```"
+                )
+            )
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        agent = run_mock.await_args.args[0]
+        self.assertIsNone(agent.output_type)
+        self.assertEqual(
+            agent.model_settings.extra_body["response_format"],
+            {"type": "json_object"},
+        )
+        self.assertEqual(agent.model_settings.tool_choice, "required")
+        self.assertIn("final output format", agent.instructions)
+        self.assertIn("MUST call get_document_structure", agent.instructions)
+        self.assertEqual(
+            {tool.name for tool in agent.tools},
+            {"get_document_structure", "get_node_content"},
+        )
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
+    async def test_litellm_normalizes_node_id_aliases_before_validation(
+        self,
+    ) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output=json.dumps(
+                    {
+                        "leaf_node_ids": [],
+                        "method_node_ids": [str(self.leaf.node_id)],
+                    }
+                )
+            )
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
+    async def test_litellm_extracts_node_ids_from_json_explanations(
+        self,
+    ) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            return_value=SimpleNamespace(
+                final_output=json.dumps(
+                    {
+                        "method": (
+                            f"The selected method node is {self.leaf.node_id}."
+                        )
+                    }
+                )
+            )
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
+    async def test_litellm_retries_malformed_tool_output_without_tools(
+        self,
+    ) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            side_effect=(
+                SimpleNamespace(
+                    final_output=json.dumps(
+                        {
+                            "question": "Find the attention evidence.",
+                            "seed_node_ids": [],
+                        }
+                    )
+                ),
+                SimpleNamespace(
+                    final_output=json.dumps(
+                        {"node_ids": [str(self.leaf.node_id)]}
+                    )
+                ),
+            )
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        self.assertEqual(run_mock.await_count, 2)
+        fallback_agent = run_mock.await_args_list[1].args[0]
+        self.assertFalse(fallback_agent.tools)
+        self.assertIsNone(fallback_agent.output_type)
+        self.assertEqual(fallback_agent.model_settings.tool_choice, None)
+        self.assertIn(
+            "Document structure:", run_mock.await_args_list[1].args[1]
+        )
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
     async def test_extra_instruction_is_appended_to_agent_instructions(
         self,
     ) -> None:

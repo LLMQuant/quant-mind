@@ -158,10 +158,16 @@ class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
-    async def test_provider_runs_one_structured_output_agent(self) -> None:
+    async def test_litellm_provider_uses_json_object_and_validates_locally(
+        self,
+    ) -> None:
         result = build_paper_result()
-        cfg = PaperStructureCfg(model="litellm/openrouter/test-model")
-        run_mock = AsyncMock(return_value=_fixture_draft())
+        cfg = PaperStructureCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            return_value=f"```json\n{_fixture_draft().model_dump_json()}\n```"
+        )
         with patch(
             "quantmind.flows.paper._structure.run_with_observability",
             new=run_mock,
@@ -176,7 +182,30 @@ class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
         run_mock.assert_awaited_once()
         agent = run_mock.await_args.args[0]
         self.assertEqual(agent.model, cfg.model)
+        self.assertIsNone(agent.output_type)
+        self.assertEqual(
+            agent.model_settings.extra_body["response_format"],
+            {"type": "json_object"},
+        )
+        self.assertIn("final output format", agent.instructions)
+
+    async def test_openai_provider_keeps_sdk_structured_output(self) -> None:
+        result = build_paper_result()
+        cfg = PaperStructureCfg(model="gpt-5.6-luna")
+        run_mock = AsyncMock(return_value=_fixture_draft())
+        with patch(
+            "quantmind.flows.paper._structure.run_with_observability",
+            new=run_mock,
+        ):
+            await _AgentsPaperStructureProvider().structure(
+                signals=_empty_signals(),
+                source=result.source_revision,
+                cfg=cfg,
+            )
+
+        agent = run_mock.await_args.args[0]
         self.assertIs(agent.output_type, PaperStructureTreeDraft)
+        self.assertIsNone(agent.model_settings.extra_body)
 
     async def test_provider_timeout_is_typed(self) -> None:
         result = build_paper_result()

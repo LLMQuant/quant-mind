@@ -20,18 +20,32 @@ of queries runs under one fixed setting (reproducibility).
 
 import asyncio
 import json
-from typing import Protocol, cast, runtime_checkable
+import re
+from dataclasses import replace
+from typing import Any, Protocol, cast, runtime_checkable
 from uuid import UUID
 
 from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
 from agents.exceptions import MaxTurnsExceeded
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 from quantmind.configs import RetrievalCfg
 from quantmind.knowledge import (
     ArtifactLocator,
     Citation,
     StructureTree,
+)
+from quantmind.utils.structured_output import (
+    json_object_instructions,
+    json_object_model_settings,
+    requires_json_object_mode,
+    validate_json_object,
 )
 
 _AGENTIC_INSTRUCTIONS = """\
@@ -41,6 +55,23 @@ source text; opening an internal node returns the concatenation of its leaves.
 Return the UUIDs of the smallest sufficient evidence nodes, not an answer. Never
 invent an ID. Seed nodes are hints only; you may inspect other branches when the
 structure supports it.
+
+You MUST call get_document_structure before selecting evidence. Call
+get_node_content for every node you select, then return only the selected node
+UUIDs in the final JSON object. Never return a request envelope, model metadata,
+or a natural-language answer as the final output.
+"""
+
+_UUID_PATTERN = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
+    re.IGNORECASE,
+)
+
+_JSON_OBJECT_SELECTION_INSTRUCTIONS = """\
+Select the smallest sufficient evidence-node UUIDs for the question from the
+provided document structure. Titles and summaries are enough to choose relevant
+nodes; the caller resolves their source text afterward. Return node UUIDs only,
+not an answer or an explanation.
 """
 
 
@@ -65,6 +96,33 @@ class _RetrievalSelectionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     node_ids: tuple[UUID, ...] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_node_id_aliases(cls, value: object) -> object:
+        """Normalize provider-specific ``*_node_ids`` labels before validation."""
+        if not isinstance(value, dict) or "node_ids" in value:
+            return value
+        node_ids = [
+            node_id
+            for key, candidates in value.items()
+            if key.endswith("_node_ids")
+            and isinstance(candidates, (list, tuple))
+            for node_id in candidates
+        ]
+        if not node_ids:
+            values = list(value.values())
+            while values:
+                candidate = values.pop()
+                if isinstance(candidate, str):
+                    node_ids.extend(_UUID_PATTERN.findall(candidate))
+                elif isinstance(candidate, dict):
+                    values.extend(candidate.values())
+                elif isinstance(candidate, (list, tuple)):
+                    values.extend(candidate)
+        if not node_ids:
+            return value
+        return {"node_ids": node_ids}
 
 
 @runtime_checkable
@@ -320,14 +378,32 @@ async def _agentic_select(
     if cfg.extra_instruction:
         instructions = f"{instructions}\n{cfg.extra_instruction}"
 
-    agent = Agent(
-        name="structure_agentic_retriever",
-        instructions=instructions,
-        model=cfg.model,
-        model_settings=cfg.model_settings or ModelSettings(),
-        tools=[get_document_structure, get_node_content],
-        output_type=_RetrievalSelectionDraft,
+    uses_json_object = requires_json_object_mode(cfg.model)
+    if uses_json_object:
+        instructions = json_object_instructions(
+            instructions,
+            _RetrievalSelectionDraft,
+        )
+
+    model_settings = (
+        json_object_model_settings(cfg.model_settings)
+        if uses_json_object
+        else cfg.model_settings or ModelSettings()
     )
+    # The first turn must inspect the actual tree; Agent resets this to auto
+    # after a tool call, allowing the model to return its final selection.
+    model_settings = replace(model_settings, tool_choice="required")
+
+    agent_kwargs: dict[str, Any] = {
+        "name": "structure_agentic_retriever",
+        "instructions": instructions,
+        "model": cfg.model,
+        "model_settings": model_settings,
+        "tools": [get_document_structure, get_node_content],
+    }
+    if not uses_json_object:
+        agent_kwargs["output_type"] = _RetrievalSelectionDraft
+    agent = Agent(**agent_kwargs)
     input_value = json.dumps(
         {
             "question": question,
@@ -354,7 +430,58 @@ async def _agentic_select(
             "agentic retrieval exceeded max_turns before returning a selection; "
             "raise RetrievalCfg.max_turns or use a stronger model"
         ) from exc
+    if uses_json_object:
+        try:
+            return validate_json_object(
+                result.final_output,
+                _RetrievalSelectionDraft,
+            )
+        except ValidationError:
+            return await _select_from_serialized_structure(
+                question,
+                serialized,
+                cfg,
+            )
     return _RetrievalSelectionDraft.model_validate(result.final_output)
+
+
+async def _select_from_serialized_structure(
+    question: str,
+    serialized: str,
+    cfg: RetrievalCfg,
+) -> _RetrievalSelectionDraft:
+    """Retry a malformed JSON-mode tool result with the structure inline."""
+    agent = Agent(
+        name="structure_json_object_selector",
+        instructions=json_object_instructions(
+            _JSON_OBJECT_SELECTION_INSTRUCTIONS,
+            _RetrievalSelectionDraft,
+        ),
+        model=cfg.model,
+        model_settings=replace(
+            json_object_model_settings(cfg.model_settings),
+            tool_choice=None,
+        ),
+    )
+    try:
+        result = await asyncio.wait_for(
+            Runner.run(
+                agent,
+                f"Question:\n{question}\n\nDocument structure:\n{serialized}",
+                run_config=_run_config(cfg),
+                max_turns=1,
+            ),
+            timeout=cfg.timeout_seconds,
+        )
+    except asyncio.TimeoutError as exc:
+        raise RetrievalError(
+            "JSON-object selection fallback exceeded timeout_seconds"
+        ) from exc
+    except MaxTurnsExceeded as exc:
+        raise RetrievalError(
+            "JSON-object selection fallback exceeded max_turns"
+        ) from exc
+    return validate_json_object(result.final_output, _RetrievalSelectionDraft)
 
 
 def _validate_selection(
