@@ -56,6 +56,10 @@ _MARKDOWN_EMPHASIS_RE = re.compile(
     r"(?<!\*)\*{1,2}([A-Z][A-Z0-9.-]{0,9})\*{1,2}(?!\*)",
     re.IGNORECASE,
 )
+_SHARED_EXCHANGE_SYMBOL_RE = re.compile(
+    r"\s*,\s*([A-Z][A-Z0-9.-]{0,9})",
+    re.IGNORECASE,
+)
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
 )
@@ -401,8 +405,12 @@ def canonicalize_source_url(url: str) -> str:
 def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
     """Extract exchange-qualified ticker mentions from PR-style text.
 
-    Examples matched include ``(NASDAQ: NVDA)`` and ``NYSE: IBM``. The result is
-    only a hint; downstream instrument resolution should still validate it.
+    Examples matched include ``(NASDAQ: NVDA)``, ``NYSE: IBM``, and a
+    parenthesized comma list such as ``(NYSE: EVEX, EVEXW)``. A shared exchange
+    applies only to comma-separated symbols before the closing parenthesis;
+    semicolons and conjunctions end the group. Additional members use a
+    reconstructed ``EXCHANGE: SYMBOL`` raw value. The result is only a hint;
+    downstream instrument resolution should still validate it.
     Markdown link and emphasis decoration is removed from a scan-only copy so
     stored news text and its content hash retain their original representation.
     """
@@ -425,6 +433,29 @@ def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
                 raw=match.group(0).strip(),
             )
         )
+        if not match.group(0).lstrip().startswith("("):
+            continue
+
+        closing_parenthesis = scan_text.find(")", match.end())
+        if closing_parenthesis == -1:
+            continue
+        suffix = scan_text[match.end() : closing_parenthesis]
+        position = 0
+        while continuation := _SHARED_EXCHANGE_SYMBOL_RE.match(
+            suffix, position
+        ):
+            symbol = continuation.group(1).upper()
+            key = (symbol, exchange)
+            if key not in seen:
+                seen.add(key)
+                hints.append(
+                    NewsTickerHint(
+                        symbol=symbol,
+                        exchange=exchange,
+                        raw=f"{exchange}: {symbol}",
+                    )
+                )
+            position = continuation.end()
     return tuple(hints)
 
 
