@@ -24,6 +24,7 @@ from quantmind.knowledge import (
     PaperFlowResult,
     PaperGlobalSummary,
     PaperSourceRevision,
+    PaperStructureTree,
     ResolvedPaperArtifact,
     Thesis,
     TreeKnowledge,
@@ -35,7 +36,7 @@ from quantmind.library._internal.retrieval_targets import (
     _RetrievalTarget,
 )
 
-_DATABASE_SCHEMA_VERSION = 3
+_DATABASE_SCHEMA_VERSION = 5
 
 _KNOWLEDGE_CLASSES: dict[str, type[BaseKnowledge]] = {
     f"{knowledge_type.__module__}:{knowledge_type.__qualname__}": knowledge_type
@@ -103,6 +104,7 @@ class _CanonicalPaperMember:
     """One separately addressable paper-artifact member."""
 
     member_id: UUID
+    parent_id: UUID | None
     position: int
     payload: str
     content_hash: str
@@ -127,6 +129,14 @@ class _PreparedPaperPut:
     source_canonical_hash: str
     artifacts: tuple[_CanonicalPaperArtifact, ...]
     existing_embeddings: dict[str, _StoredEmbedding]
+
+
+@dataclass(frozen=True)
+class _PreparedStructureTreePut:
+    """Validated self-contained structure-tree write with no source revision."""
+
+    tree: PaperStructureTree
+    canonical: _CanonicalPaperArtifact
 
 
 def _json_payload(value: object) -> str:
@@ -196,9 +206,39 @@ def _canonical_paper_artifact(
             canonical_hash=canonical_hash,
             members=(),
         )
+    if isinstance(artifact, PaperStructureTree):
+        members = tuple(
+            _CanonicalPaperMember(
+                member_id=node.node_id,
+                parent_id=node.parent_id,
+                position=node.position,
+                payload=(
+                    payload := _json_payload(node.model_dump(mode="json"))
+                ),
+                content_hash=hashlib.sha256(
+                    payload.encode("utf-8")
+                ).hexdigest(),
+            )
+            for _, node in sorted(
+                artifact.nodes.items(), key=lambda pair: str(pair[0])
+            )
+        )
+        return _CanonicalPaperArtifact(
+            artifact=artifact,
+            payload=_json_payload(
+                artifact.model_dump(mode="json", exclude={"nodes"})
+            ),
+            canonical_hash=canonical_hash,
+            members=members,
+        )
+    if not isinstance(artifact, PaperChunkSet):
+        raise TypeError(
+            f"Unsupported paper artifact '{type(artifact).__name__}'"
+        )
     members = tuple(
         _CanonicalPaperMember(
             member_id=chunk.chunk_id,
+            parent_id=None,
             position=chunk.position,
             payload=(payload := _json_payload(chunk.model_dump(mode="json"))),
             content_hash=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
@@ -213,6 +253,25 @@ def _canonical_paper_artifact(
         canonical_hash=canonical_hash,
         members=members,
     )
+
+
+def _prepare_paper_source(source: PaperSourceRevision) -> tuple[str, str]:
+    """Validate loaded source blobs and return its canonical payload/hash."""
+    for asset in source.assets:
+        blob = source.blobs.get(asset.content_hash)
+        if blob is None:
+            raise ValueError(
+                f"Paper source is missing blob for asset '{asset.asset_id}'"
+            )
+        if (
+            len(blob) != asset.size_bytes
+            or hashlib.sha256(blob).hexdigest() != asset.content_hash
+        ):
+            raise ValueError(
+                f"Paper source blob for asset '{asset.asset_id}' is invalid"
+            )
+    payload = _json_payload(source.model_dump(mode="json"))
+    return payload, hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _assemble_canonical_payload(
@@ -351,6 +410,10 @@ CREATE TABLE paper_source_assets (
         ON DELETE CASCADE
 );
 
+-- A derived artifact (e.g. a self-contained structure tree) can be stored
+-- without its source revision, so ``source_revision_id`` is a metadata pointer
+-- with no foreign key to ``paper_sources``. Chunk-set and summary artifacts
+-- still write their source first via ``put_paper``.
 CREATE TABLE paper_artifacts (
     artifact_id TEXT PRIMARY KEY,
     source_revision_id TEXT NOT NULL,
@@ -360,20 +423,18 @@ CREATE TABLE paper_artifacts (
     payload_json TEXT NOT NULL,
     canonical_hash TEXT NOT NULL,
     member_count INTEGER NOT NULL CHECK (member_count >= 0),
-    target_count INTEGER NOT NULL CHECK (target_count > 0),
-    UNIQUE (source_revision_id, artifact_kind, producer_config_hash),
-    FOREIGN KEY (source_revision_id) REFERENCES paper_sources(source_revision_id)
-        ON DELETE CASCADE
+    target_count INTEGER NOT NULL CHECK (target_count >= 0),
+    UNIQUE (source_revision_id, artifact_kind, producer_config_hash)
 );
 
 CREATE TABLE paper_artifact_members (
     artifact_id TEXT NOT NULL,
     member_id TEXT NOT NULL,
+    parent_id TEXT,
     position INTEGER NOT NULL CHECK (position >= 0),
     payload_json TEXT NOT NULL,
     content_hash TEXT NOT NULL,
     PRIMARY KEY (artifact_id, member_id),
-    UNIQUE (artifact_id, position),
     FOREIGN KEY (artifact_id) REFERENCES paper_artifacts(artifact_id)
         ON DELETE CASCADE
 );
@@ -421,16 +482,148 @@ CREATE TABLE paper_projections (
 
 CREATE INDEX paper_artifacts_source_kind
     ON paper_artifacts(source_revision_id, artifact_kind);
+CREATE UNIQUE INDEX paper_artifact_members_sibling_position
+    ON paper_artifact_members(
+        artifact_id, COALESCE(parent_id, ''), position
+    );
 CREATE INDEX paper_projections_filters
     ON paper_projections(artifact_kind, source_kind, source_revision_id);
 """
+
+
+def _migrate_schema_v3_to_v4(db: sqlite3.Connection) -> None:
+    """Allow vectorless artifacts and hierarchical normalized members."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        db.executescript(
+            """
+            BEGIN IMMEDIATE;
+
+            CREATE TABLE paper_artifacts_v4 (
+                artifact_id TEXT PRIMARY KEY,
+                source_revision_id TEXT NOT NULL,
+                artifact_kind TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                producer_config_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                canonical_hash TEXT NOT NULL,
+                member_count INTEGER NOT NULL CHECK (member_count >= 0),
+                target_count INTEGER NOT NULL CHECK (target_count >= 0),
+                UNIQUE (source_revision_id, artifact_kind, producer_config_hash),
+                FOREIGN KEY (source_revision_id)
+                    REFERENCES paper_sources(source_revision_id)
+                    ON DELETE CASCADE
+            );
+
+            INSERT INTO paper_artifacts_v4
+            SELECT * FROM paper_artifacts;
+
+            CREATE TABLE paper_artifact_members_v4 (
+                artifact_id TEXT NOT NULL,
+                member_id TEXT NOT NULL,
+                parent_id TEXT,
+                position INTEGER NOT NULL CHECK (position >= 0),
+                payload_json TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                PRIMARY KEY (artifact_id, member_id),
+                FOREIGN KEY (artifact_id)
+                    REFERENCES paper_artifacts_v4(artifact_id)
+                    ON DELETE CASCADE
+            );
+
+            INSERT INTO paper_artifact_members_v4 (
+                artifact_id, member_id, parent_id, position,
+                payload_json, content_hash
+            )
+            SELECT artifact_id, member_id, NULL, position,
+                   payload_json, content_hash
+            FROM paper_artifact_members;
+
+            DROP TABLE paper_artifact_members;
+            DROP TABLE paper_artifacts;
+            ALTER TABLE paper_artifacts_v4 RENAME TO paper_artifacts;
+            ALTER TABLE paper_artifact_members_v4
+                RENAME TO paper_artifact_members;
+
+            CREATE INDEX paper_artifacts_source_kind
+                ON paper_artifacts(source_revision_id, artifact_kind);
+            CREATE UNIQUE INDEX paper_artifact_members_sibling_position
+                ON paper_artifact_members(
+                    artifact_id, COALESCE(parent_id, ''), position
+                );
+
+            PRAGMA user_version = 4;
+            COMMIT;
+            """
+        )
+        if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError(
+                "Stale knowledge library schema: v3 migration broke links"
+            )
+    except Exception:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+    finally:
+        db.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate_schema_v4_to_v5(db: sqlite3.Connection) -> None:
+    """Decouple derived artifacts from a stored source revision.
+
+    A self-contained structure tree is stored without its source, so the
+    ``paper_artifacts -> paper_sources`` foreign key is dropped. The
+    ``source_revision_id`` column and every other paper relationship are
+    preserved; chunk-set and summary writes still persist their source first.
+    """
+    db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        db.executescript(
+            """
+            BEGIN IMMEDIATE;
+
+            CREATE TABLE paper_artifacts_v5 (
+                artifact_id TEXT PRIMARY KEY,
+                source_revision_id TEXT NOT NULL,
+                artifact_kind TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                producer_config_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                canonical_hash TEXT NOT NULL,
+                member_count INTEGER NOT NULL CHECK (member_count >= 0),
+                target_count INTEGER NOT NULL CHECK (target_count >= 0),
+                UNIQUE (source_revision_id, artifact_kind, producer_config_hash)
+            );
+
+            INSERT INTO paper_artifacts_v5 SELECT * FROM paper_artifacts;
+
+            DROP TABLE paper_artifacts;
+            ALTER TABLE paper_artifacts_v5 RENAME TO paper_artifacts;
+
+            CREATE INDEX paper_artifacts_source_kind
+                ON paper_artifacts(source_revision_id, artifact_kind);
+
+            PRAGMA user_version = 5;
+            COMMIT;
+            """
+        )
+        if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError(
+                "Stale knowledge library schema: v4 migration broke links"
+            )
+    except Exception:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+    finally:
+        db.execute("PRAGMA foreign_keys = ON")
 
 
 def _initialize_schema(db: sqlite3.Connection) -> None:
     """Create the current schema or reject an incompatible local database."""
     version_row = db.execute("PRAGMA user_version").fetchone()
     version = int(version_row[0])
-    if version not in (0, 2, _DATABASE_SCHEMA_VERSION):
+    if version not in (0, 2, 3, 4, _DATABASE_SCHEMA_VERSION):
         raise RuntimeError(
             "Stale knowledge library schema: database version "
             f"{version}, expected {_DATABASE_SCHEMA_VERSION}"
@@ -444,6 +637,12 @@ def _initialize_schema(db: sqlite3.Connection) -> None:
         db.executescript(
             f"{migration_sql}\nPRAGMA user_version = {_DATABASE_SCHEMA_VERSION};"
         )
+        return
+    if version == 3:
+        _migrate_schema_v3_to_v4(db)
+        version = 4
+    if version == 4:
+        _migrate_schema_v4_to_v5(db)
         return
     db.executescript(
         f"""
@@ -588,19 +787,7 @@ class _SQLiteStore:
     def prepare_put_paper(self, result: PaperFlowResult) -> _PreparedPaperPut:
         """Validate paper blobs and load projections eligible for reuse."""
         source = result.source_revision
-        for asset in source.assets:
-            blob = source.blobs.get(asset.content_hash)
-            if blob is None:
-                raise ValueError(
-                    f"Paper source is missing blob for asset '{asset.asset_id}'"
-                )
-            if (
-                len(blob) != asset.size_bytes
-                or hashlib.sha256(blob).hexdigest() != asset.content_hash
-            ):
-                raise ValueError(
-                    f"Paper source blob for asset '{asset.asset_id}' is invalid"
-                )
+        source_payload, source_canonical_hash = _prepare_paper_source(source)
         artifact_ids = (str(result.chunk_set.id), str(result.global_summary.id))
         rows = self._db.execute(
             """
@@ -622,19 +809,62 @@ class _SQLiteStore:
             )
             for row in rows
         }
-        source_payload = _json_payload(source.model_dump(mode="json"))
         return _PreparedPaperPut(
             result=result,
             source_payload=source_payload,
-            source_canonical_hash=hashlib.sha256(
-                source_payload.encode("utf-8")
-            ).hexdigest(),
+            source_canonical_hash=source_canonical_hash,
             artifacts=(
                 _canonical_paper_artifact(result.chunk_set),
                 _canonical_paper_artifact(result.global_summary),
             ),
             existing_embeddings=existing,
         )
+
+    def _put_paper_source(
+        self,
+        source: PaperSourceRevision,
+        *,
+        payload: str,
+        canonical_hash: str,
+    ) -> None:
+        """Write or reuse one exact source inside the active transaction."""
+        self._db.execute(
+            """
+            INSERT INTO paper_sources (
+                source_revision_id, schema_version, source_content_hash,
+                payload_json, canonical_hash, asset_count
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_revision_id) DO NOTHING
+            """,
+            (
+                str(source.id),
+                source.schema_version,
+                source.source.content_hash,
+                payload,
+                canonical_hash,
+                len(source.assets),
+            ),
+        )
+        for asset in source.assets:
+            self._db.execute(
+                """
+                INSERT INTO paper_source_assets (
+                    asset_id, source_revision_id, kind, page_number,
+                    media_type, content_hash, size_bytes, blob
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(asset_id) DO NOTHING
+                """,
+                (
+                    str(asset.asset_id),
+                    str(source.id),
+                    asset.kind,
+                    asset.page_number,
+                    asset.media_type,
+                    asset.content_hash,
+                    asset.size_bytes,
+                    source.blobs[asset.content_hash],
+                ),
+            )
 
     def put_paper(
         self,
@@ -659,43 +889,11 @@ class _SQLiteStore:
             raise ValueError("paper artifacts do not have complete projections")
         try:
             self._db.execute("BEGIN IMMEDIATE")
-            self._db.execute(
-                """
-                INSERT INTO paper_sources (
-                    source_revision_id, schema_version, source_content_hash,
-                    payload_json, canonical_hash, asset_count
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(source_revision_id) DO NOTHING
-                """,
-                (
-                    str(source.id),
-                    source.schema_version,
-                    source.source.content_hash,
-                    prepared.source_payload,
-                    prepared.source_canonical_hash,
-                    len(source.assets),
-                ),
+            self._put_paper_source(
+                source,
+                payload=prepared.source_payload,
+                canonical_hash=prepared.source_canonical_hash,
             )
-            for asset in source.assets:
-                self._db.execute(
-                    """
-                    INSERT INTO paper_source_assets (
-                        asset_id, source_revision_id, kind, page_number,
-                        media_type, content_hash, size_bytes, blob
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(asset_id) DO NOTHING
-                    """,
-                    (
-                        str(asset.asset_id),
-                        str(source.id),
-                        asset.kind,
-                        asset.page_number,
-                        asset.media_type,
-                        asset.content_hash,
-                        asset.size_bytes,
-                        source.blobs[asset.content_hash],
-                    ),
-                )
             for canonical in prepared.artifacts:
                 artifact = canonical.artifact
                 artifact_targets = targets_by_artifact[artifact.id]
@@ -740,13 +938,18 @@ class _SQLiteStore:
                     self._db.execute(
                         """
                         INSERT INTO paper_artifact_members (
-                            artifact_id, member_id, position,
+                            artifact_id, member_id, parent_id, position,
                             payload_json, content_hash
-                        ) VALUES (?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
                             str(artifact.id),
                             str(member.member_id),
+                            (
+                                str(member.parent_id)
+                                if member.parent_id is not None
+                                else None
+                            ),
                             member.position,
                             member.payload,
                             member.content_hash,
@@ -812,6 +1015,98 @@ class _SQLiteStore:
                         _PROJECTION_SCHEMA_VERSION,
                         canonical.canonical_hash,
                         blob,
+                    ),
+                )
+            self._db.execute("COMMIT")
+        except Exception:
+            if self._db.in_transaction:
+                self._db.execute("ROLLBACK")
+            raise
+
+    def prepare_structure_tree(
+        self,
+        tree: PaperStructureTree,
+    ) -> _PreparedStructureTreePut:
+        """Re-run a self-contained tree's integrity gate before storing it.
+
+        The tree is persisted on its own, reading ``as_of`` / source ref /
+        ``source_content_hash`` from its own provenance metadata; no source
+        revision or chunk set is required. Re-validating from the tree's own
+        dump makes a bypassed (for example ``model_copy``-mutated) tree fail
+        closed before any row is written.
+        """
+        validated = PaperStructureTree.model_validate(
+            tree.model_dump(mode="json")
+        )
+        return _PreparedStructureTreePut(
+            tree=validated,
+            canonical=_canonical_paper_artifact(validated),
+        )
+
+    def put_structure_tree(
+        self,
+        prepared: _PreparedStructureTreePut,
+    ) -> None:
+        """Atomically persist one self-contained structure tree with no source."""
+        tree = prepared.tree
+        canonical = prepared.canonical
+        try:
+            self._db.execute("BEGIN IMMEDIATE")
+            self._db.execute(
+                """
+                INSERT INTO paper_artifacts (
+                    artifact_id, source_revision_id, artifact_kind,
+                    schema_version, producer_config_hash, payload_json,
+                    canonical_hash, member_count, target_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT(artifact_id) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    canonical_hash = excluded.canonical_hash,
+                    member_count = excluded.member_count,
+                    target_count = excluded.target_count
+                """,
+                (
+                    str(tree.id),
+                    str(tree.source_revision_id),
+                    tree.artifact_kind,
+                    tree.schema_version,
+                    tree.producer_config_hash,
+                    canonical.payload,
+                    canonical.canonical_hash,
+                    len(canonical.members),
+                ),
+            )
+            self._db.execute(
+                "DELETE FROM paper_projections WHERE artifact_id = ?",
+                (str(tree.id),),
+            )
+            self._db.execute(
+                "DELETE FROM paper_artifact_members WHERE artifact_id = ?",
+                (str(tree.id),),
+            )
+            self._db.execute(
+                "DELETE FROM paper_artifact_lineage WHERE artifact_id = ?",
+                (str(tree.id),),
+            )
+            for member in canonical.members:
+                self._db.execute(
+                    """
+                    INSERT INTO paper_artifact_members (
+                        artifact_id, member_id, parent_id, position,
+                        payload_json, content_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(tree.id),
+                        str(member.member_id),
+                        (
+                            str(member.parent_id)
+                            if member.parent_id is not None
+                            else None
+                        ),
+                        member.position,
+                        member.payload,
+                        member.content_hash,
                     ),
                 )
             self._db.execute("COMMIT")
@@ -1101,7 +1396,7 @@ class _SQLiteStore:
         return source
 
     def get_paper_artifact(self, artifact_id: UUID) -> PaperArtifact:
-        """Rehydrate one canonical summary or normalized chunk-set artifact."""
+        """Rehydrate one validated paper artifact and normalized members."""
         row = self._db.execute(
             "SELECT * FROM paper_artifacts WHERE artifact_id = ?",
             (str(artifact_id),),
@@ -1111,7 +1406,8 @@ class _SQLiteStore:
         member_rows = self._db.execute(
             """
             SELECT * FROM paper_artifact_members
-            WHERE artifact_id = ? ORDER BY position
+            WHERE artifact_id = ?
+            ORDER BY COALESCE(parent_id, ''), position, member_id
             """,
             (str(artifact_id),),
         ).fetchall()
@@ -1130,6 +1426,7 @@ class _SQLiteStore:
             raise RuntimeError(
                 f"Stale paper artifact '{artifact_id}': invalid payload"
             )
+        artifact_kind = str(row["artifact_kind"])
         members: list[object] = []
         for member_row in member_rows:
             member_payload = str(member_row["payload_json"])
@@ -1146,28 +1443,55 @@ class _SQLiteStore:
                 raise RuntimeError(
                     f"Stale paper artifact '{artifact_id}': invalid member JSON"
                 ) from exc
-            if (
-                not isinstance(parsed_member, dict)
-                or parsed_member.get("chunk_id") != member_row["member_id"]
-                or parsed_member.get("position") != member_row["position"]
-            ):
+            if not isinstance(parsed_member, dict):
+                raise RuntimeError(
+                    f"Stale paper artifact '{artifact_id}': member metadata "
+                    "mismatch"
+                )
+            if artifact_kind == "paper_structure_tree":
+                metadata_matches = all(
+                    (
+                        parsed_member.get("node_id") == member_row["member_id"],
+                        parsed_member.get("parent_id")
+                        == member_row["parent_id"],
+                        parsed_member.get("position") == member_row["position"],
+                    )
+                )
+            else:
+                metadata_matches = all(
+                    (
+                        parsed_member.get("chunk_id")
+                        == member_row["member_id"],
+                        member_row["parent_id"] is None,
+                        parsed_member.get("position") == member_row["position"],
+                    )
+                )
+            if not metadata_matches:
                 raise RuntimeError(
                     f"Stale paper artifact '{artifact_id}': member metadata "
                     "mismatch"
                 )
             members.append(parsed_member)
-        artifact_kind = str(row["artifact_kind"])
         if artifact_kind == "paper_chunk_set":
             payload_value["chunks"] = members
-            model: type[PaperChunkSet] | type[PaperGlobalSummary] = (
-                PaperChunkSet
-            )
+            model: (
+                type[PaperChunkSet]
+                | type[PaperGlobalSummary]
+                | type[PaperStructureTree]
+            ) = PaperChunkSet
         elif artifact_kind == "paper_summary":
             if members:
                 raise RuntimeError(
                     f"Stale paper artifact '{artifact_id}': summary has members"
                 )
             model = PaperGlobalSummary
+        elif artifact_kind == "paper_structure_tree":
+            payload_value["nodes"] = {
+                str(member["node_id"]): member
+                for member in members
+                if isinstance(member, dict)
+            }
+            model = PaperStructureTree
         else:
             raise RuntimeError(
                 f"Stale paper artifact '{artifact_id}': unsupported kind "
@@ -1202,6 +1526,17 @@ class _SQLiteStore:
         ):
             raise RuntimeError(
                 f"Stale paper artifact '{artifact_id}': identity mismatch"
+            )
+        expected_target_count = (
+            0
+            if isinstance(artifact, PaperStructureTree)
+            else 1
+            if isinstance(artifact, PaperGlobalSummary)
+            else len(artifact.chunks)
+        )
+        if int(row["target_count"]) != expected_target_count:
+            raise RuntimeError(
+                f"Stale paper artifact '{artifact_id}': target count mismatch"
             )
         if isinstance(artifact, PaperChunkSet):
             try:
@@ -1239,6 +1574,9 @@ class _SQLiteStore:
             raise RuntimeError(
                 f"Stale paper artifact '{artifact_id}': lineage mismatch"
             )
+        # A structure tree is self-contained: ``model_validate`` above already
+        # ran its full integrity gate (topology, leaf content, citations) from
+        # the tree's own value. Loading it never depends on a stored source.
         return artifact
 
     def get_paper_result(
@@ -1304,8 +1642,15 @@ class _SQLiteStore:
             )
         if locator.member_id is None:
             return artifact
+        if isinstance(artifact, PaperStructureTree):
+            try:
+                return artifact.nodes[locator.member_id]
+            except KeyError as exc:
+                raise KeyError(
+                    f"Paper structure node '{locator.member_id}' not found"
+                ) from exc
         if not isinstance(artifact, PaperChunkSet):
-            raise KeyError("Paper summary artifacts do not have members")
+            raise KeyError("Paper artifact does not have resolvable members")
         for chunk in artifact.chunks:
             if chunk.chunk_id == locator.member_id:
                 return chunk

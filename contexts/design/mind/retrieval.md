@@ -1,20 +1,26 @@
-# Build and retrieve from a page-preserving structure tree
+# Build and retrieve from a self-contained structure tree
 
 ## Quick Summary
 
-- **Purpose**: Define how a source-first paper gains a validated structure tree
-  and how a reasoning agent traverses it, without embeddings replacing reasoning.
+- **Purpose**: Define how a paper becomes a self-contained page-preserving
+  structure tree, how that tree is persisted and reopened, and how a reasoning
+  agent retrieves evidence from it without embeddings replacing reasoning.
 - **Read when**: Designing or changing PageIndex-style tree construction, the
-  `mind` retrieval package, or hybrid semantic-plus-agentic retrieval.
-- **Status**: Planned. No implementation exists on `master`. This page records
-  the accepted design and refines issue #95 for the source-first Paper Flow V1
-  model shipped in #120; the `quantmind.mind` package does not exist yet.
-- **Core rule**: One tree implementation. A shared `StructureTree` base carries
-  structure, traversal, and the integrity gate; each document type subclasses it
-  for identity. The paper structure tree is a derived, source-linked artifact whose model
-  returns only a draft while code validates every node. Retrieval reasons over
-  titles and summaries; embeddings are a coarse pre-filter added later, never a
-  replacement.
+  `PaperFlow` pipeline collection, the `mind` retrieval operation, structure-tree
+  persistence, or future hybrid semantic-plus-agentic retrieval.
+- **Status**: Redesigned (2026-07). Supersedes the earlier "vectorless empty
+  shell + library page refill" design. The structure tree now carries its own
+  node content; retrieval is a pure value operation over that tree; the library
+  dumps and loads the tree as an independent artifact. Semantic node projections
+  and hybrid seeding remain deferred.
+- **Core rule**: **Pipelines produce complete, self-contained artifacts;
+  persistence and retrieval are separate downstream concerns.** A structure
+  tree's nodes carry their own text (and optionally an embedding), so the tree
+  is usable the moment a pipeline returns it — in memory, with no library. The
+  library only dumps and loads that value; single-tree retrieval reasons over
+  the tree value and returns **evidence values**, never a bare reference that
+  forces a library round-trip. Retrieval reasons over titles and summaries;
+  embeddings are a coarse pre-filter added later, never a replacement.
 - **Canonical models**: [Paper source and artifact design](../knowledge/paper.md).
 - **Related work**: issues #122 (context), #95 (feature request), #71 (`mind`
   scaffold), #120 (source-first Paper Flow V1); prior art `VectifyAI/PageIndex`
@@ -23,11 +29,15 @@
 ## Contents
 
 - [Motivation](#motivation)
+- [Pipelines vs Components (Altitude)](#pipelines-vs-components-altitude)
 - [Design at a Glance](#design-at-a-glance)
 - [Ownership](#ownership)
-- [Structure Tree Base and Paper Binding](#structure-tree-base-and-paper-binding)
-- [Build Pipeline](#build-pipeline)
-- [Retrieval](#retrieval)
+- [Self-Contained Structure Tree](#self-contained-structure-tree)
+- [The PaperFlow Pipeline Collection](#the-paperflow-pipeline-collection)
+- [Persistence: Dump / Load Symmetry](#persistence-dump-load-symmetry)
+- [Retrieval Returns Values, Not References](#retrieval-returns-values-not-references)
+- [Callable Shape](#callable-shape)
+- [Future Multi-Document Composition](#future-multi-document-composition)
 - [Multi-Model Compatibility](#multi-model-compatibility)
 - [Hybrid Search Compatibility](#hybrid-search-compatibility)
 - [Boundaries and Import Contracts](#boundaries-and-import-contracts)
@@ -45,271 +55,333 @@ reasoning to decide where to look.
 
 Reasoning-based retrieval reframes the problem as relevance classification over a
 document's real structure: an agent reads a tree of section titles and
-summaries, picks a branch, drills down, and lazily loads leaf text with exact
-page provenance. `quantmind.knowledge` already records this as the purpose of
+summaries, picks a branch, drills down, and reads leaf text with exact page
+provenance. `quantmind.knowledge` already records this as the purpose of
 `TreeKnowledge`, and embeddings there "act as a coarse pre-filter, never as a
 replacement for that reasoning."
+
+The earlier build of this feature made the tree an *empty shell*: nodes stored
+only titles, summaries, and page citations, and leaf text was refilled at query
+time from the library via `resolve(locator)`. That coupled two things that
+should be independent — the tree artifact and the store — and made single-tree
+retrieval impossible without a library. This design removes that coupling.
+
+## Pipelines vs Components (Altitude)
+
+This feature is the worked example for the repository's altitude rule (see
+[operations/orchestration.md](../operations/orchestration.md)). Two layers, two
+jobs:
+
+- **Pipelines** (`quantmind.flows`) are finished, batteries-included workflows.
+  A caller states an intent — "turn this paper into a structure tree" — and gets
+  back a **complete, self-contained artifact**. A pipeline is pure processing:
+  `input → artifact`. It does **not** bind a library, persist anything, or
+  retrieve. Producing the artifact fully — including any embeddings it carries —
+  is the pipeline's job.
+- **Components** (`knowledge`, `preprocess`, `rag`, `library`, `mind`) are the
+  building blocks. A caller who wants only an intermediate (just the parsed
+  source, just chunks) uses a component directly and wires it themselves. A
+  half-finished intermediate is **not** promoted to a public pipeline.
+
+Persistence (`library`) and retrieval (`mind`) are **downstream** of a pipeline,
+not part of it. A structure tree returned by `PaperFlow(cfg).build(input)` is
+immediately usable; putting it in a library and retrieving from it are separate,
+optional steps a caller chooses.
 
 ## Design at a Glance
 
 The build spine is solid; the dotted branch is the later hybrid path that adds
-embeddings. Each package owns one stage, and every deterministic or code-owned
-stage carries no model call.
+embeddings. Processing (including any embeddings) belongs to the pipeline;
+`library` only stores and loads; `mind` only retrieves.
 
 ```mermaid
 flowchart TD
-    PD["ParsedDocument (page-aware)"]
-    subgraph PRE["preprocess — deterministic"]
-        OUT["outline signals: TOC / headings / page offset"]
-    end
-    subgraph FLW["flows"]
+    IN["PaperInput (arxiv / url / local pdf)"]
+    subgraph FLW["flows — PaperFlow(cfg).build(input), pure processing"]
+        OPEN["fetch + parse the input"]
+        OUT["outline signals (deterministic)"]
         DRAFT["draft structuring agent (model, private draft)"]
+        BUILD["mint ids/links, read node text from cited pages, validate; self-contained PaperStructureTree (+ as_of / provenance)"]
     end
-    subgraph KNW["knowledge"]
-        FD["PaperStructureTree.from_draft() (code): mint ids, links, citations + validate() gate"]
+    subgraph LIB["library — dump / load only"]
+        PUT["put(tree): serialize self-contained tree"]
+        OPENT["open_structure(id): deserialize same value"]
     end
-    subgraph LIB["library"]
-        PUT["put artifact: paper_artifacts (no embeddings)"]
-        PROJ["per-node projections (embeddings)"]
-        SRCH["search(SemanticQuery)"]
-        RES["resolve(locator): page-cited content"]
+    subgraph MND["mind — retrieve (pure value op, no library)"]
+        RET["AgenticRetriever(cfg).retrieve(tree, question): agentic, evidence values"]
     end
-    subgraph MND["mind"]
-        NAV["retrieve(structure, question): single-pass / agentic"]
-    end
-    PD --> OUT
-    OUT --> DRAFT
-    DRAFT --> FD
-    FD --> PUT
-    PUT --> NAV
-    NAV -->|get_node_content| RES
-    PUT -.->|P2 projections| PROJ
-    PROJ -.->|candidates| SRCH
-    SRCH -.->|seed_locators| NAV
+    IN --> OPEN --> OUT --> DRAFT --> BUILD
+    BUILD -->|in-memory, use immediately| RET
+    BUILD -.->|optional persist| PUT
+    OPENT -.->|reopened, identical use| RET
+    BUILD -.->|P2 node projections embeddings| PUT
 ```
 
 ## Ownership
 
-Each existing package keeps its responsibility; only agentic traversal introduces
-a new owner, `mind`. No shared runtime is moved and no second store is added.
-
 | Owner | Responsibility |
 |---|---|
 | `quantmind.preprocess` | Emit deterministic outline signals (heading candidates, table-of-contents pages, printed-to-physical page offset) from a parsed document. No LLM calls. |
-| `quantmind.knowledge` | Add the `StructureTree` structural base (reused by a refactored `TreeKnowledge`) plus a `PaperStructureTree(StructureTree)` artifact whose `from_draft` constructor mints identity and runs the shared integrity gate. |
-| `quantmind.flows` | Run one draft-structuring agent and call the knowledge constructor. Reuses `flows._runner` unchanged. Persistence stays explicit. |
-| `quantmind.library` | Persist the artifact through the existing paper artifact tables and extend `resolve()` to the new kind. Per-node projections are a separate later step. |
-| `quantmind.mind` | Traverse the tree with the Agents SDK and return node evidence. May request a semantic shortlist from `library`. |
+| `quantmind.flows` (`PaperFlow`) | A **config-bound** flow: `PaperFlow(cfg)` binds the settings; `build(input)` fetches, parses, runs one draft-structuring agent, then calls the knowledge constructor and returns a **self-contained** `PaperStructureTree`. The cfg *type* selects the knowledge shape (`PaperStructureCfg` → tree today). No persistence, no retrieval, no library. |
+| `quantmind.knowledge` | Own the `StructureTree` structural base and the source-bound `PaperStructureTree` artifact. `from_draft` mints identity, resolves page citations, **and populates each node's `content` from the exact source pages**, then runs the integrity gate. The artifact is a complete value. |
+| `quantmind.library` | Dump a self-contained tree and load it back unchanged (`put` / `open_structure`). A tree is an **independent** artifact: its library need not contain a chunk set, and loading it never depends on refilling text from another artifact. |
+| `quantmind.mind` | `AgenticRetriever(cfg)` binds the strategy config; `retrieve(tree, question)` reasons over one explicit tree value and returns evidence values with content already in them. It does **not** take or bind a library. |
 
-`quantmind.rag` is unchanged: it stays deterministic chunking and BM25 with no
-LLM dependency and hosts no PageIndex draft producer.
+`quantmind.rag` is unchanged: deterministic chunking and BM25, no LLM, no
+PageIndex producer.
 
-## Structure Tree Base and Paper Binding
+## Self-Contained Structure Tree
 
-The tree structure is shared across document types; the identity binding is not.
-The design factors the two apart so the codebase keeps exactly one tree, not two.
+`StructureTree` stays the shared structural base (a plain `BaseModel`:
+`root_node_id`, `nodes`, the `root()` / `children_of()` / `walk_dfs()` /
+`find_path()` traversal surface, and the `validate()` integrity gate). Identity
+is added by subclasses.
 
-```mermaid
-classDiagram
-    class StructureTree {
-        <<structural base>>
-        +UUID root_node_id
-        +Map nodes
-        +root()
-        +children_of()
-        +walk_dfs()
-        +find_path()
-        +validate()
-    }
-    class TreeNode {
-        +UUID node_id
-        +UUID parent_id
-        +str title
-        +str summary
-    }
-    class Citation {
-        +int page
-        +UUID node_id
-    }
-    class BaseKnowledge {
-        <<canonical identity>>
-    }
-    class TreeKnowledge
-    class PaperStructureTree {
-        +PaperArtifactKind artifact_kind
-        +UUID source_revision_id
-        +str producer_config_hash
-        +str content_hash
-        +from_draft()
-    }
-    class PaperSourceRevision {
-        <<source-first anchor>>
-    }
-    class PaperChunkSet
+The change is in what a node holds. `TreeNode` already has a
+`content: str | None` field; the previous design **forbade** populating it
+(`PaperStructureTree` raised "nodes must not copy content"). That rule is
+**inverted**:
 
-    StructureTree <|-- TreeKnowledge
-    BaseKnowledge <|-- TreeKnowledge
-    StructureTree <|-- PaperStructureTree
-    StructureTree *-- TreeNode : nodes
-    TreeNode *-- Citation : citations
-    PaperStructureTree ..> PaperSourceRevision : source_revision_id
-    PaperStructureTree ..> PaperChunkSet : lineage
+- A `PaperStructureTree` leaf node **carries its own `content`** — the text of
+  the physical source pages it cites, read from the exact source revision at
+  build time. The tree is self-contained: it no longer depends on the source
+  revision or a chunk set to yield node text.
+- The tree also carries the **minimal provenance metadata** it needs to be
+  stored and time-queried standalone: `as_of` (financial time, copied from the
+  source revision) plus a light source ref (uri / title) and the source content
+  hash. This metadata is **not** part of `id` / `content_hash` — a rebuild at a
+  different wall-clock time yields the same identity. It is shared via a light
+  provenance base (an `ArtifactMeta`-style mixin), **not** full `BaseKnowledge`:
+  a structure tree is a derived artifact, not canonical knowledge. With it,
+  `library.put(tree)` stores the tree with no other object required.
+- A node **may** additionally carry an optional `embedding` (reserved for the
+  later hybrid path). Pure agentic retrieval does not need it; when present it is
+  produced by the pipeline and persisted with the tree, never computed at
+  `library.put` time.
+- `content_hash` covers node content (it hashes the full node dump), so a
+  self-contained tree versions by its content as expected; the provenance
+  metadata stays outside it.
+- The redundancy is deliberate and accepted: a structure tree is a derived,
+  rebuildable artifact; carrying its own text and light provenance in a local
+  knowledge base is worth far more (self-contained, independently retrievable,
+  dump/load symmetric) than the storage saved by an empty shell.
+
+Page ranges still reuse `Citation`: a node spanning pages 5-8 carries four
+`Citation(page=5..8)` entries. The integrity gate still requires single-rooted,
+acyclic, fully reachable topology; bidirectional parent/child links; unique
+sibling positions; every cited page inside the source; and every child's pages
+contained in its parent's. The only relaxed rule is the content prohibition.
+
+A future document type adds its own `StructureTree` subclass with its own source
+binding and its own content-population step; nothing paper-specific leaks into
+the base.
+
+## The PaperFlow Pipeline Collection
+
+`PaperFlow` is a **config-bound** flow: you bind the settings once at
+construction, and `build(input)` applies them to each input. The cfg **type**
+selects which knowledge shape it produces — a paper projects into several
+knowledge shapes (tree / flatten / graph), and none is privileged over the
+others.
+
+```python
+from quantmind.flows import PaperFlow, batch_run
+from quantmind.configs import PaperStructureCfg
+
+tree_flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))   # bind cfg once
+tree = await tree_flow.build(input)                             # -> PaperStructureTree
+
+# a batch runs every input under one fixed, reproducible setting:
+trees = await batch_run(tree_flow.build, inputs)
 ```
 
-`StructureTree` is a structural base — a plain `BaseModel` with no
-`BaseKnowledge` identity: `root_node_id: UUID`, `nodes: dict[UUID, TreeNode]`, the
-traversal surface (`root()`, `children_of()`, `walk_dfs()`, `find_path()`), and
-the `validate()` integrity gate. It carries no `id`, `as_of`, or `source`, so a
-subclass adds whatever identity its storage model needs without a second
-competing identity. The existing `TreeKnowledge` is refactored to
-`TreeKnowledge(BaseKnowledge, StructureTree)` and reuses the same nodes,
-helpers, and gate instead of defining its own.
+Rules:
 
-A structure tree is a derived artifact — rebuildable from a source plus a
-producer configuration, like `PaperChunkSet` — not canonical knowledge, so the
-paper binding is a paper artifact rather than a `TreeKnowledge` stored as a
-knowledge item. `PaperStructureTree(StructureTree)` adds:
+- **Bind the config, not the input.** `PaperFlow(cfg)` stores the immutable cfg;
+  `build(input)` takes only the operand. A batch therefore runs every input under
+  one unified setting, and a config can never drift mid-run — a reproducibility
+  requirement, not ergonomics.
+- **The cfg type picks the shape.** `PaperStructureCfg` → `PaperStructureTree`
+  (implemented now). A later `PaperCardCfg` → the chunk/summary shape reached
+  through the same `build` seam; the existing `paper_flow(input, *, cfg)` function
+  stays as a thin compatibility wrapper for that semantic shape until it lands.
+- **Pure processing.** `build` fetches, parses, and structures, producing the
+  complete self-contained artifact. It binds **no** library, persists nothing,
+  and does not retrieve.
+- A caller who wants only the parsed source uses `quantmind.preprocess` directly;
+  "parse only" is a component seam, not a public pipeline.
 
-- `artifact_kind = PaperArtifactKind.STRUCTURE_TREE` and `schema_version`;
-- `source_revision_id` binding it to an exact `PaperSourceRevision`;
-- a `producer` config (model, prompt version, input chunk-set id, instructions
-  hash, structuring bounds) and its `producer_config_hash`;
-- a `content_hash` over the canonical tree and lineage to the input
-  `PaperChunkSet` via `paper_artifact_lineage`.
+## Persistence: Dump / Load Symmetry
 
-A stable, source-and-producer-derived id makes an unchanged re-run idempotent and
-versions a changed configuration rather than overwriting it, exactly as the other
-paper artifacts behave. A future document type adds its own `StructureTree`
-subclass with its own source binding; nothing paper-specific leaks into the base.
+Because the tree is a self-contained value with its own provenance metadata, the
+library reduces to dump/load and needs no second object:
 
-Page ranges reuse `Citation`: a node spanning pages 5-8 carries four
-`Citation(page=5..8)` entries on `TreeNode.citations`. No `end_page` field or new
-range rule is added. A leaf does not copy chunk text; `TreeNode.content` stays
-empty and provenance is a citation pointing at the owning chunk, so source text
-is never duplicated into the tree.
+```python
+tree_flow = PaperFlow(PaperStructureCfg())
+tree = await tree_flow.build(input)              # in-memory, immediately usable
 
-## Build Pipeline
-
-Construction mirrors `paper_flow`: deterministic work in code, one bounded model
-call for the draft, and code-owned identity and validation.
-
-1. **Outline signals (`preprocess`, deterministic).** From the page-aware
-   `ParsedDocument`, detect table-of-contents pages, heading candidates, and the
-   printed-to-physical page offset. Emit ordered, page-anchored signals; make no
-   LLM call.
-2. **Draft structuring (`flows`, one agent).** An agent proposes a private draft
-   hierarchy from outline signals and chunk summaries: titles, nesting, per-node
-   draft summaries, and candidate chunk indices per node. The draft chooses no
-   ids, links, or canonical citations, exactly like the summary draft.
-3. **Canonicalization and integrity gate (`knowledge`).**
-   `PaperStructureTree.from_draft(chunk_set, *, producer, draft)` mints node
-   ids, builds parent/child links, and resolves each node's `Citation` entries
-   from the chunk set, then runs the shared `StructureTree.validate()` gate. The
-   gate rejects any tree that is not single-rooted and acyclic with every node
-   reachable, bidirectional parent/child consistency, unique sibling positions,
-   no orphan, every cited page within the source, and every child's cited pages
-   contained in its parent's. A low structuring-quality signal falls back to a
-   flat single-level tree rather than an unverified hierarchy.
-4. **Persistence (`library`).** Store the artifact through the paper artifact
-   tables. Persistence needs no embeddings.
-
-Steps 1, 3, and 4 have no model dependency and are testable without a network.
-
-## Retrieval
-
-Retrieval lives in `quantmind.mind.retrieval` and returns node evidence, never
-a synthesized answer:
-
-```text
-retrieve(structure, question, *, library, cfg, seed_locators=None)
-  -> list[RetrievalEvidence]
+await library.put(tree)                          # dump: nodes, text, embeddings, meta
+tree2 = await library.open_structure(tree.id)    # load: identical value object
 ```
 
-`structure` is any `StructureTree` — a `PaperStructureTree` today. Retrieval is
-written against the base, so a future document type reuses it unchanged. Leaf
-content is resolved through the existing `LocalKnowledgeLibrary.resolve()`,
-extended to the new artifact kind, so no parallel page-resolver concept is added.
-Two grains are supported:
+- `library.put(tree)` serializes the whole self-contained tree (structure, node
+  text, any node embeddings, and the `as_of` / source-ref provenance). It
+  requires **no** source revision or chunk set. Storing the raw source is a
+  separate, independent `library.put(source)` when a caller wants the PDF kept.
+- `library.open_structure(tree_id)` returns the same `PaperStructureTree` value,
+  embeddings and metadata included.
+- The library is one store holding **independent** artifacts side by side —
+  `PaperSourceRevision`, `PaperChunkSet`, `PaperStructureTree`. A tree does not
+  imply a chunk set or a stored source, and vice versa.
+- The old `resolve(locator)` **text-refill** path for structure-tree nodes is
+  gone; a resolved node returns its own stored content. `resolve` remains for
+  cross-document reference resolution (see below), but single-tree retrieval
+  never uses it.
 
-- **Single-pass selection.** Serialize the tree with leaf text stripped (ids,
-  titles, summaries, hierarchy), make **one** model call for the relevant node
-  ids, then resolve their page-cited content in code.
-- **Agentic traversal.** Expose two SDK `@function_tool` functions —
-  `get_document_structure()` (tree without leaf text) and
-  `get_node_content(node_ids)` (page-cited leaf text via `resolve()`) — and let an
-  Agent decide, turn by turn, which node to open and when it has enough evidence.
+## Retrieval Returns Values, Not References
 
-Retrieval calls `agents.Runner.run(...)` with its own `RunConfig` directly; it
-does not import `flows._runner`. Whole-tree serialization is bounded by a
-structure token budget over titles and summaries.
+Single-tree retrieval is a **pure value operation** over a self-contained tree.
+`AgenticRetriever(cfg)` binds the retrieval config; `retrieve(retrievable, question)`
+takes only the operand — a `Retrievable` (a `StructureTree` today; it widens
+within `knowledge` to other reasoning-able shapes such as a graph, never to a
+vector store):
+
+```python
+from quantmind.mind import AgenticRetriever
+from quantmind.configs import RetrievalCfg
+
+retriever = AgenticRetriever(RetrievalCfg(model="gpt-5.6-luna"))
+evidence = await retriever.retrieve(tree, "What are the method and limitations?")
+for item in evidence:
+    print(item.title, item.content)     # content is already here; no library
+```
+
+`RetrievalEvidence` carries the **value**, with the reference as an optional
+provenance field, not the path to the content:
+
+```python
+class RetrievalEvidence(BaseModel):
+    title: str
+    content: str                            # value: self-contained, ready to use
+    citations: tuple[Citation, ...]         # value: provenance to source pages
+    locator: ArtifactLocator | None = None  # optional: for cross-artifact fusion
+```
+
+Why this shape resolves the reference dilemma: if retrieval returned a bare node
+**reference**, the consumer would have to resolve it against a library, making
+every single-tree retrieval library-dependent. Because the tree is
+self-contained, retrieval reads `tree.nodes[id].content` directly and returns
+it. The `locator` is there for when a caller *wants* to fuse or re-open across
+artifacts — an optional capability, never the only way to see content.
+
+There is one strategy: **agentic traversal**. The retriever exposes two SDK
+`@function_tool` functions — `get_document_structure()` (tree without leaf text)
+and `get_node_content(node_ids)` (leaf text read from `tree.nodes`, **not** a
+library) — and lets an Agent decide, turn by turn, which node to open. Content
+for a selected non-leaf node is assembled from its descendant leaves. Mechanical
+retrieval (semantic vector search / BM25) is a different layer entirely
+(`library.search` / `rag`); `mind` never re-implements it, and a future hybrid
+path composes the two rather than adding a "semantic strategy" here.
+
+`retrieve` calls `agents.Runner.run(...)` with its own `RunConfig`; it does not
+import `flows._runner`. Serialization is bounded by a structure token budget.
+Seeds (when a hybrid shortlist eventually supplies them) are **in-tree node
+ids**, validated against `tree.nodes`; they carry no library dependency.
+
+## Callable Shape
+
+Both public callables **bind their cfg** and take only the operand per call,
+following the repository's altitude rule
+([operations/naming.md](../operations/naming.md)):
+
+- `AgenticRetriever(cfg)` is a **class**, not a function. It binds the retrieval
+  config so a batch of queries runs under one fixed setting — reproducibility, not
+  ceremony. (The earlier `StructureRetriever` bound a *library*; that binding is
+  gone now that the tree is self-contained, but the *config* binding remains, so
+  the class stays — an absent external dependency is not a reason to demote it.)
+  It has a **single behavior** — an LLM agent reasons over the structure — so it
+  does no cfg-type dispatch. That is deliberate: `mind` is the reasoning layer,
+  and mechanical retrieval (semantic / BM25) stays in `library` / `rag`, never a
+  second strategy bolted onto this class.
+- `PaperFlow(cfg)` is a **class** for the same reason: it binds the build config
+  once so a batch builds every input identically, and its cfg type selects the
+  knowledge shape. It binds no source, no store, and no per-call state.
+
+## Future Multi-Document Composition
+
+References and the library earn their keep at **corpus scale**, which is exactly
+where single-tree value retrieval stops fitting in memory:
+
+1. select candidate documents using metadata, descriptions, or global-summary
+   projections;
+2. `library.open_structure(...)` each candidate tree by identity;
+3. reuse one `AgenticRetriever(cfg).retrieve(tree, question)` per explicit tree;
+4. fuse evidence using the full `(source_revision_id, artifact_id, node_id)`
+   locator carried on each `RetrievalEvidence`.
+
+Here the `locator` field and library-backed `resolve` are the right tools:
+you cannot hold thousands of trees in memory, so you shortlist by reference and
+open on demand. The current release does not implement the collection router or
+evidence fusion; the seam is the optional `locator` on evidence plus
+independent per-artifact persistence.
 
 ## Multi-Model Compatibility
 
 - **Rely on the SDK.** `cfg.model` (a plain string, including a
-  `litellm/<provider>/<model>` value) flows unchanged into the SDK `Runner`,
-  which already routes multiple providers. No provider-resolution wrapper is
-  added.
-- **Capability requirement.** Draft structuring needs reliable structured output
-  and agentic traversal needs tool-calling; a provider that lacks the capability a
-  stage needs is unsupported for that stage. Tests cover at least one non-OpenAI
-  model across both stages.
-- **Embeddings.** The hybrid step depends only on the library's existing
-  `_EmbeddingProvider` seam and on `SemanticQuery` / `SemanticHit`, never on a
-  specific vendor.
+  `litellm/<provider>/<model>` value) flows unchanged into the SDK `Runner`.
+- **Capability requirement.** Draft structuring needs reliable structured output;
+  agentic traversal needs tool-calling. A provider lacking a stage's capability
+  is unsupported for that stage. Tests cover at least one non-OpenAI model.
+- **Embeddings.** The later hybrid step depends only on the library's existing
+  embedding seam and on `SemanticQuery` / `SemanticHit`, never on a specific
+  vendor.
 
 ## Hybrid Search Compatibility
 
 Hybrid retrieval — shortlist nodes by semantic search, then reason over the
-shortlist — is a later, explicit step that reuses locator identity end to end. It
-is the only part that needs an embedding provider; build and pure-agentic
-retrieval do not.
-
-- Building per-node projections is an explicit later step. Once built,
-  `search(SemanticQuery(...))` returns `SemanticHit` values that already carry a
-  full `ArtifactLocator`; the design keeps the locator and never collapses a hit
-  to a bare `node_id`.
-- Seeds are validated locators: `retrieve(..., seed_locators=...)`. Single-tree
-  mode constrains the query with `tree_id = artifact.id` and rejects any seed
-  whose artifact id does not match, so a hit from another tree, a flat item, or a
-  chunk cannot leak in. Cross-artifact traversal keys seeds by the full
-  `(artifact_id, node_id)` locator.
-- Embeddings stay a coarse pre-filter: the agent may leave the seeded subtree, and
-  a hit never becomes an answer without the reasoning step.
-
-Pure-agentic retrieval passes no seeds; hybrid adds one shortlist step in front
-of the same primitive.
+shortlist — is a later, explicit step. Node embeddings are produced **by the
+pipeline** and persisted **with the tree** (not computed at `put` time), so the
+tree stays self-contained end to end. Two independent embedding sets can then
+coexist in one library — chunk-set embeddings and structure-node embeddings —
+and hybrid queries both. Seeds remain validated in-tree node ids; a hit never
+becomes an answer without the reasoning step.
 
 ## Boundaries and Import Contracts
 
-Placement satisfies the existing `import-linter` contracts, which already forbid
-`library` and `rag` from importing `quantmind.mind`. When `mind` is implemented,
-add one contract pinning `mind -> library -> knowledge`: `mind` may import
-`knowledge`, `library`, `configs`, and `utils`, but not `flows`, `magic`, `rag`,
-or `preprocess`; `flows` may import `mind`. Nothing moves out of `flows`, and
-`rag` keeps its imports-only-`preprocess` rule.
+- `library` and `rag` must not import `quantmind.mind`.
+- `mind` may import `knowledge`, `configs`, and `utils`. It **no longer needs to
+  import `library`** for retrieval: single-tree `retrieve` is library-free. The
+  existing `mind -> library` allowance may stay for the future collection path,
+  but the retrieval operation must not depend on it.
+- `flows` is the apex and may import `knowledge`, `preprocess`, `rag`, `configs`,
+  `mind`, and `utils`. `PaperFlow` imports no library.
+- Update the `import-linter` contracts if the `mind -> library` edge is dropped
+  from the retrieval path; keep every other edge intact.
 
 ## Verification Slice
 
-Offline tests use fixed generated PDFs and a fake structuring provider. They
-cover a clean table of contents, a missing table of contents, a printed
-page-number reset, and an in-body cross-reference; integrity rejection of cyclic,
-orphaned, and out-of-page-range trees; stable ids and idempotent re-runs; citation
-resolution to correct pages; reopen behavior; and, once projections exist, seeded
-hybrid retrieval with locator validation.
-
-A bounded live slice builds a structure tree over one exact arXiv revision with a
-real model, traverses it single-pass and agentically, and prints the selected
-titles, resolved page-cited content, and citation pages. It runs at least one
-non-OpenAI model to exercise the capability requirement.
+Offline tests use fixed PDFs and fake model outputs. They cover: a table of
+contents, a missing table of contents, a printed page-number reset, and an
+in-body cross-reference; every tree-integrity rejection; **node content
+populated from cited pages and preserved through dump/load**; stable IDs and
+idempotent re-runs; a tree persisted and reopened as an identical self-contained
+value **without any chunk set present**, with `as_of` / provenance preserved;
+agentic retrieval returning evidence **whose content comes from the tree, with
+no library involved**; a bound `PaperFlow(cfg)` producing a self-contained tree
+with the cfg *type* selecting the shape; `AgenticRetriever(cfg)` binding its
+config; multi-model identity forwarding; and in-tree seed validation. P2 adds
+seeded semantic-shortlist tests once node projections exist.
 
 ## Out of Scope
 
-- a nested `TreeKnowledge` inside an artifact, a second parallel tree
-  implementation, or a `PaperTree` on `Paper`;
+- an empty-shell tree or a query-time text-refill path;
+- a nested `TreeKnowledge` inside an artifact, or a second parallel tree
+  implementation;
 - a `Citation.end_page` field or a separate page-resolver concept;
 - a shared runtime module or moving `flows._runner`;
-- a public retriever, vector-store, provider registry, or query-engine hierarchy;
-- a second persistence or semantic-index layer;
+- a generic retriever hierarchy, vector-store abstraction, provider registry, or
+  query-engine hierarchy (a single `retrieve` that branches on cfg/kind is not
+  this);
 - answer synthesis or agent memory inside the retrieval primitive;
-- corpus-level virtual nodes or query-time tree reconstruction;
+- collection routing or evidence fusion in this release;
 - knowledge-graph construction.

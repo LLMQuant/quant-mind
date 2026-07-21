@@ -18,8 +18,13 @@ from pydantic import (
     model_validator,
 )
 
-from quantmind.knowledge._base import SourceRef
-from quantmind.knowledge._tree import TreeKnowledge
+from quantmind.knowledge._base import ArtifactMeta, Citation, SourceRef
+from quantmind.knowledge._tree import (
+    StructureTree,
+    StructureTreeValidationError,
+    TreeKnowledge,
+    TreeNode,
+)
 
 
 class PaperArtifactKind(str, Enum):
@@ -27,6 +32,7 @@ class PaperArtifactKind(str, Enum):
 
     CHUNK_SET = "paper_chunk_set"
     GLOBAL_SUMMARY = "paper_summary"
+    STRUCTURE_TREE = "paper_structure_tree"
 
 
 def _stable_hash(value: object) -> str:
@@ -663,6 +669,56 @@ def _validate_chunk_set_source(
                     )
 
 
+class PaperStructureNodeDraft(BaseModel):
+    """Model-proposed hierarchy node without canonical identity or links."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    title: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    start_page: int = Field(ge=1)
+    end_page: int = Field(ge=1)
+    children: tuple["PaperStructureNodeDraft", ...] = ()
+
+    @field_validator("title", "summary")
+    @classmethod
+    def _text_is_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("paper structure draft text must not be blank")
+        return stripped
+
+    @model_validator(mode="after")
+    def _page_span_is_ordered(self) -> "PaperStructureNodeDraft":
+        if self.end_page < self.start_page:
+            raise ValueError("paper structure draft page span must be ordered")
+        return self
+
+
+class PaperStructureTreeDraft(BaseModel):
+    """Bounded model output consumed by code-owned tree construction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    root: PaperStructureNodeDraft
+    quality: Literal["low", "medium", "high"] = "high"
+
+
+class PaperStructureProducer(BaseModel):
+    """Exact model, prompt, page-input, and bounds used to structure a paper."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str
+    prompt_version: str
+    orchestration: Literal["single-pass-v1"] = "single-pass-v1"
+    instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    page_text_chars: int = Field(ge=80)
+    max_output_tokens: int = Field(gt=0)
+    max_depth: int = Field(ge=1)
+    max_nodes: int = Field(ge=1)
+
+
 class ArtifactLocator(BaseModel):
     """Stable address for a paper artifact or one of its members."""
 
@@ -672,6 +728,281 @@ class ArtifactLocator(BaseModel):
     artifact_id: UUID
     artifact_kind: str = Field(min_length=1)
     member_id: UUID | None = None
+
+
+def _paper_structure_content_hash(
+    root_node_id: UUID,
+    nodes: dict[UUID, TreeNode],
+) -> str:
+    return _stable_hash(
+        {
+            "root_node_id": str(root_node_id),
+            "nodes": {
+                str(node_id): node.model_dump(mode="json")
+                for node_id, node in sorted(
+                    nodes.items(), key=lambda pair: str(pair[0])
+                )
+            },
+        }
+    )
+
+
+class PaperStructureTree(ArtifactMeta, StructureTree):
+    """Page-preserving structure derived from one exact source revision.
+
+    Self-contained: leaf nodes carry their own page-cited text and the tree
+    mixes in ``ArtifactMeta`` provenance (``as_of`` / source ref /
+    ``source_content_hash``). That provenance lets the library persist the tree
+    on its own, yet stays out of ``id`` and ``content_hash`` so a rebuild at a
+    different wall-clock time yields the identical artifact.
+    """
+
+    id: UUID
+    artifact_kind: Literal[PaperArtifactKind.STRUCTURE_TREE] = (
+        PaperArtifactKind.STRUCTURE_TREE
+    )
+    schema_version: Literal["1.0"] = "1.0"
+    source_revision_id: UUID
+    producer: PaperStructureProducer
+    producer_config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _validate_artifact(self) -> "PaperStructureTree":
+        expected_config_hash = _stable_hash(
+            self.producer.model_dump(mode="json")
+        )
+        if self.producer_config_hash != expected_config_hash:
+            raise ValueError("paper structure-tree producer hash mismatch")
+        expected_id = _paper_artifact_id(
+            self.source_revision_id,
+            self.artifact_kind,
+            self.producer_config_hash,
+        )
+        if self.id != expected_id:
+            raise ValueError(
+                "paper structure-tree ID does not match its producer"
+            )
+        if self.content_hash != _paper_structure_content_hash(
+            self.root_node_id,
+            self.nodes,
+        ):
+            raise ValueError("paper structure-tree content hash mismatch")
+        if (
+            self.source.content_hash is not None
+            and self.source.content_hash != self.source_content_hash
+        ):
+            raise ValueError(
+                "paper structure-tree provenance source hash is inconsistent"
+            )
+        for node in self.nodes.values():
+            if node.children_ids:
+                if node.content is not None:
+                    raise ValueError(
+                        "paper structure-tree internal nodes must not carry "
+                        "content"
+                    )
+            elif not node.content:
+                raise ValueError(
+                    "paper structure-tree leaf nodes require content"
+                )
+        if any(not node.citations for node in self.nodes.values()):
+            raise ValueError("paper structure-tree nodes require citations")
+        self.validate()
+        return self
+
+    @classmethod
+    def from_draft(
+        cls,
+        source: PaperSourceRevision,
+        *,
+        producer: PaperStructureProducer,
+        draft: PaperStructureTreeDraft,
+    ) -> "PaperStructureTree":
+        """Mint canonical identity, links, and page citations from a draft.
+
+        A low-quality draft is replaced with a bounded, deterministic flat tree
+        over physical source pages. Otherwise draft positions and page spans
+        are retained, while every UUID, link, and citation is owned by code.
+        """
+        producer_hash = _stable_hash(producer.model_dump(mode="json"))
+        artifact_id = _paper_artifact_id(
+            source.id,
+            PaperArtifactKind.STRUCTURE_TREE,
+            producer_hash,
+        )
+        root_draft = (
+            cls._flat_fallback(source, draft.root, max_nodes=producer.max_nodes)
+            if draft.quality == "low"
+            else draft.root
+        )
+        page_texts: dict[int, str] = {
+            page.page_number: page.text for page in source.parsed.pages
+        }
+        nodes: dict[UUID, TreeNode] = {}
+        node_count = 0
+
+        def build(
+            value: PaperStructureNodeDraft,
+            *,
+            parent_id: UUID | None,
+            position: int,
+            path: tuple[int, ...],
+            depth: int,
+        ) -> UUID:
+            nonlocal node_count
+            if depth > producer.max_depth:
+                raise StructureTreeValidationError(
+                    "paper structure draft exceeds max_depth"
+                )
+            if node_count >= producer.max_nodes:
+                raise StructureTreeValidationError(
+                    "paper structure draft exceeds max_nodes"
+                )
+            node_count += 1
+            node_id = uuid5(
+                artifact_id,
+                "quantmind:paper-structure-node:"
+                + ".".join(str(part) for part in path),
+            )
+            children_ids = [
+                build(
+                    child,
+                    parent_id=node_id,
+                    position=child_position,
+                    path=(*path, child_position),
+                    depth=depth + 1,
+                )
+                for child_position, child in enumerate(value.children)
+            ]
+            citations = cls._resolve_structure_citations(source, value)
+            content = (
+                None
+                if children_ids
+                else "\n\n".join(
+                    page_texts[citation.page]
+                    for citation in citations
+                    if citation.page is not None
+                )
+            )
+            nodes[node_id] = TreeNode(
+                node_id=node_id,
+                parent_id=parent_id,
+                position=position,
+                title=value.title,
+                summary=value.summary,
+                content=content,
+                citations=citations,
+                children_ids=children_ids,
+            )
+            return node_id
+
+        root_node_id = build(
+            root_draft,
+            parent_id=None,
+            position=0,
+            path=(0,),
+            depth=1,
+        )
+        source_content_hash = source.source.content_hash
+        if source_content_hash is None:
+            raise ValueError("paper source revision is missing a content hash")
+        tree = cls(
+            id=artifact_id,
+            source_revision_id=source.id,
+            producer=producer,
+            producer_config_hash=producer_hash,
+            content_hash=_paper_structure_content_hash(root_node_id, nodes),
+            root_node_id=root_node_id,
+            nodes=nodes,
+            # Provenance metadata (not identity): copied from the exact source
+            # revision so the tree can be stored and time-queried standalone.
+            as_of=source.as_of,
+            source=source.source,
+            source_title=source.title,
+            source_content_hash=source_content_hash,
+        )
+        _validate_structure_tree_source(tree, source)
+        return tree
+
+    @staticmethod
+    def _resolve_structure_citations(
+        source: PaperSourceRevision,
+        draft: PaperStructureNodeDraft,
+    ) -> list[Citation]:
+        source_pages = {page.page_number for page in source.parsed.pages}
+        pages = set(range(draft.start_page, draft.end_page + 1))
+        if not pages.issubset(source_pages):
+            raise StructureTreeValidationError(
+                "paper structure draft cites a page outside its source"
+            )
+        return [
+            Citation(source_id=str(source.id), page=page)
+            for page in sorted(pages)
+        ]
+
+    @staticmethod
+    def _flat_fallback(
+        source: PaperSourceRevision,
+        proposed_root: PaperStructureNodeDraft,
+        *,
+        max_nodes: int,
+    ) -> PaperStructureNodeDraft:
+        pages = tuple(page.page_number for page in source.parsed.pages)
+        leaf_count = min(len(pages), max(0, max_nodes - 1))
+        leaves: list[PaperStructureNodeDraft] = []
+        if leaf_count:
+            group_size = (len(pages) + leaf_count - 1) // leaf_count
+            for offset in range(0, len(pages), group_size):
+                group = pages[offset : offset + group_size]
+                leaves.append(
+                    PaperStructureNodeDraft(
+                        title=(
+                            f"Page {group[0]}"
+                            if len(group) == 1
+                            else f"Pages {group[0]}-{group[-1]}"
+                        ),
+                        summary="Source pages retained in canonical storage.",
+                        start_page=group[0],
+                        end_page=group[-1],
+                    )
+                )
+        return PaperStructureNodeDraft(
+            title=proposed_root.title,
+            summary=(
+                "Flat source-order structure used because hierarchy quality "
+                "was low."
+            ),
+            start_page=pages[0],
+            end_page=pages[-1],
+            children=tuple(leaves),
+        )
+
+
+def _validate_structure_tree_source(
+    tree: PaperStructureTree,
+    source: PaperSourceRevision,
+) -> None:
+    """Validate every tree page citation against its exact source revision."""
+    if tree.source_revision_id != source.id:
+        raise ValueError("paper structure tree belongs to another source")
+    source_pages = {page.page_number for page in source.parsed.pages}
+    tree.validate(source_pages=source_pages)
+    for node in tree.nodes.values():
+        for citation in node.citations:
+            if (
+                citation.source_id != str(source.id)
+                or citation.page not in source_pages
+                or citation.tree_id is not None
+                or citation.node_id is not None
+            ):
+                raise ValueError(
+                    "paper structure-tree citation does not resolve to its source"
+                )
+    if {citation.page for citation in tree.root().citations} != source_pages:
+        raise ValueError(
+            "paper structure-tree root must cover every source page"
+        )
 
 
 class PaperCitation(BaseModel):
@@ -926,5 +1257,5 @@ class LegacyPaper(TreeKnowledge):
     asset_classes: list[str] = Field(default_factory=list)
 
 
-PaperArtifact = PaperChunkSet | PaperGlobalSummary
-ResolvedPaperArtifact = PaperArtifact | PaperChunk
+PaperArtifact = PaperChunkSet | PaperGlobalSummary | PaperStructureTree
+ResolvedPaperArtifact = PaperArtifact | PaperChunk | TreeNode

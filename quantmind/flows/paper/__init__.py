@@ -1,11 +1,33 @@
-"""Source-first paper flow that returns chunks before a cited summary.
+"""PaperFlow — a config-bound flow producing paper knowledge artifacts.
 
-The flow is deliberately thin. It owns only what genuinely needs both the
-preprocess/rag value objects and IO: fetching bytes, parsing the PDF, reading
-page-asset bytes off disk, and mapping those ephemeral, path-based artifacts
-into knowledge-native inputs. All identity (IDs, content and producer hashes,
-citation resolution) lives on the knowledge models' ``from_*`` constructors,
-so this module imports no private ID helpers and computes no paper ID itself.
+``PaperFlow`` binds an immutable build config at construction and applies it to
+each input, so a batch runs under one unified, reproducible setting:
+
+    tree_flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))  # bind cfg once
+    tree = await tree_flow.build(input)                            # -> tree
+    trees = await batch_run(tree_flow.build, inputs)               # one setting
+
+``build(input)`` takes only the operand and dispatches on the cfg **type**: a
+``PaperStructureCfg`` selects the self-contained ``PaperStructureTree`` shape
+(fetch + parse, deterministic outline signals, one draft-structuring agent, then
+the knowledge-layer ``from_draft`` constructor that mints identity and populates
+each leaf node's page-cited text). Any other cfg type raises
+``NotImplementedError`` — the chunk/summary (card) shape is not wired through
+``build`` yet; it stays in the ``paper_flow`` compatibility function.
+
+``build`` fetches and parses **per call**: the flow binds no source, no library,
+persists nothing, and retrieves nothing. Persistence (``library``) and retrieval
+(``mind``) are downstream concerns a caller wires itself.
+
+The module keeps only what genuinely needs both the preprocess/rag value objects
+and IO: fetching bytes, parsing the PDF, reading page-asset bytes off disk, and
+mapping those ephemeral, path-based artifacts into knowledge-native inputs. All
+identity (IDs, content and producer hashes, citation resolution) lives on the
+knowledge models' ``from_*`` constructors, so this module imports no private ID
+helpers and computes no paper ID itself.
+
+``paper_flow`` remains as a thin compatibility function for the semantic
+chunk/summary shape (``PaperFlowResult``).
 """
 
 import mimetypes
@@ -15,7 +37,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Literal
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import BaseFlowCfg, PaperFlowCfg, PaperStructureCfg
 from quantmind.configs.paper import (
     ArxivIdentifier,
     DoiIdentifier,
@@ -30,6 +52,12 @@ from quantmind.flows._paper_summary import (
     _PaperSummaryProvider,
     _summary_instructions_hash,
 )
+from quantmind.flows.paper._structure import (
+    PaperStructureError,
+    _AgentsPaperStructureProvider,
+    _PaperStructureProvider,
+    _structure_instructions_hash,
+)
 from quantmind.knowledge import (
     PaperAssetInput,
     PaperBoundingBox,
@@ -43,7 +71,16 @@ from quantmind.knowledge import (
     PaperParsedBlock,
     PaperSourceFacts,
     PaperSourceRevision,
+    PaperStructureProducer,
+    PaperStructureTree,
     PaperSummaryProducer,
+)
+from quantmind.preprocess import (
+    BoundingBox,
+    ParsedDocument,
+    ParsedPage,
+    TextBlock,
+    extract_outline_signals,
 )
 from quantmind.preprocess.fetch import (
     Fetched,
@@ -52,16 +89,118 @@ from quantmind.preprocess.fetch import (
     fetch_url,
     read_local_file,
 )
-from quantmind.preprocess.format import ParsedDocument, parse_pdf
+from quantmind.preprocess.format import parse_pdf
 from quantmind.rag import (
     ParsedChunk,
     SentenceSplitterConfig,
     chunk_parsed_document,
 )
 
+__all__ = [
+    "PaperFlow",
+    "PaperStructureError",
+    "UnsupportedContentTypeError",
+    "paper_flow",
+]
+
 
 class UnsupportedContentTypeError(ValueError):
     """The source is not a page-aware PDF supported by Paper Flow V1."""
+
+
+class PaperFlow:
+    """Config-bound flow producing a paper knowledge artifact per input.
+
+    ``PaperFlow(cfg)`` binds an immutable copy of the build config; ``build``
+    applies it to each input, so a batch runs under one unified, reproducible
+    setting and a config can never drift mid-run. The cfg **type** selects the
+    knowledge shape: ``PaperStructureCfg`` builds a self-contained
+    ``PaperStructureTree`` today. The flow binds no source, no library, and no
+    per-call state; ``build`` fetches and parses per call.
+    """
+
+    __slots__ = (
+        "_cfg",
+        "_structure_provider",
+    )
+
+    def __init__(
+        self,
+        cfg: BaseFlowCfg,
+        *,
+        _structure_provider: _PaperStructureProvider | None = None,
+    ) -> None:
+        """Bind an immutable copy of the build config.
+
+        Args:
+            cfg: The build config. Its **type** selects the knowledge shape
+                ``build`` produces (``PaperStructureCfg`` → structure tree).
+            _structure_provider: Optional test seam for the structure draft.
+        """
+        self._cfg: BaseFlowCfg = cfg.model_copy(deep=True)
+        self._structure_provider = _structure_provider
+
+    async def build(self, input: PaperInput) -> PaperStructureTree:
+        """Build one self-contained knowledge artifact for ``input``.
+
+        Dispatches on the bound cfg **type**. A ``PaperStructureCfg`` runs the
+        structure pipeline: fetch and parse the input, extract deterministic
+        outline signals, seed a single draft-structuring agent, then call the
+        knowledge-layer constructor, which mints identity, resolves page
+        citations, and populates each leaf node's ``content`` from its cited
+        source pages. The returned tree is self-contained: it yields node text
+        without the source revision or a chunk set.
+
+        Fetch and parse run **per call**; the flow keeps no shared source state.
+
+        Args:
+            input: Typed paper source. V1 requires a PDF-backed input.
+
+        Returns:
+            A code-identified ``PaperStructureTree`` whose leaf nodes carry
+            cited page text.
+
+        Raises:
+            NotImplementedError: If the bound cfg is not a ``PaperStructureCfg``
+                (the chunk/summary shape stays in ``paper_flow``).
+            UnsupportedContentTypeError: If the resolved content is not a PDF.
+            PaperStructureError: If the model call exceeds its timeout.
+            StructureTreeValidationError: If the proposed page tree is invalid.
+        """
+        cfg = self._cfg
+        if isinstance(cfg, PaperStructureCfg):
+            return await self._build_structure(input, cfg)
+        raise NotImplementedError(
+            "PaperFlow.build does not support cfg type "
+            f"{type(cfg).__name__!r}; only PaperStructureCfg (structure-tree "
+            "shape) is wired today. The chunk/summary shape stays in the "
+            "paper_flow() compatibility function."
+        )
+
+    async def _build_structure(
+        self,
+        input: PaperInput,
+        cfg: PaperStructureCfg,
+    ) -> PaperStructureTree:
+        """Fetch, parse, and structure one input into a self-contained tree."""
+        source, _ = await _open_source(input, output_dir=cfg.output_dir)
+        provider = self._structure_provider or _AgentsPaperStructureProvider()
+        signals = extract_outline_signals(_parsed_document(source))
+        draft = await provider.structure(signals, source, cfg=cfg)
+        producer = PaperStructureProducer(
+            model=cfg.model,
+            prompt_version=cfg.prompt_version,
+            instructions_hash=_structure_instructions_hash(cfg),
+            page_text_chars=cfg.page_text_chars,
+            max_output_tokens=cfg.max_output_tokens,
+            max_depth=cfg.max_depth,
+            max_nodes=cfg.max_nodes,
+        )
+        return PaperStructureTree.from_draft(
+            source,
+            producer=producer,
+            draft=draft,
+        )
 
 
 async def paper_flow(
@@ -72,13 +211,20 @@ async def paper_flow(
 ) -> PaperFlowResult:
     """Build a page-aware chunk set and one cited global summary.
 
-    IDs, source metadata, artifact membership, lineage, and citation links are
-    minted and validated by the knowledge-layer constructors. The model returns
-    only summary prose and chunk/page coordinates through a bounded seam.
+    Thin compatibility function for the semantic (chunk + summary) shape: it
+    fetches and parses the document once, chunks it, and runs the deterministic
+    map-reduce summary pipeline. IDs, source metadata, artifact membership,
+    lineage, and citation links are minted and validated by the knowledge-layer
+    constructors; the model returns only summary prose and chunk/page
+    coordinates through a bounded seam.
+
+    ``PaperFlow(cfg).build(input)`` is the config-bound entry point for the
+    structure-tree shape; the chunk/summary shape is not wired through it yet.
 
     Args:
         input: Typed paper source. V1 requires a PDF-backed input.
         cfg: Splitter, summary model, and usage/runtime limits.
+        _summary_provider: Optional test seam for the summary draft.
 
     Returns:
         The exact source revision, one chunk-set artifact, and one cited
@@ -91,16 +237,7 @@ async def paper_flow(
         NotImplementedError: If a DOI input has no exact open PDF resolver.
     """
     cfg = cfg or PaperFlowCfg()
-    facts = await _fetch_paper_source(input)
-    parsed = await parse_pdf(facts.raw_bytes, artifact_dir=cfg.output_dir)
-    source = PaperSourceRevision.from_parsed(
-        facts=facts,
-        source_hash=parsed.source_hash,
-        parser_name=parsed.parser_name,
-        parser_version=parsed.parser_version,
-        cleanup_version=parsed.cleanup_version,
-        pages=_adapt_pages(parsed),
-    )
+    source, parsed = await _open_source(input, output_dir=cfg.output_dir)
     parsed_chunks = chunk_parsed_document(
         parsed,
         config=SentenceSplitterConfig(
@@ -126,6 +263,29 @@ async def paper_flow(
         chunk_set=chunk_set,
         global_summary=summary,
     )
+
+
+async def _open_source(
+    input: PaperInput,
+    *,
+    output_dir: str | None,
+) -> tuple[PaperSourceRevision, ParsedDocument]:
+    """Fetch, parse, and mint the immutable source revision for one input (IO).
+
+    The single expensive step both shapes share. It performs no LLM call and
+    keeps no state; callers invoke it once per build.
+    """
+    facts = await _fetch_paper_source(input)
+    parsed = await parse_pdf(facts.raw_bytes, artifact_dir=output_dir)
+    source = PaperSourceRevision.from_parsed(
+        facts=facts,
+        source_hash=parsed.source_hash,
+        parser_name=parsed.parser_name,
+        parser_version=parsed.parser_version,
+        cleanup_version=parsed.cleanup_version,
+        pages=_adapt_pages(parsed),
+    )
+    return source, parsed
 
 
 def _aware_or_now(value: datetime | None) -> datetime:
@@ -331,4 +491,39 @@ def _build_summary(
         citations=citations,
         min_citations=cfg.min_summary_citations,
         min_pages=cfg.min_summary_pages,
+    )
+
+
+def _parsed_document(source: PaperSourceRevision) -> ParsedDocument:
+    """Project a canonical source manifest into outline extraction input."""
+    return ParsedDocument(
+        source_hash=source.parsed.source_hash,
+        parser_name=source.parsed.parser_name,
+        parser_version=source.parsed.parser_version,
+        cleanup_version=source.parsed.cleanup_version,
+        pages=tuple(
+            ParsedPage(
+                page_number=page.page_number,
+                width=page.width,
+                height=page.height,
+                text=page.text,
+                blocks=tuple(
+                    TextBlock(
+                        text=block.text,
+                        page_number=page.page_number,
+                        bbox=BoundingBox(
+                            x0=block.bbox.x0,
+                            y0=block.bbox.y0,
+                            x1=block.bbox.x1,
+                            y1=block.bbox.y1,
+                        ),
+                        font_name=block.font_name,
+                        font_size=block.font_size,
+                        confidence=block.confidence,
+                    )
+                    for block in page.blocks
+                ),
+            )
+            for page in source.parsed.pages
+        ),
     )
