@@ -331,7 +331,28 @@ independent per-artifact persistence.
   `litellm/<provider>/<model>` value) flows unchanged into the SDK `Runner`.
 - **Capability requirement.** Draft structuring needs reliable structured output;
   agentic traversal needs tool-calling. A provider lacking a stage's capability
-  is unsupported for that stage. Tests cover at least one non-OpenAI model.
+  is unsupported for that stage.
+- **Structured output, transparently, without a provider registry.** Setting
+  `output_type=` makes the SDK send a strict `response_format={"type":
+  "json_schema"}`. Native OpenAI routes accept it; some LiteLLM-routed providers
+  (DeepSeek, ...) reject that `response_format` outright at *request* time (the
+  call fails before any output exists). `quantmind.utils.structured_output.
+  run_structured` hides this: it runs the strict path first and, **only when the
+  provider rejects the `json_schema` format**, re-runs the same call once in
+  JSON-object mode — no `output_type`, the JSON Schema pinned into the
+  instructions, `response_format={"type": "json_object"}` — then validates the raw
+  output locally against the Pydantic type. Incapability is discovered by the
+  provider's own rejection (a narrow `BadRequestError` check), **not** a
+  model-name prefix or a capability table; unrelated bad requests are re-raised,
+  never swallowed. The only cost on a json-object-only provider is one rejected
+  first request per call. Callers pass just `cfg.model`; the fallback is invisible.
+- **One helper, two layers, one boundary.** Both stages call the same
+  `run_structured`, but each supplies its own `build_agent` (how the agent is
+  constructed) and `run` (which runner executes it). Structuring runs under
+  `flows._runner.run_with_observability`; agentic retrieval runs under this
+  module's own `Runner.run` + `RunConfig`. The shared helper lives in `utils` — a
+  leaf both layers import — so `mind` still never imports `flows` and no runtime
+  module is introduced.
 - **Embeddings.** The later hybrid step depends only on the library's existing
   embedding seam and on `SemanticQuery` / `SemanticHit`, never on a specific
   vendor.
@@ -369,8 +390,11 @@ value **without any chunk set present**, with `as_of` / provenance preserved;
 agentic retrieval returning evidence **whose content comes from the tree, with
 no library involved**; a bound `PaperFlow(cfg)` producing a self-contained tree
 with the cfg *type* selecting the shape; `AgenticRetriever(cfg)` binding its
-config; multi-model identity forwarding; and in-tree seed validation. P2 adds
-seeded semantic-shortlist tests once node projections exist.
+config; multi-model identity forwarding; the strict→json-object structured-output
+fallback (offline: a simulated `json_schema` rejection re-runs in JSON-object mode
+and a bad request unrelated to `response_format` propagates; live: a real
+json-object-only provider); and in-tree seed validation. P2 adds seeded
+semantic-shortlist tests once node projections exist.
 
 ## Out of Scope
 

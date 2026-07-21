@@ -15,8 +15,7 @@ from quantmind.preprocess import OutlineSignals
 from quantmind.utils.structured_output import (
     json_object_instructions,
     json_object_model_settings,
-    requires_json_object_mode,
-    validate_json_object,
+    run_structured,
 )
 
 _STRUCTURE_INSTRUCTIONS = """\
@@ -125,40 +124,47 @@ class _AgentsPaperStructureProvider:
         *,
         cfg: PaperStructureCfg,
     ) -> PaperStructureTreeDraft:
-        uses_json_object = requires_json_object_mode(cfg.model)
-        instructions = _structure_instructions(cfg)
-        model_settings = _structure_model_settings(cfg)
-        if uses_json_object:
-            instructions = json_object_instructions(
-                instructions,
-                PaperStructureTreeDraft,
-            )
-            model_settings = json_object_model_settings(model_settings)
+        payload = _structure_payload(signals, source, cfg)
 
-        agent_kwargs: dict[str, Any] = {
-            "name": "paper_structure_builder",
-            "instructions": instructions,
-            "model": cfg.model,
-            "model_settings": model_settings,
-        }
-        if not uses_json_object:
-            agent_kwargs["output_type"] = PaperStructureTreeDraft
-        agent: Agent[Any] = Agent(**agent_kwargs)
-        try:
-            output = await asyncio.wait_for(
-                run_with_observability(
-                    agent,
-                    _structure_payload(signals, source, cfg),
-                    cfg=cfg,
-                    memory=None,
-                    extra_run_hooks=[],
-                ),
-                timeout=cfg.timeout_seconds,
-            )
-        except asyncio.TimeoutError as exc:
-            raise PaperStructureError(
-                "paper structure build exceeded timeout_seconds"
-            ) from exc
-        if uses_json_object:
-            return validate_json_object(output, PaperStructureTreeDraft)
-        return PaperStructureTreeDraft.model_validate(output)
+        def build_agent(json_object: bool) -> Agent[Any]:
+            instructions = _structure_instructions(cfg)
+            model_settings = _structure_model_settings(cfg)
+            kwargs: dict[str, Any] = {
+                "name": "paper_structure_builder",
+                "model": cfg.model,
+            }
+            if json_object:
+                kwargs["instructions"] = json_object_instructions(
+                    instructions, PaperStructureTreeDraft
+                )
+                kwargs["model_settings"] = json_object_model_settings(
+                    model_settings
+                )
+            else:
+                kwargs["instructions"] = instructions
+                kwargs["model_settings"] = model_settings
+                kwargs["output_type"] = PaperStructureTreeDraft
+            return Agent(**kwargs)
+
+        async def run_agent(agent: Agent[Any]) -> Any:
+            try:
+                return await asyncio.wait_for(
+                    run_with_observability(
+                        agent,
+                        payload,
+                        cfg=cfg,
+                        memory=None,
+                        extra_run_hooks=[],
+                    ),
+                    timeout=cfg.timeout_seconds,
+                )
+            except asyncio.TimeoutError as exc:
+                raise PaperStructureError(
+                    "paper structure build exceeded timeout_seconds"
+                ) from exc
+
+        return await run_structured(
+            PaperStructureTreeDraft,
+            build_agent=build_agent,
+            run=run_agent,
+        )

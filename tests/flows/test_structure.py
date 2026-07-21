@@ -5,7 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 from agents import ModelSettings
+from openai import BadRequestError
 
 from quantmind.configs import PaperFlowCfg, PaperStructureCfg
 from quantmind.configs.paper import LocalFilePath
@@ -157,17 +159,24 @@ class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
                 await flow.build(LocalFilePath(path=_FIXTURE))
 
 
+def _bad_request(message: str) -> BadRequestError:
+    request = httpx.Request("POST", "https://api.test/v1/chat/completions")
+    return BadRequestError(
+        message, response=httpx.Response(400, request=request), body=None
+    )
+
+
 class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
-    async def test_litellm_provider_uses_json_object_and_validates_locally(
+    async def test_strict_structured_output_is_the_default_for_every_model(
         self,
     ) -> None:
+        # A litellm-routed model is no longer force-downgraded: it takes the
+        # SDK's native strict json_schema path first, like any other provider.
         result = build_paper_result()
         cfg = PaperStructureCfg(
             model="litellm/openrouter/deepseek/deepseek-v4-flash"
         )
-        run_mock = AsyncMock(
-            return_value=f"```json\n{_fixture_draft().model_dump_json()}\n```"
-        )
+        run_mock = AsyncMock(return_value=_fixture_draft())
         with patch(
             "quantmind.flows.paper._structure.run_with_observability",
             new=run_mock,
@@ -182,30 +191,44 @@ class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
         run_mock.assert_awaited_once()
         agent = run_mock.await_args.args[0]
         self.assertEqual(agent.model, cfg.model)
-        self.assertIsNone(agent.output_type)
-        self.assertEqual(
-            agent.model_settings.extra_body["response_format"],
-            {"type": "json_object"},
-        )
-        self.assertIn("final output format", agent.instructions)
+        self.assertIs(agent.output_type, PaperStructureTreeDraft)
+        self.assertIsNone(agent.model_settings.extra_body)
 
-    async def test_openai_provider_keeps_sdk_structured_output(self) -> None:
+    async def test_falls_back_to_json_object_when_json_schema_is_rejected(
+        self,
+    ) -> None:
         result = build_paper_result()
-        cfg = PaperStructureCfg(model="gpt-5.6-luna")
-        run_mock = AsyncMock(return_value=_fixture_draft())
+        cfg = PaperStructureCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            side_effect=[
+                _bad_request("This response_format type is unavailable now"),
+                f"```json\n{_fixture_draft().model_dump_json()}\n```",
+            ]
+        )
         with patch(
             "quantmind.flows.paper._structure.run_with_observability",
             new=run_mock,
         ):
-            await _AgentsPaperStructureProvider().structure(
+            draft = await _AgentsPaperStructureProvider().structure(
                 signals=_empty_signals(),
                 source=result.source_revision,
                 cfg=cfg,
             )
 
-        agent = run_mock.await_args.args[0]
-        self.assertIs(agent.output_type, PaperStructureTreeDraft)
-        self.assertIsNone(agent.model_settings.extra_body)
+        self.assertEqual(draft, _fixture_draft())
+        self.assertEqual(run_mock.await_count, 2)
+        strict_agent = run_mock.await_args_list[0].args[0]
+        self.assertIs(strict_agent.output_type, PaperStructureTreeDraft)
+        self.assertIsNone(strict_agent.model_settings.extra_body)
+        json_agent = run_mock.await_args_list[1].args[0]
+        self.assertIsNone(json_agent.output_type)
+        self.assertEqual(
+            json_agent.model_settings.extra_body["response_format"],
+            {"type": "json_object"},
+        )
+        self.assertIn("final output format", json_agent.instructions)
 
     async def test_provider_timeout_is_typed(self) -> None:
         result = build_paper_result()
