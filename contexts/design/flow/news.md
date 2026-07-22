@@ -230,10 +230,17 @@ three limited checks:
 3. fetch up to 25 unique articles and find the first supported exchange-coded
    symbol in every group that has one (100% recall).
 
+Ticker-hint extraction supports one exchange-qualified symbol and parenthesized
+comma-separated symbol lists that share a supported exchange prefix. A shared
+group ends at a semicolon, conjunction, or closing parenthesis. Additional list
+members record a reconstructed `EXCHANGE: SYMBOL` raw value; unsupported
+exchanges remain outside the whitelist policy.
+
 The ticker check uses a separate comparison regex rather than the production
 extractor. It accepts plain, Markdown-link, and emphasis-wrapped symbols. It
-ignores later symbols in a multi-symbol list and exchanges that the extractor
-does not support. The script prints PASS/FAIL plus short listing, article,
+recognizes comma-separated symbols that share a supported exchange prefix and
+ignores exchanges that the extractor does not support. The script prints
+PASS/FAIL plus short listing, article,
 failure, and recall summaries. It fails when RSS or listing data is invalid,
 no sampled article parses, or supported symbols fall below 100% recall. A
 parsed sample with no supported symbols reports `SKIP` and still passes.
