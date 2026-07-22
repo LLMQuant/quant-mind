@@ -71,10 +71,7 @@ Every chunk span is also checked against that manifest: its page must exist, its
 
 Changing any producer field creates a distinct artifact ID. Multiple chunk sets and summaries may coexist for one source revision. Loading a complete `PaperFlowResult` without explicit artifact IDs is allowed only when one unambiguous linked pair exists.
 
-`PaperStructureTree.producer` records model and prompt identity, the
-instructions hash, the bounded physical-page text input policy, and tree/output
-bounds. It deliberately records no splitter or chunk-set identity. Rechunking
-an unchanged source therefore does not create a different structure tree.
+`PaperStructureTree.producer` records model and prompt identity, the instructions hash, the bounded physical-page text input policy, and tree/output bounds. It deliberately records no splitter or chunk-set identity. Rechunking an unchanged source therefore does not create a different structure tree.
 
 ## Citation and Lineage Integrity
 
@@ -82,10 +79,7 @@ A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verb
 
 `PaperGlobalSummary.derived_from` contains `ArtifactLocator` values. At least one locator must point to its producer's exact input chunk set, with the same source revision and no member ID. The library stores this relationship explicitly so lineage can be checked independently from the summary JSON.
 
-`PaperStructureTree` binds directly to one `PaperSourceRevision`. Each node
-carries inclusive physical-page citations with no chunk coordinates, and the
-root must cover every source page. The tree has no artifact lineage because no
-chunk set or summary is an input to its construction.
+`PaperStructureTree` binds directly to one `PaperSourceRevision`. Each node carries inclusive physical-page citations with no chunk coordinates, and the root must cover every source page. The tree has no artifact lineage because no chunk set or summary is an input to its construction.
 
 ## Retrieval Boundary
 

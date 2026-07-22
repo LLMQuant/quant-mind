@@ -81,11 +81,7 @@ The transaction writes or reuses the source, asset blobs, artifacts, members, li
 
 Putting an unchanged result is idempotent and reuses valid vectors. The same source may own multiple chunk-set and summary versions. Artifact identity includes producer configuration, so one version never silently replaces another.
 
-`put_paper_structure_tree(source, tree)` is a separate vectorless transaction.
-It validates that every node citation belongs to the exact source, writes or
-reuses the source and its assets, then stores the tree and normalized members.
-It does not require `put_paper()`, a chunk set, an embedding provider call, or
-artifact-lineage rows.
+`put_paper_structure_tree(source, tree)` is a separate vectorless transaction. It validates that every node citation belongs to the exact source, writes or reuses the source and its assets, then stores the tree and normalized members. It does not require `put_paper()`, a chunk set, an embedding provider call, or artifact-lineage rows.
 
 ## Search Projections
 
@@ -128,8 +124,7 @@ Paper projections inherit both times from their exact source revision. This prev
 
 ## Integrity and Migration
 
-Open performs an explicit SQLite user-version migration from schema 2 to schema 3 by adding paper tables and indexes without rewriting conventional knowledge. Older canonical class references for the pre-V1 paper tree load as `LegacyPaper` solely for database compatibility.
-Schema 3 to 4 permits zero-projection artifacts and adds hierarchical member parents without rewriting conventional knowledge.
+Open performs an explicit SQLite user-version migration from schema 2 to schema 3 by adding paper tables and indexes without rewriting conventional knowledge. Older canonical class references for the pre-V1 paper tree load as `LegacyPaper` solely for database compatibility. Schema 3 to 4 permits zero-projection artifacts and adds hierarchical member parents without rewriting conventional knowledge.
 
 Reads fail closed when canonical hashes, counts, IDs, membership, lineage, source relationships, vector bytes, or asset metadata disagree. Blob SHA-256 hashes and byte lengths are checked, and stored asset table fields must match the canonical source manifest. Missing IDs raise `KeyError`; stale or corrupt linked state raises `RuntimeError` with context.
 

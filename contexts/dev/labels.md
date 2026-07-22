@@ -4,10 +4,8 @@
 
 - **Purpose**: Select consistent labels for QuantMind issues and pull requests.
 - **Read when**: Creating, updating, triaging, or reviewing an issue or PR.
-- **Label count**: Use exactly one `type:` label, normally one `area:` label
-  (at most two), and optional `impact:` labels.
-- **Selection rule**: Label the work's actual purpose and main area, not every
-  file it touches.
+- **Label count**: Use exactly one `type:` label, normally one `area:` label (at most two), and optional `impact:` labels.
+- **Selection rule**: Label the work's actual purpose and main area, not every file it touches.
 
 ## Contents
 
@@ -26,18 +24,15 @@ Labels describe three separate parts of the work:
 - `area:` answers which part of the repository owns the work.
 - `impact:` identifies breaking changes or live-network risk.
 
-Choose labels from the work's purpose and agreed scope, not only from the files
-it happens to touch.
+Choose labels from the work's purpose and agreed scope, not only from the files it happens to touch.
 
 ## How Many Labels to Use
 
 Every issue and pull request must have **exactly one** `type:` label.
 
-Normally choose **one** `area:` label. Use two only when the work genuinely
-belongs to two main areas; never use more than two.
+Normally choose **one** `area:` label. Use two only when the work genuinely belongs to two main areas; never use more than two.
 
-Add `impact:` labels only when needed. Resolution and community labels do not
-count toward these limits.
+Add `impact:` labels only when needed. Resolution and community labels do not count toward these limits.
 
 ## Type Labels
 
@@ -50,8 +45,7 @@ count toward these limits.
 | `type: maintenance` | The work performs specific repository upkeep, such as dependency, configuration, release, or housekeeping changes. |
 | `type: design` | The primary deliverable is an architecture decision, RFC, or design that precedes implementation. |
 
-`type: maintenance` is not a catch-all label. If the intended outcome is
-unclear, clarify the work before labeling it.
+`type: maintenance` is not a catch-all label. If the intended outcome is unclear, clarify the work before labeling it.
 
 ## Area Labels
 
@@ -69,9 +63,7 @@ unclear, clarify the work before labeling it.
 | `area: examples` | Examples are the primary deliverable, rather than supporting files for another area. |
 | `area: packaging` | Installation, builds, dependencies, releases, and package metadata. |
 
-Area labels describe the main work, not every touched path. For example, a news
-design-document-only change is `type: docs` + `area: preprocess`, while a
-skill-only guidance change is `type: docs` + `area: harness`.
+Area labels describe the main work, not every touched path. For example, a news design-document-only change is `type: docs` + `area: preprocess`, while a skill-only guidance change is `type: docs` + `area: harness`.
 
 ## Impact Labels
 
@@ -82,23 +74,16 @@ skill-only guidance change is `type: docs` + `area: harness`.
 
 ## Resolution and Community Labels
 
-Keep these standard GitHub labels when applicable: `duplicate`,
-`good first issue`, `help wanted`, `invalid`, `question`, and `wontfix`.
-They describe resolution or collaboration state and are independent of the
-type, area, and impact dimensions.
+Keep these standard GitHub labels when applicable: `duplicate`, `good first issue`, `help wanted`, `invalid`, `question`, and `wontfix`. They describe resolution or collaboration state and are independent of the type, area, and impact dimensions.
 
 ## Issues and Pull Requests
 
-Body source formatting follows the [GitHub writing style](github-writing.md),
-including its no-hard-wrap rule.
+Body source formatting follows the [GitHub writing style](github-writing.md), including its no-hard-wrap rule.
 
 - Label an issue from the intended problem and accepted scope.
 - Label a pull request from its actual diff.
-- A pull request that closes an issue should normally align with the issue's
-  type and area. If implementation differs, label the pull request accurately
-  and update the issue when its agreed scope changed.
-- Re-evaluate labels when scope changes; do not preserve a stale label merely
-  because it was applied first.
+- A pull request that closes an issue should normally align with the issue's type and area. If implementation differs, label the pull request accurately and update the issue when its agreed scope changed.
+- Re-evaluate labels when scope changes; do not preserve a stale label merely because it was applied first.
 
 ## Examples
 
@@ -113,8 +98,7 @@ including its no-hard-wrap rule.
 
 ## Rename Existing Labels
 
-Rename labels instead of deleting and recreating them so GitHub preserves
-history and current assignments:
+Rename labels instead of deleting and recreating them so GitHub preserves history and current assignments:
 
 | Existing | Rename to |
 |---|---|
@@ -125,6 +109,4 @@ history and current assignments:
 | `example` | `area: examples` |
 | `harness` | `area: harness` |
 
-After renaming, create the missing labels and audit open issues and
-pull requests. Remove accidental multiple `type:` labels, choose one or two
-areas from accepted scope, and leave resolution/community labels intact.
+After renaming, create the missing labels and audit open issues and pull requests. Remove accidental multiple `type:` labels, choose one or two areas from accepted scope, and leave resolution/community labels intact.
