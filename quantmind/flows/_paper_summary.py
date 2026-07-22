@@ -24,7 +24,7 @@ from typing import Any, Literal, Protocol
 from agents import Agent, ModelSettings
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperFlowCfg, resolve_agent_model
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import PaperChunkSet, PaperSourceRevision
 
@@ -293,7 +293,7 @@ class _AgentsPaperSummaryProvider:
         researcher: Agent[Any] = Agent(
             name="paper_chunk_researcher",
             instructions=_RESEARCH_INSTRUCTIONS,
-            model=cfg.model,
+            model=resolve_agent_model(cfg.model),
             model_settings=model_settings,
             output_type=PaperResearchDraft,
         )
@@ -317,7 +317,7 @@ class _AgentsPaperSummaryProvider:
         reducer: Agent[Any] = Agent(
             name="paper_summary_reducer",
             instructions=_summary_instructions(cfg),
-            model=cfg.model,
+            model=resolve_agent_model(cfg.model),
             model_settings=model_settings,
             output_type=PaperSummaryDraft,
         )
