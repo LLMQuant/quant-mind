@@ -2,11 +2,27 @@
 
 import asyncio
 import unittest
+from dataclasses import dataclass
 from typing import Any
 
 from quantmind.configs import PaperFlowCfg
 from quantmind.configs.paper import RawText
-from quantmind.flows.batch import BatchResult, batch_run
+from quantmind.flows._usage import PriceRate, record_usage
+from quantmind.flows.batch import (
+    BatchResult,
+    BudgetExceededError,
+    batch_run,
+)
+
+
+@dataclass
+class _FakeUsage:
+    """Duck-types the SDK ``Usage`` object for tests."""
+
+    requests: int = 1
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
 
 class BatchResultPropertiesTests(unittest.TestCase):
@@ -158,3 +174,85 @@ class BatchRunTests(unittest.IsolatedAsyncioTestCase):
 
         await batch_run(flow, [RawText(text="x")], concurrency=1, marker="here")
         self.assertEqual(seen, ["here"])
+
+
+class BatchUsageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_usage_aggregated_across_inputs(self) -> None:
+        async def flow(input: RawText, *, cfg: Any = None) -> str:
+            record_usage(
+                _FakeUsage(input_tokens=10, output_tokens=4, total_tokens=14)
+            )
+            return f"ok:{input.text}"
+
+        inputs = [RawText(text=str(i)) for i in range(3)]
+        result = await batch_run(flow, inputs, concurrency=2)
+        self.assertEqual(
+            result.tokens_total,
+            {
+                "requests": 3,
+                "input_tokens": 30,
+                "output_tokens": 12,
+                "total_tokens": 42,
+            },
+        )
+        self.assertEqual(result.cost_estimate_usd, 0.0)
+
+    async def test_prices_populate_cost_estimate(self) -> None:
+        async def flow(input: RawText, *, cfg: Any = None) -> str:
+            record_usage(_FakeUsage(input_tokens=1_000_000, output_tokens=0))
+            return "ok"
+
+        cfg = PaperFlowCfg(model="gpt-test")
+        prices = {
+            "gpt-test": PriceRate(input_usd_per_1m=2.0, output_usd_per_1m=8.0)
+        }
+        result = await batch_run(
+            flow, [RawText(text="x")], cfg=cfg, concurrency=1, prices=prices
+        )
+        # 1M input tokens @ $2/1M = $2.00.
+        self.assertAlmostEqual(result.cost_estimate_usd, 2.0)
+
+    async def test_token_budget_trips_and_skips_later_inputs(self) -> None:
+        async def flow(input: RawText, *, cfg: Any = None) -> str:
+            record_usage(_FakeUsage(input_tokens=100))
+            return f"ok:{input.text}"
+
+        cfg = PaperFlowCfg(model="gpt-test", max_total_input_tokens=150)
+        inputs = [RawText(text=str(i)) for i in range(4)]
+        # concurrency=1 makes the trip point deterministic: after input 1 the
+        # running total (200) exceeds 150, so inputs 2 and 3 are skipped.
+        result = await batch_run(flow, inputs, cfg=cfg, concurrency=1)
+        self.assertEqual(result.success_count, 2)
+        self.assertEqual([i for i, _ in result.errors], [2, 3])
+        self.assertTrue(
+            all(isinstance(e, BudgetExceededError) for _, e in result.errors)
+        )
+
+    async def test_cost_budget_trips_with_prices(self) -> None:
+        async def flow(input: RawText, *, cfg: Any = None) -> str:
+            record_usage(_FakeUsage(input_tokens=1_000_000))
+            return "ok"
+
+        cfg = PaperFlowCfg(model="gpt-test", max_total_cost_usd=1.5)
+        prices = {
+            "gpt-test": PriceRate(input_usd_per_1m=1.0, output_usd_per_1m=1.0)
+        }
+        inputs = [RawText(text=str(i)) for i in range(4)]
+        result = await batch_run(
+            flow, inputs, cfg=cfg, concurrency=1, prices=prices
+        )
+        # $1/input; after input 1 cumulative $2.00 > $1.50 → skip 2 and 3.
+        self.assertEqual(result.success_count, 2)
+        self.assertEqual([i for i, _ in result.errors], [2, 3])
+
+    async def test_budget_raise_propagates(self) -> None:
+        async def flow(input: RawText, *, cfg: Any = None) -> str:
+            record_usage(_FakeUsage(input_tokens=100))
+            return "ok"
+
+        cfg = PaperFlowCfg(model="gpt-test", max_total_input_tokens=50)
+        inputs = [RawText(text=str(i)) for i in range(3)]
+        with self.assertRaises(BudgetExceededError):
+            await batch_run(
+                flow, inputs, cfg=cfg, concurrency=1, on_error="raise"
+            )
