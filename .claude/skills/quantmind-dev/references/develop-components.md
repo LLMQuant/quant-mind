@@ -176,14 +176,13 @@ When adding a source to an existing operation:
 
 ## Tests
 
-- Location mirrors the module: `tests/<module>/test_<topic>.py`.
-- Subclass `unittest.TestCase` (run via pytest).
-- Mock external services (network, LLM APIs, filesystem where practical);
-  tests must pass offline.
-- Cover the success path **and** at least one failure path per public
-  function.
-- Coverage floor is enforced by `pytest --cov` in `scripts/verify.sh`; new
-  code should not lower branch coverage.
+Follow the canonical [test standard](tests.md) before writing tests: where they
+live, the offline-and-deterministic default suite, the change→test obligations,
+and how live behavior goes in a `scripts/verify_<component>_e2e.py` slice rather
+than a unit test. In short: mirror the module at `tests/<module>/test_<topic>.py`,
+mock across boundaries so the suite passes offline, cover a success path **and**
+a failure path per public function, and keep branch coverage from dropping (the
+`pytest --cov` floor in `scripts/verify.sh`).
 
 ## Examples
 

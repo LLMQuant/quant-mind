@@ -33,6 +33,7 @@ implementation must preserve.
 | Mind | [Build and retrieve from a page-preserving structure tree](mind/retrieval.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 | Operations | [Orchestration and construction altitude](operations/orchestration.md) |
+| Utils | [Cross-provider structured output](utils/structured_output.md) |
 
 ## Organization Rules
 
@@ -51,3 +52,6 @@ implementation must preserve.
 - Use code and tests to check current behavior. Keep `docs/` focused on
   user-facing guides, examples, and catalogs; those pages may link here but
   must not maintain a second copy of a design.
+- Follow the [contexts authoring standard](../../.agents/skills/quantmind-dev/references/write-contexts.md)
+  when adding or editing a page — required page structure, index registration,
+  and Mermaid diagram guidance live there.

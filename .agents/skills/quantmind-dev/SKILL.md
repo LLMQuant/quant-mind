@@ -28,6 +28,7 @@ Development workflow for contributing to the QuantMind codebase.
 - Opening or updating a pull request → `references/pull-request.md`
 - Implementing or refactoring anything under `quantmind/` →
   `references/develop-components.md` (read it **before** writing code)
+- Adding or editing a page under `contexts/` → `references/write-contexts.md`
 
 A feature task usually chains all three: develop → commit → pull request.
 

@@ -13,10 +13,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
+from openai import BadRequestError
+
 from quantmind.configs import RetrievalCfg
 from quantmind.knowledge import PaperStructureTree, StructureTree
 from quantmind.mind import AgenticRetriever, RetrievalError, RetrievalEvidence
-from quantmind.mind.retrieval import _node_text, _serialize_structure
+from quantmind.mind.retrieval import (
+    _node_text,
+    _RetrievalSelectionDraft,
+    _serialize_structure,
+)
 from tests.paper_helpers import build_paper_structure_tree
 
 _PARALLEL_PROJECTIONS = "parallel projections"
@@ -25,6 +32,13 @@ _PARALLEL_PROJECTIONS = "parallel projections"
 def _selection(*node_ids: object) -> SimpleNamespace:
     return SimpleNamespace(
         final_output={"node_ids": [str(value) for value in node_ids]}
+    )
+
+
+def _bad_request(message: str) -> BadRequestError:
+    request = httpx.Request("POST", "https://api.test/v1/chat/completions")
+    return BadRequestError(
+        message, response=httpx.Response(400, request=request), body=None
     )
 
 
@@ -106,6 +120,97 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(evidence[0].content, self.leaf.content)
+
+    async def test_strict_structured_output_is_the_default(self) -> None:
+        # A litellm route is no longer force-downgraded: strict json_schema
+        # (output_type) is tried first, with tools and a forced first tool call.
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(return_value=_selection(self.leaf.node_id))
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        run_mock.assert_awaited_once()
+        agent = run_mock.await_args.args[0]
+        self.assertIs(agent.output_type, _RetrievalSelectionDraft)
+        self.assertIsNone(agent.model_settings.extra_body)
+        self.assertEqual(agent.model_settings.tool_choice, "required")
+        self.assertEqual(
+            {tool.name for tool in agent.tools},
+            {"get_document_structure", "get_node_content"},
+        )
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
+    async def test_falls_back_to_json_object_when_json_schema_is_rejected(
+        self,
+    ) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            side_effect=[
+                _bad_request("This response_format type is unavailable now"),
+                SimpleNamespace(
+                    final_output=(
+                        "```json\n"
+                        f"{json.dumps({'node_ids': [str(self.leaf.node_id)]})}\n"
+                        "```"
+                    )
+                ),
+            ]
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            evidence = await AgenticRetriever(cfg).retrieve(
+                self.tree,
+                "Find the attention evidence.",
+            )
+
+        self.assertEqual(run_mock.await_count, 2)
+        strict_agent = run_mock.await_args_list[0].args[0]
+        self.assertIs(strict_agent.output_type, _RetrievalSelectionDraft)
+        self.assertIsNone(strict_agent.model_settings.extra_body)
+        json_agent = run_mock.await_args_list[1].args[0]
+        self.assertIsNone(json_agent.output_type)
+        self.assertEqual(
+            json_agent.model_settings.extra_body["response_format"],
+            {"type": "json_object"},
+        )
+        self.assertEqual(json_agent.model_settings.tool_choice, "required")
+        self.assertIn("final output format", json_agent.instructions)
+        self.assertIn(
+            "MUST call get_document_structure", json_agent.instructions
+        )
+        # Same tools as the strict path — no second, tool-less selector agent.
+        self.assertEqual(
+            {tool.name for tool in json_agent.tools},
+            {"get_document_structure", "get_node_content"},
+        )
+        self.assertEqual(evidence[0].title, self.leaf.title)
+
+    async def test_bad_request_unrelated_to_response_format_propagates(
+        self,
+    ) -> None:
+        cfg = RetrievalCfg(
+            model="litellm/openrouter/deepseek/deepseek-v4-flash"
+        )
+        run_mock = AsyncMock(
+            side_effect=_bad_request("insufficient_quota: over your quota")
+        )
+
+        with patch("quantmind.mind.retrieval.Runner.run", new=run_mock):
+            with self.assertRaises(BadRequestError):
+                await AgenticRetriever(cfg).retrieve(
+                    self.tree,
+                    "Find the attention evidence.",
+                )
+
+        run_mock.assert_awaited_once()  # no json-object fallback attempted
 
     async def test_extra_instruction_is_appended_to_agent_instructions(
         self,

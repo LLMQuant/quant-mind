@@ -31,6 +31,7 @@ on:
       - 'quantmind/configs/structure.py'
       - 'quantmind/flows/paper/**'
       - 'quantmind/preprocess/outline.py'
+      - 'quantmind/utils/structured_output.py'
       - 'pyproject.toml'
   schedule:
     - cron: "17 3 * * *"
@@ -96,6 +97,7 @@ jobs:
               - 'quantmind/library/**'
               - 'quantmind/preprocess/outline.py'
               - 'quantmind/preprocess/format/pdf.py'
+              - 'quantmind/utils/structured_output.py'
               - 'pyproject.toml'
 
   news:
@@ -176,9 +178,9 @@ jobs:
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.structure == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 18
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
       - name: Checkout
@@ -201,17 +203,17 @@ jobs:
       - name: Install project runtime dependencies
         run: uv pip install --python .venv/bin/python -e .
 
-      - name: Check OpenAI credential
-        id: openai
+      - name: Check OpenRouter credential
+        id: openrouter
         shell: bash
         run: |
-          if [[ -n "${OPENAI_API_KEY}" ]]; then
+          if [[ -n "${OPENROUTER_API_KEY}" ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping structure-retrieval E2E because OPENAI_API_KEY is not configured."
+            echo "::notice::Skipping structure-retrieval E2E because OPENROUTER_API_KEY is not configured."
           fi
 
       - name: Run live structure-retrieval E2E
-        if: steps.openai.outputs.available == 'true'
+        if: steps.openrouter.outputs.available == 'true'
         run: .venv/bin/python scripts/verify_structure_e2e.py

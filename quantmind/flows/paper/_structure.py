@@ -12,6 +12,11 @@ from quantmind.configs import PaperStructureCfg
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import PaperSourceRevision, PaperStructureTreeDraft
 from quantmind.preprocess import OutlineSignals
+from quantmind.utils.structured_output import (
+    json_object_instructions,
+    json_object_model_settings,
+    run_structured,
+)
 
 _STRUCTURE_INSTRUCTIONS = """\
 Act as a paper structure specialist. Return one hierarchy draft and a quality
@@ -119,26 +124,47 @@ class _AgentsPaperStructureProvider:
         *,
         cfg: PaperStructureCfg,
     ) -> PaperStructureTreeDraft:
-        agent: Agent[Any] = Agent(
-            name="paper_structure_builder",
-            instructions=_structure_instructions(cfg),
-            model=cfg.model,
-            model_settings=_structure_model_settings(cfg),
-            output_type=PaperStructureTreeDraft,
+        payload = _structure_payload(signals, source, cfg)
+
+        def build_agent(json_object: bool) -> Agent[Any]:
+            instructions = _structure_instructions(cfg)
+            model_settings = _structure_model_settings(cfg)
+            kwargs: dict[str, Any] = {
+                "name": "paper_structure_builder",
+                "model": cfg.model,
+            }
+            if json_object:
+                kwargs["instructions"] = json_object_instructions(
+                    instructions, PaperStructureTreeDraft
+                )
+                kwargs["model_settings"] = json_object_model_settings(
+                    model_settings
+                )
+            else:
+                kwargs["instructions"] = instructions
+                kwargs["model_settings"] = model_settings
+                kwargs["output_type"] = PaperStructureTreeDraft
+            return Agent(**kwargs)
+
+        async def run_agent(agent: Agent[Any]) -> Any:
+            try:
+                return await asyncio.wait_for(
+                    run_with_observability(
+                        agent,
+                        payload,
+                        cfg=cfg,
+                        memory=None,
+                        extra_run_hooks=[],
+                    ),
+                    timeout=cfg.timeout_seconds,
+                )
+            except asyncio.TimeoutError as exc:
+                raise PaperStructureError(
+                    "paper structure build exceeded timeout_seconds"
+                ) from exc
+
+        return await run_structured(
+            PaperStructureTreeDraft,
+            build_agent=build_agent,
+            run=run_agent,
         )
-        try:
-            output = await asyncio.wait_for(
-                run_with_observability(
-                    agent,
-                    _structure_payload(signals, source, cfg),
-                    cfg=cfg,
-                    memory=None,
-                    extra_run_hooks=[],
-                ),
-                timeout=cfg.timeout_seconds,
-            )
-        except asyncio.TimeoutError as exc:
-            raise PaperStructureError(
-                "paper structure build exceeded timeout_seconds"
-            ) from exc
-        return PaperStructureTreeDraft.model_validate(output)

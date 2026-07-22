@@ -20,7 +20,8 @@ of queries runs under one fixed setting (reproducibility).
 
 import asyncio
 import json
-from typing import Protocol, cast, runtime_checkable
+from dataclasses import replace
+from typing import Any, Protocol, cast, runtime_checkable
 from uuid import UUID
 
 from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
@@ -33,6 +34,11 @@ from quantmind.knowledge import (
     Citation,
     StructureTree,
 )
+from quantmind.utils.structured_output import (
+    json_object_instructions,
+    json_object_model_settings,
+    run_structured,
+)
 
 _AGENTIC_INSTRUCTIONS = """\
 Retrieve evidence relevant to the question by inspecting the document structure
@@ -41,6 +47,11 @@ source text; opening an internal node returns the concatenation of its leaves.
 Return the UUIDs of the smallest sufficient evidence nodes, not an answer. Never
 invent an ID. Seed nodes are hints only; you may inspect other branches when the
 structure supports it.
+
+You MUST call get_document_structure before selecting evidence. Call
+get_node_content for every node you select, then return only the selected node
+UUIDs in the final JSON object. Never return a request envelope, model metadata,
+or a natural-language answer as the final output.
 """
 
 
@@ -316,18 +327,10 @@ async def _agentic_select(
             values.append(_node_evidence(tree, node_id).model_dump(mode="json"))
         return json.dumps(values, ensure_ascii=False)
 
-    instructions = _AGENTIC_INSTRUCTIONS
+    base_instructions = _AGENTIC_INSTRUCTIONS
     if cfg.extra_instruction:
-        instructions = f"{instructions}\n{cfg.extra_instruction}"
+        base_instructions = f"{base_instructions}\n{cfg.extra_instruction}"
 
-    agent = Agent(
-        name="structure_agentic_retriever",
-        instructions=instructions,
-        model=cfg.model,
-        model_settings=cfg.model_settings or ModelSettings(),
-        tools=[get_document_structure, get_node_content],
-        output_type=_RetrievalSelectionDraft,
-    )
     input_value = json.dumps(
         {
             "question": question,
@@ -335,26 +338,58 @@ async def _agentic_select(
         },
         ensure_ascii=False,
     )
-    try:
-        result = await asyncio.wait_for(
-            Runner.run(
-                agent,
-                input_value,
-                run_config=_run_config(cfg),
-                max_turns=cfg.max_turns,
-            ),
-            timeout=cfg.timeout_seconds,
+
+    def build_agent(json_object: bool) -> Agent[Any]:
+        instructions = base_instructions
+        model_settings = cfg.model_settings or ModelSettings()
+        kwargs: dict[str, Any] = {
+            "name": "structure_agentic_retriever",
+            "model": cfg.model,
+            "tools": [get_document_structure, get_node_content],
+        }
+        if json_object:
+            instructions = json_object_instructions(
+                instructions, _RetrievalSelectionDraft
+            )
+            model_settings = json_object_model_settings(model_settings)
+        else:
+            kwargs["output_type"] = _RetrievalSelectionDraft
+        kwargs["instructions"] = instructions
+        # The first turn must inspect the actual tree; the SDK's
+        # reset_tool_choice (default True) relaxes this to auto after a tool
+        # call so the model can still return its final selection.
+        kwargs["model_settings"] = replace(
+            model_settings, tool_choice="required"
         )
-    except asyncio.TimeoutError as exc:
-        raise RetrievalError(
-            "agentic retrieval exceeded timeout_seconds"
-        ) from exc
-    except MaxTurnsExceeded as exc:
-        raise RetrievalError(
-            "agentic retrieval exceeded max_turns before returning a selection; "
-            "raise RetrievalCfg.max_turns or use a stronger model"
-        ) from exc
-    return _RetrievalSelectionDraft.model_validate(result.final_output)
+        return Agent(**kwargs)
+
+    async def run_agent(agent: Agent[Any]) -> Any:
+        try:
+            result = await asyncio.wait_for(
+                Runner.run(
+                    agent,
+                    input_value,
+                    run_config=_run_config(cfg),
+                    max_turns=cfg.max_turns,
+                ),
+                timeout=cfg.timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RetrievalError(
+                "agentic retrieval exceeded timeout_seconds"
+            ) from exc
+        except MaxTurnsExceeded as exc:
+            raise RetrievalError(
+                "agentic retrieval exceeded max_turns before returning a "
+                "selection; raise RetrievalCfg.max_turns or use a stronger model"
+            ) from exc
+        return result.final_output
+
+    return await run_structured(
+        _RetrievalSelectionDraft,
+        build_agent=build_agent,
+        run=run_agent,
+    )
 
 
 def _validate_selection(
