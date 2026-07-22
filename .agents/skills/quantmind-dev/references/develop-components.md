@@ -133,8 +133,11 @@ apply throughout.
 
 ### `quantmind/utils/`
 
-- Logger only. New general-purpose helpers need maintainer sign-off via an
-  issue first; the default answer is "put it in the module that uses it".
+- The logger, plus small dependency-free helpers that wrap an Agents SDK
+  seam and must be shared across layers without one importing another
+  (`structured_output`, `usage`). New helpers still need maintainer
+  sign-off via an issue first; the default answer is "put it in the module
+  that uses it".
 
 ## Public Operation Checklist
 
