@@ -2,23 +2,17 @@
 
 ## Quick Summary
 
-- **Purpose**: Find accepted designs for QuantMind packages and public
-  operations.
-- **Read when**: A task changes architecture, package responsibilities, public
-  behavior, or a required validation rule.
-- **Load next**: Open only the domain design that matches the task, then read
-  that page in full before implementation.
-- **Authority**: These pages explain agreed behavior. Each page lists any part
-  that is not implemented yet.
+- **Purpose**: Find accepted designs for QuantMind packages and public operations.
+- **Read when**: A task changes architecture, package responsibilities, public behavior, or a required validation rule.
+- **Load next**: Open only the domain design that matches the task, then read that page in full before implementation.
+- **Authority**: These pages explain agreed behavior. Each page lists any part that is not implemented yet.
 
 ## Contents
 
 - [Design Index](#design-index)
 - [Organization Rules](#organization-rules)
 
-This directory records QuantMind engineering decisions. Use it to understand
-which package owns each step, how packages work together, and what behavior an
-implementation must preserve.
+This directory records QuantMind engineering decisions. Use it to understand which package owns each step, how packages work together, and what behavior an implementation must preserve.
 
 ## Design Index
 
@@ -34,24 +28,14 @@ implementation must preserve.
 | Operations | [Public operation naming](operations/naming.md) |
 | Operations | [Orchestration and construction altitude](operations/orchestration.md) |
 | Utils | [Cross-provider structured output](utils/structured_output.md) |
+| Utils | [Collect per-run token and timing usage from SDK traces](utils/usage.md) |
 
 ## Organization Rules
 
-- Organize designs directly by package or feature, such as `flow/`, `knowledge/`,
-  `library/`, `operations/`, or `preprocess/`. Do not add an intermediate
-  `components/` directory.
-- Keep this page as the single global design index. Domain directories do not
-  need their own index.
-- Add a design page only for real design content. Do not create empty
-  directories, placeholders, or speculative component pages.
-- State whether a document describes current behavior, planned behavior, or
-  both. List current gaps so readers can distinguish a plan from working code.
-- Write headings and summaries as an action plus a concrete object. Avoid
-  unexplained project shorthand and define any necessary domain term when it
-  first appears.
-- Use code and tests to check current behavior. Keep `docs/` focused on
-  user-facing guides, examples, and catalogs; those pages may link here but
-  must not maintain a second copy of a design.
-- Follow the [contexts authoring standard](../../.agents/skills/quantmind-dev/references/write-contexts.md)
-  when adding or editing a page — required page structure, index registration,
-  and Mermaid diagram guidance live there.
+- Organize designs directly by package or feature, such as `flow/`, `knowledge/`, `library/`, `operations/`, or `preprocess/`. Do not add an intermediate `components/` directory.
+- Keep this page as the single global design index. Domain directories do not need their own index.
+- Add a design page only for real design content. Do not create empty directories, placeholders, or speculative component pages.
+- State whether a document describes current behavior, planned behavior, or both. List current gaps so readers can distinguish a plan from working code.
+- Write headings and summaries as an action plus a concrete object. Avoid unexplained project shorthand and define any necessary domain term when it first appears.
+- Use code and tests to check current behavior. Keep `docs/` focused on user-facing guides, examples, and catalogs; those pages may link here but must not maintain a second copy of a design.
+- Follow the [contexts authoring standard](../../.agents/skills/quantmind-dev/references/write-contexts.md) when adding or editing a page — required page structure, index registration, and Mermaid diagram guidance live there.
