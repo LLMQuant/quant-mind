@@ -17,10 +17,10 @@ English, [Conventional Commits](https://www.conventionalcommits.org/):
   repo-wide changes (`feat: flows + magic apex layer`).
 - **summary**: imperative, lower-case start, no trailing period.
 - **body** (optional): explain what changed and why. Follow the same
-  no-hard-wrap prose rule as GitHub bodies (see
-  [GitHub writing style](../../../../contexts/dev/github-writing.md)) — keep
-  each paragraph or list item on one physical line, with no fixed-width
-  wrapping — so a squash-merge keeps a clean description on GitHub.
+  no-hard-wrap prose rule as GitHub bodies (see the GitHub writing style in
+  `contexts/dev/github-writing.md`, a repo-root-relative path) — keep each
+  paragraph or list item on one physical line, with no fixed-width wrapping —
+  so a squash-merge keeps a clean description on GitHub.
 
 Examples from history:
 
