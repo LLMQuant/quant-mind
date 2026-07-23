@@ -77,10 +77,11 @@ Each rule is enforced at the layer that fits it, and hooks are kept to mechanica
 | Contexts page structure (Quick Summary / Contents / anchors / index links) | `tests/test_contexts.py` inside `verify.sh` | CI + local |
 | English Conventional Commit subject | `scripts/hooks/commit_msg_check.py` | `commit-msg` git hook (tool-agnostic: humans, Claude, Codex) |
 | No `--no-verify` bypass of the hooks above | `scripts/hooks/pre_tool_use_no_bypass.py` | Agent PreToolUse hook |
+| English Conventional Commit PR title | `.github/workflows/pr-title.yml` (reuses `commit_msg_check.py`) | CI check |
 
 The anti-bypass hook is the one guarantee that cannot live in a git hook: `--no-verify` is by definition the flag that turns git hooks off, and CI only notices after the fact. A PreToolUse `deny` stops an agent from skipping the checks at the source. It is a mechanical check only: the command is tokenized with `shlex` and split into simple commands, so it denies only when `--no-verify` is a real argument token of a real `git` invocation — a command that merely mentions the flag inside a quoted string (an `echo`, a `grep`, a commit message) keeps it inside one token and passes. The residual gap is shell indirection (`$VAR` / `eval`), which a mechanical guard does not resolve. Commit-*message* format, by contrast, is a git hook rather than an agent hook, so it also catches a human committing from a terminal.
 
-Planned next: enforce the commit convention for external contributors at the CI floor (a PR-title lint), since local git hooks only fire for contributors who ran `pre-commit install`.
+The PR-title lint (`.github/workflows/pr-title.yml`) is the server-side floor for the commit convention. Local git hooks only fire for contributors who ran `pre-commit install`, so the PR title — which becomes the squash-merge commit subject — is linted in CI with the same `commit_msg_check.py` rule (single source). Making that workflow a *required* status check is a one-time repository-settings toggle, separate from committing the workflow here.
 
 ## References
 
