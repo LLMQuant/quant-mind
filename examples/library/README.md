@@ -2,7 +2,7 @@
 
 This example searches an auditable AI-infrastructure knowledge bundle containing
 `News`, `Earnings`, and a pre-V1 `LegacyPaper` tree. New paper ingestion uses
-`PaperFlowResult` and `LocalKnowledgeLibrary.put_paper()`; the legacy type is
+`PaperSemanticResult` and `LocalKnowledgeLibrary.put_paper()`; the legacy type is
 retained only so this existing bundle remains readable.
 
 ## Run

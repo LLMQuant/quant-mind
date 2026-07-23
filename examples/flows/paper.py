@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import ArxivIdentifier
 from quantmind.flows import PaperFlow
 from quantmind.knowledge import (
@@ -63,8 +63,8 @@ async def main() -> None:
     workspace = Path(".quantmind")
     workspace.mkdir(exist_ok=True)
     flow = PaperFlow(
-        PaperFlowCfg(
-            model="gpt-4o-mini",
+        PaperSemanticCfg(
+            model="gpt-5.6-luna",
             output_dir=str(workspace / "attention-assets"),
         )
     )

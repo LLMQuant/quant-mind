@@ -39,7 +39,7 @@ handoff all come from `openai-agents`.
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
 | `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
 | `quantmind/rag/` | Opinionated LlamaIndex document chunking and retrieval — depends only on `preprocess` |
-| `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
+| `quantmind/flows/` | Apex layer: public library operations (`PaperFlow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
 | `quantmind/mind/` | Pure-agentic reasoning layer — memory + agentic (reasoning-based) retrieval where an LLM decides; mechanical retrieval (similarity / BM25) lives in `rag` / `library` |
 | `quantmind/utils/` | Logger only — keep it that way |

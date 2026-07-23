@@ -9,7 +9,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import ArxivIdentifier
 from quantmind.flows import PaperFlow
 from quantmind.knowledge import (
@@ -53,8 +53,8 @@ async def _run_vertical_slice() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="quantmind-paper-v1-") as directory:
         root = Path(directory)
         flow = PaperFlow(
-            PaperFlowCfg(
-                model="gpt-4o-mini",
+            PaperSemanticCfg(
+                model="gpt-5.6-luna",
                 output_dir=str(root / "assets"),
                 timeout_seconds=240,
                 summary_research_group_size=8,

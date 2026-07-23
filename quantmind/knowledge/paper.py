@@ -1199,7 +1199,7 @@ class PaperGlobalSummary(BaseModel):
         )
 
 
-class PaperFlowResult(BaseModel):
+class PaperSemanticResult(BaseModel):
     """Validated V1 result containing source, chunks, and cited summary."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -1209,7 +1209,7 @@ class PaperFlowResult(BaseModel):
     global_summary: PaperGlobalSummary
 
     @model_validator(mode="after")
-    def _validate_cross_artifact_links(self) -> "PaperFlowResult":
+    def _validate_cross_artifact_links(self) -> "PaperSemanticResult":
         source_id = self.source_revision.id
         if (
             self.chunk_set.source_revision_id != source_id

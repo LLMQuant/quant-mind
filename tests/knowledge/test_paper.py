@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from quantmind.knowledge import (
     PaperCitation,
-    PaperFlowResult,
+    PaperSemanticResult,
     PaperSourceRevision,
     PaperSourceSpan,
 )
@@ -115,7 +115,7 @@ class PaperArtifactTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValidationError, "unknown chunk"):
-            PaperFlowResult(
+            PaperSemanticResult(
                 source_revision=result.source_revision,
                 chunk_set=result.chunk_set,
                 global_summary=summary,
@@ -161,7 +161,7 @@ class PaperArtifactTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValidationError, "exceeds its source page"):
-            PaperFlowResult(
+            PaperSemanticResult(
                 source_revision=result.source_revision,
                 chunk_set=invalid_chunk_set,
                 global_summary=result.global_summary,

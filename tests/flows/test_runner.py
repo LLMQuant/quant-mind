@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents import RunHooks
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.flows._runner import (
     _archive_run_artifacts,
     _collect_hooks,
@@ -113,7 +113,7 @@ class CollectHooksTests(unittest.TestCase):
 
 class ArchiveStubTests(unittest.TestCase):
     def test_archive_is_no_op(self) -> None:
-        cfg = PaperFlowCfg()
+        cfg = PaperSemanticCfg()
         result = MagicMock()
         # Must not raise, must return None, must not touch result.
         self.assertIsNone(_archive_run_artifacts(cfg, None, result))
@@ -122,7 +122,7 @@ class ArchiveStubTests(unittest.TestCase):
 
 class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
     async def test_run_config_built_from_cfg(self) -> None:
-        cfg = PaperFlowCfg(
+        cfg = PaperSemanticCfg(
             model="gpt-test",
             max_turns=7,
             workflow_name="custom-name",
@@ -160,7 +160,7 @@ class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(call.kwargs["hooks"])
 
     async def test_workflow_name_falls_back_to_agent_name(self) -> None:
-        cfg = PaperFlowCfg()  # workflow_name = None
+        cfg = PaperSemanticCfg()  # workflow_name = None
         agent = MagicMock()
         agent.name = "paper_extractor"
         fake_result = MagicMock()
@@ -178,7 +178,7 @@ class RunWithObservabilityTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_extra_hooks_forwarded(self) -> None:
-        cfg = PaperFlowCfg()
+        cfg = PaperSemanticCfg()
         agent = MagicMock()
         agent.name = "x"
         fake_result = MagicMock()

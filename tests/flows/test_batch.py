@@ -4,7 +4,7 @@ import asyncio
 import unittest
 from typing import Any
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import RawText
 from quantmind.flows.batch import BatchResult, batch_run
 
@@ -143,7 +143,7 @@ class BatchRunTests(unittest.IsolatedAsyncioTestCase):
             seen_cfg.append(cfg)
             return "ok"
 
-        cfg = PaperFlowCfg(model="sentinel-model")
+        cfg = PaperSemanticCfg(model="sentinel-model")
         await batch_run(flow, [RawText(text="x")], cfg=cfg, concurrency=1)
         self.assertIs(seen_cfg[0], cfg)
 

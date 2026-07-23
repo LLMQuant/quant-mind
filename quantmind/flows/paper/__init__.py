@@ -14,18 +14,30 @@ one config-bound flow produces every paper shape:
   (fetch + parse, deterministic outline signals, one draft-structuring agent,
   then the knowledge-layer ``from_draft`` constructor that mints identity and
   populates each leaf node's page-cited text).
-- ``PaperFlowCfg`` selects the source-first chunk/summary shape
-  (``PaperFlowResult``): fetch + parse, page-aware chunking, then a bounded
+- ``PaperSemanticCfg`` selects the source-first chunk/summary shape
+  (``PaperSemanticResult``): fetch + parse, page-aware chunking, then a bounded
   map-reduce summary whose citations the knowledge layer resolves.
 - Any other cfg type raises ``NotImplementedError``.
 
 The bound cfg *type* determines ``build``'s result type: constructing with a
-``PaperStructureCfg`` yields a ``PaperStructureTree``; a ``PaperFlowCfg`` yields
-a ``PaperFlowResult`` (typed via constructor overloads over a generic result).
+``PaperStructureCfg`` yields a ``PaperStructureTree``; a ``PaperSemanticCfg``
+yields a ``PaperSemanticResult`` (typed via constructor overloads over a generic
+result).
+
+Real run — arXiv ``1706.03762v7``, model ``gpt-5.6-luna`` (2026-07-24):
+
+- structure: 17 nodes (13 leaves), root ``"Attention Is All You Need"``.
+- semantic: 15 pages, 33 chunks. The cited-summary step asserts every research
+  quote verbatim against its chunk; the sampled models paraphrased, so that step
+  raised ``ValueError`` and produced no summary line on this run.
 
 ``build`` fetches and parses **per call**: the flow binds no source, no library,
 persists nothing, and retrieves nothing. Persistence (``library``) and retrieval
-(``mind``) are downstream concerns a caller wires itself.
+(``mind``) are downstream concerns a caller wires itself. Embeddings are not
+computed here: a ``PaperSemanticResult`` carries only source, chunk, and summary
+text; its vector projections are minted downstream when the result is persisted,
+using the ``embedding_model`` bound at ``LocalKnowledgeLibrary.open(...)`` (the
+examples use ``text-embedding-3-small``).
 
 The module keeps only what genuinely needs both the preprocess/rag value objects
 and IO: fetching bytes, parsing the PDF, reading page-asset bytes off disk, and
@@ -33,22 +45,16 @@ mapping those ephemeral, path-based artifacts into knowledge-native inputs. All
 identity (IDs, content and producer hashes, citation resolution) lives on the
 knowledge models' ``from_*`` constructors, so this module imports no private ID
 helpers and computes no paper ID itself.
-
-``paper_flow`` remains as a **deprecated** thin wrapper for the chunk/summary
-shape: it emits a ``DeprecationWarning`` and delegates to
-``PaperFlow(PaperFlowCfg(...)).build(input)``. It is grandfathered by the
-operation-naming contract, not removed.
 """
 
 import mimetypes
-import warnings
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 from typing import Generic, Literal, TypeVar, cast, overload
 
-from quantmind.configs import BaseFlowCfg, PaperFlowCfg, PaperStructureCfg
+from quantmind.configs import BaseFlowCfg, PaperSemanticCfg, PaperStructureCfg
 from quantmind.configs.paper import (
     ArxivIdentifier,
     DoiIdentifier,
@@ -76,10 +82,10 @@ from quantmind.knowledge import (
     PaperChunkInput,
     PaperChunkSet,
     PaperCitationDraft,
-    PaperFlowResult,
     PaperGlobalSummary,
     PaperPageInput,
     PaperParsedBlock,
+    PaperSemanticResult,
     PaperSourceFacts,
     PaperSourceRevision,
     PaperStructureProducer,
@@ -111,7 +117,6 @@ __all__ = [
     "PaperFlow",
     "PaperStructureError",
     "UnsupportedContentTypeError",
-    "paper_flow",
 ]
 
 
@@ -134,7 +139,7 @@ class PaperFlow(Generic[_ResultT]):
     type of ``build``:
 
     - ``PaperStructureCfg`` builds a self-contained ``PaperStructureTree``;
-    - ``PaperFlowCfg`` builds a source-first ``PaperFlowResult`` (chunk set +
+    - ``PaperSemanticCfg`` builds a source-first ``PaperSemanticResult`` (chunk set +
       cited global summary).
 
     The flow binds no source, no library, and no per-call state; ``build``
@@ -158,8 +163,8 @@ class PaperFlow(Generic[_ResultT]):
 
     @overload
     def __init__(
-        self: "PaperFlow[PaperFlowResult]",
-        cfg: PaperFlowCfg,
+        self: "PaperFlow[PaperSemanticResult]",
+        cfg: PaperSemanticCfg,
         *,
         _structure_provider: _PaperStructureProvider | None = None,
         _summary_provider: _PaperSummaryProvider | None = None,
@@ -167,7 +172,7 @@ class PaperFlow(Generic[_ResultT]):
 
     @overload
     def __init__(
-        self: "PaperFlow[PaperStructureTree | PaperFlowResult]",
+        self: "PaperFlow[PaperStructureTree | PaperSemanticResult]",
         cfg: BaseFlowCfg,
         *,
         _structure_provider: _PaperStructureProvider | None = None,
@@ -186,8 +191,8 @@ class PaperFlow(Generic[_ResultT]):
         Args:
             cfg: The build config. Its **type** selects both the knowledge shape
                 ``build`` produces and ``build``'s static result type
-                (``PaperStructureCfg`` → ``PaperStructureTree``, ``PaperFlowCfg``
-                → ``PaperFlowResult``).
+                (``PaperStructureCfg`` → ``PaperStructureTree``, ``PaperSemanticCfg``
+                → ``PaperSemanticResult``).
             _structure_provider: Optional test seam for the structure draft.
             _summary_provider: Optional test seam for the summary draft.
         """
@@ -205,9 +210,9 @@ class PaperFlow(Generic[_ResultT]):
           knowledge-layer constructor that mints identity, resolves page
           citations, and populates each leaf node's ``content``), returning a
           self-contained ``PaperStructureTree``.
-        - ``PaperFlowCfg`` runs the source-first chunk/summary pipeline (fetch +
+        - ``PaperSemanticCfg`` runs the source-first chunk/summary pipeline (fetch +
           parse, page-aware chunking, bounded map-reduce summary), returning a
-          ``PaperFlowResult``.
+          ``PaperSemanticResult``.
 
         Fetch and parse run **per call**; the flow keeps no shared source state.
 
@@ -217,11 +222,11 @@ class PaperFlow(Generic[_ResultT]):
         Returns:
             The knowledge artifact for the bound cfg type: a
             ``PaperStructureTree`` (``PaperStructureCfg``) or a
-            ``PaperFlowResult`` (``PaperFlowCfg``).
+            ``PaperSemanticResult`` (``PaperSemanticCfg``).
 
         Raises:
             NotImplementedError: If the bound cfg is neither a
-                ``PaperStructureCfg`` nor a ``PaperFlowCfg``.
+                ``PaperStructureCfg`` nor a ``PaperSemanticCfg``.
             UnsupportedContentTypeError: If the resolved content is not a PDF.
             PaperStructureError: If a structure model call exceeds its timeout.
             PaperCitationValidationError: If summary citations are invalid or do
@@ -230,12 +235,12 @@ class PaperFlow(Generic[_ResultT]):
         cfg = self._cfg
         if isinstance(cfg, PaperStructureCfg):
             return cast(_ResultT, await self._build_structure(input, cfg))
-        if isinstance(cfg, PaperFlowCfg):
+        if isinstance(cfg, PaperSemanticCfg):
             return cast(_ResultT, await self._build_semantic(input, cfg))
         raise NotImplementedError(
             "PaperFlow.build does not support cfg type "
             f"{type(cfg).__name__!r}; only PaperStructureCfg (structure-tree "
-            "shape) and PaperFlowCfg (chunk/summary shape) are wired."
+            "shape) and PaperSemanticCfg (chunk/summary shape) are wired."
         )
 
     async def _build_structure(
@@ -266,8 +271,8 @@ class PaperFlow(Generic[_ResultT]):
     async def _build_semantic(
         self,
         input: PaperInput,
-        cfg: PaperFlowCfg,
-    ) -> PaperFlowResult:
+        cfg: PaperSemanticCfg,
+    ) -> PaperSemanticResult:
         """Fetch, parse, chunk, and summarize one input into a paper result.
 
         Builds a page-aware chunk set and one cited global summary. IDs, source
@@ -296,52 +301,11 @@ class PaperFlow(Generic[_ResultT]):
         provider = self._summary_provider or _AgentsPaperSummaryProvider()
         draft = await provider.summarize(source, chunk_set, cfg=cfg)
         summary = _build_summary(chunk_set, draft, cfg)
-        return PaperFlowResult(
+        return PaperSemanticResult(
             source_revision=source,
             chunk_set=chunk_set,
             global_summary=summary,
         )
-
-
-async def paper_flow(
-    input: PaperInput,
-    *,
-    cfg: PaperFlowCfg | None = None,
-    _summary_provider: _PaperSummaryProvider | None = None,
-) -> PaperFlowResult:
-    """Build a page-aware chunk set and one cited global summary (deprecated).
-
-    Deprecated thin wrapper for the source-first chunk/summary shape. It emits a
-    ``DeprecationWarning`` and delegates to
-    ``PaperFlow(PaperFlowCfg(...)).build(input)``, which now owns the semantic
-    pipeline. The wrapper is grandfathered by the operation-naming contract;
-    prefer the config-bound entry point in new code::
-
-        result = await PaperFlow(PaperFlowCfg(...)).build(input)
-
-    Args:
-        input: Typed paper source. V1 requires a PDF-backed input.
-        cfg: Splitter, summary model, and usage/runtime limits.
-        _summary_provider: Optional test seam for the summary draft.
-
-    Returns:
-        The exact source revision, one chunk-set artifact, and one cited
-        global-summary artifact.
-
-    Raises:
-        UnsupportedContentTypeError: If the resolved content is not a PDF.
-        PaperCitationValidationError: If generated citations are invalid or do
-            not meet the configured source-coverage policy.
-        NotImplementedError: If a DOI input has no exact open PDF resolver.
-    """
-    warnings.warn(
-        "paper_flow() is deprecated; use "
-        "PaperFlow(PaperFlowCfg(...)).build(input) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    flow = PaperFlow(cfg or PaperFlowCfg(), _summary_provider=_summary_provider)
-    return await flow.build(input)
 
 
 async def _open_source(
@@ -544,7 +508,7 @@ def _adapt_chunks(
 def _build_summary(
     chunk_set: PaperChunkSet,
     draft: PaperSummaryDraft,
-    cfg: PaperFlowCfg,
+    cfg: PaperSemanticCfg,
 ) -> PaperGlobalSummary:
     """Assemble the summary producer and delegate identity to the model."""
     producer = PaperSummaryProducer(

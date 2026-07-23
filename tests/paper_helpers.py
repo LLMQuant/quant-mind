@@ -1,7 +1,7 @@
 """Deterministic paper artifacts shared by offline tests.
 
 The fixture builds through the same knowledge-layer smart constructors that
-``paper_flow`` uses, so tests exercise the real identity path instead of
+``PaperFlow.build`` uses, so tests exercise the real identity path instead of
 re-deriving IDs and hashes with the private helpers.
 """
 
@@ -14,9 +14,9 @@ from quantmind.knowledge import (
     PaperChunkInput,
     PaperChunkSet,
     PaperCitationDraft,
-    PaperFlowResult,
     PaperGlobalSummary,
     PaperPageInput,
+    PaperSemanticResult,
     PaperSourceFacts,
     PaperSourceRevision,
     PaperStructureNodeDraft,
@@ -48,7 +48,7 @@ def build_paper_result(
         "and improves translation quality with efficient training."
     ),
     when: datetime = _WHEN,
-) -> PaperFlowResult:
+) -> PaperSemanticResult:
     """Build one valid two-page result without parsing, network, or models.
 
     ``when`` drives the source revision timestamps (and therefore the derived
@@ -129,7 +129,7 @@ def build_paper_result(
         min_citations=1,
         min_pages=1,
     )
-    return PaperFlowResult(
+    return PaperSemanticResult(
         source_revision=source,
         chunk_set=chunk_set,
         global_summary=summary,

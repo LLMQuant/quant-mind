@@ -148,7 +148,7 @@ class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider.calls, 1)
 
     async def test_unwired_cfg_type_raises_not_implemented(self) -> None:
-        # A cfg type that is neither PaperStructureCfg nor PaperFlowCfg selects
+        # A cfg type that is neither PaperStructureCfg nor PaperSemanticCfg selects
         # an unwired shape: build must reject it by cfg type, before any fetch
         # or parse.
         flow = PaperFlow(BaseFlowCfg())

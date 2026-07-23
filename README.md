@@ -161,16 +161,15 @@ Component-specific guides and architecture notes live under [`docs/`](docs/).
 ```python
 import asyncio
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import ArxivIdentifier
-from quantmind.flows import paper_flow
+from quantmind.flows import PaperFlow
 
 
 async def main() -> None:
-    result = await paper_flow(
-        ArxivIdentifier(id="1706.03762v7"),
-        cfg=PaperFlowCfg(model="gpt-4o-mini"),
-    )
+    result = await PaperFlow(
+        PaperSemanticCfg(model="gpt-5.6-luna"),
+    ).build(ArxivIdentifier(id="1706.03762v7"))
     print(result.global_summary.summary)
     print(result.source_revision.id, result.chunk_set.id)
 
@@ -178,24 +177,34 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+`PaperFlow` binds an immutable `PaperSemanticCfg` once; the cfg **type** selects
+the shape (`PaperStructureCfg` → `PaperStructureTree`, `PaperSemanticCfg` →
+`PaperSemanticResult`).
+
 #### Fan out a batch with `batch_run`
 
 ```python
 import asyncio
+from datetime import datetime, timedelta, timezone
 
-from quantmind.configs import PaperFlowCfg
-from quantmind.configs.paper import ArxivIdentifier
-from quantmind.flows import batch_run, paper_flow
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.flows import batch_run, collect_news
 
 
 async def main() -> None:
-    inputs = [ArxivIdentifier(id=aid) for aid in (
-        "2401.12345", "2401.12346", "2401.12347",
-    )]
+    end = datetime.now(timezone.utc)
+    windows = [
+        NewsWindow(
+            source="pr-newswire",
+            start=end - timedelta(days=day + 1),
+            end=end - timedelta(days=day),
+        )
+        for day in range(3)
+    ]
     result = await batch_run(
-        paper_flow,
-        inputs,
-        cfg=PaperFlowCfg(model="gpt-4o-mini"),
+        collect_news,
+        windows,
+        cfg=NewsCollectionCfg(retain_raw_html=False),
         concurrency=3,
         on_error="skip",
         on_progress=lambda done, total: print(f"{done}/{total}"),
@@ -211,17 +220,17 @@ asyncio.run(main())
 ```python
 import asyncio
 
-from quantmind.flows import paper_flow
+from quantmind.flows import collect_news
 from quantmind.magic import resolve_magic_input
 
 
 async def main() -> None:
     inp, cfg = await resolve_magic_input(
-        "Pull arXiv 2401.12345 about cross-sectional momentum; use gpt-4o-mini.",
-        target_flow=paper_flow,
+        "Collect the last day of PR Newswire company news.",
+        target_flow=collect_news,
     )
-    result = await paper_flow(inp, cfg=cfg)
-    print(result.global_summary.summary)
+    batch = await collect_news(inp, cfg=cfg)
+    print(f"documents={batch.success_count} complete={batch.complete}")
 
 
 asyncio.run(main())

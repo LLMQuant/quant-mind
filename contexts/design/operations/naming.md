@@ -4,7 +4,7 @@
 
 - **Purpose**: Define clear names for public QuantMind callables and their input, config, and result types.
 - **Read when**: Adding or renaming a public function, service, operation type, or pipeline.
-- **Status**: Use these rules for new names. Keep the existing `paper_flow` name until a separate change explains how callers will migrate.
+- **Status**: Use these rules for new names. The legacy paper extraction function has been removed; the paper semantic build is now `PaperFlow(PaperSemanticCfg(...)).build(input)`, so no `*_flow` functions remain.
 - **Core rule**: Name a function or service method with a verb that says what it does. Use `pipeline` only when one callable combines several public operations. Do not use `flow` as a **verb**; `flow` as a **noun** naming a finished pipeline collection (`PaperFlow`) is allowed.
 
 ## Contents
@@ -64,15 +64,15 @@ A domain flow binds an immutable `cfg` at construction and applies it to each in
 
 - Input types describe what the caller supplies, such as `NewsWindow` or `PaperInput`.
 - Config types name the domain and stage, such as `NewsCollectionCfg`, `PaperStructureCfg`, or `RetrievalCfg`.
-- Result types describe returned data, such as `NewsBatch`, `PaperFlowResult`, or `PageIndex`.
+- Result types describe returned data, such as `NewsBatch`, `PaperSemanticResult`, or `PageIndex`.
 - Keep provider names out of public function names unless callers are choosing provider-specific behavior.
 
 ## Current API
 
 - `collect_news` is a collection operation and follows these naming rules.
 - `batch_run` is a generic batch helper, not a news or paper operation.
-- `paper_flow` is an existing extraction **function** with an old name, now a deprecated thin wrapper that emits a `DeprecationWarning` and delegates to `PaperFlow(PaperFlowCfg(...)).build(input)`. Do not copy the `*_flow` function pattern for new operations.
-- `PaperFlow(cfg)` is the config-bound paper flow; `build(input)` produces a knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg` → `PaperStructureTree`, `PaperFlowCfg` → `PaperFlowResult`). `Flow` as a noun here is deliberate and allowed.
+- The `*_flow` function-name pattern is banned for new operations; the former paper extraction function was removed rather than kept as a wrapper.
+- `PaperFlow(cfg)` is the config-bound paper flow and the single entry point for every paper shape; `build(input)` produces a knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg` → `PaperStructureTree`, `PaperSemanticCfg` → `PaperSemanticResult`). `Flow` as a noun here is deliberate and allowed.
 - `AgenticRetriever(cfg)` is the reasoning-retrieval service in `quantmind.mind`; `retrieve(structure, question)` returns evidence values. It has one behavior — an LLM agent reasons over the structure — so it binds `RetrievalCfg` but does no cfg-type dispatch. Mechanical semantic search is `quantmind.library.search`, a different layer, not a strategy here.
 
 The current `quantmind.flows` package continues to contain public operations in this release. Renaming it to `operations` or adding a separate `pipelines` package is outside this page.
