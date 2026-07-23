@@ -119,13 +119,13 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create virtual environment
         run: uv venv
 
       - name: Install project runtime dependencies
-        run: uv pip install --python .venv/bin/python -e .
+        run: uv sync --frozen
 
       - name: Run live news E2E
         run: .venv/bin/python scripts/verify_news_e2e.py
@@ -151,13 +151,13 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create virtual environment
         run: uv venv
 
       - name: Install project runtime dependencies
-        run: uv pip install --python .venv/bin/python -e .
+        run: uv sync --frozen
 
       - name: Check OpenAI credential
         id: openai
@@ -195,13 +195,13 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create virtual environment
         run: uv venv
 
       - name: Install project runtime dependencies
-        run: uv pip install --python .venv/bin/python -e .
+        run: uv sync --frozen
 
       - name: Check OpenRouter credential
         id: openrouter
