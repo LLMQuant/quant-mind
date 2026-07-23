@@ -30,7 +30,7 @@
 |---|---|
 | `open()` | Open or migrate a SQLite library without network I/O. |
 | `put()` | Store one conventional `BaseKnowledge` item and its required projections. |
-| `put_paper()` | Store one `PaperFlowResult`, including exact source assets, two artifacts, lineage, and required projections. |
+| `put_paper()` | Store one `PaperSemanticResult`, including exact source assets, two artifacts, lineage, and required projections. |
 | `put_paper_structure_tree()` | Atomically store one exact source revision and validated structure tree without projections or embeddings. |
 | `get()` | Rehydrate one conventional knowledge item. |
 | `get_paper()` | Rehydrate one unambiguous source/chunk-set/summary result, or use explicit artifact IDs when versions coexist. |
@@ -50,7 +50,7 @@ The public types are `LocalKnowledgeLibrary`, `SemanticQuery`, `SemanticHit`, an
 | `quantmind.flows` | Produce validated results and leave persistence explicit. |
 | Caller | Choose database and temporary parser-artifact locations and manage application lifecycle. |
 
-For conventional `BaseKnowledge`, source references remain pointers and the caller retains external raw files. For `PaperFlowResult`, the exact source PDF, screenshots, and extracted images are part of the durable source revision and are copied into the library transaction.
+For conventional `BaseKnowledge`, source references remain pointers and the caller retains external raw files. For `PaperSemanticResult`, the exact source PDF, screenshots, and extracted images are part of the durable source revision and are copied into the library transaction.
 
 ## Canonical Storage
 
@@ -75,7 +75,7 @@ There is no single opaque paper JSON blob and no canonical vector field. Aggrega
 
 ## Paper Transaction
 
-`put_paper()` first validates the complete `PaperFlowResult`, computes its source and artifact canonical forms, determines affected projections, and obtains every required embedding. Only then does it begin one `BEGIN IMMEDIATE` transaction.
+`put_paper()` first validates the complete `PaperSemanticResult`, computes its source and artifact canonical forms, determines affected projections, and obtains every required embedding. Only then does it begin one `BEGIN IMMEDIATE` transaction.
 
 The transaction writes or reuses the source, asset blobs, artifacts, members, lineage, and all required projections. Any constraint, integrity, or write failure rolls back the transaction. An embedding-provider failure occurs before the transaction and therefore leaves no partial source or artifact rows.
 

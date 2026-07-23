@@ -9,9 +9,9 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import ArxivIdentifier
-from quantmind.flows import paper_flow
+from quantmind.flows import PaperFlow
 from quantmind.knowledge import (
     PaperArtifactKind,
     PaperChunk,
@@ -52,10 +52,9 @@ async def _search_and_resolve(
 async def _run_vertical_slice() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="quantmind-paper-v1-") as directory:
         root = Path(directory)
-        result = await paper_flow(
-            ArxivIdentifier(id=_ARXIV_ID),
-            cfg=PaperFlowCfg(
-                model="gpt-4o-mini",
+        flow = PaperFlow(
+            PaperSemanticCfg(
+                model="gpt-5.6-luna",
                 output_dir=str(root / "assets"),
                 timeout_seconds=240,
                 summary_research_group_size=8,
@@ -63,8 +62,9 @@ async def _run_vertical_slice() -> dict[str, Any]:
                 max_summary_output_tokens=4_096,
                 min_summary_citations=3,
                 min_summary_pages=2,
-            ),
+            )
         )
+        result = await flow.build(ArxivIdentifier(id=_ARXIV_ID))
         database = root / "library.db"
         library = await LocalKnowledgeLibrary.open(
             database,

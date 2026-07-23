@@ -28,7 +28,7 @@ Source-first paper handling separates four layers:
 | Semantic artifact | `PaperGlobalSummary` | `PaperCitation` | Store one independently versioned model summary with resolvable chunk/page evidence. |
 | Structural artifact | `PaperStructureTree` | `TreeNode`, `Citation` | Store one independently versioned natural-section hierarchy over exact source pages. |
 
-`PaperFlowResult` validates one compatible source, chunk set, and summary combination. It is a transfer result, not a fourth stored artifact.
+`PaperSemanticResult` validates one compatible source, chunk set, and summary combination. It is a transfer result, not a fourth stored artifact.
 
 All models are frozen Pydantic values with `extra="forbid"`. Canonical values contain no embedding vectors, provider node objects, or storage handles.
 
@@ -53,7 +53,7 @@ These identities make an identical run idempotent. They also keep a changed spli
 
 The source's canonical JSON excludes blobs. This keeps canonical hashes stable and reviewable while allowing SQLite to store exact bytes in a normalized linked table. Rehydration checks both directions: stored blob bytes must match their table hashes, and table asset metadata must match the canonical source manifest.
 
-Every chunk span is also checked against that manifest: its page must exist, its character range must fit the page text, and every visual asset ID must resolve to a screenshot or image from the same page. This check runs for a complete `PaperFlowResult` and when a stored chunk set is rehydrated independently.
+Every chunk span is also checked against that manifest: its page must exist, its character range must fit the page text, and every visual asset ID must resolve to a screenshot or image from the same page. This check runs for a complete `PaperSemanticResult` and when a stored chunk set is rehydrated independently.
 
 ## Artifact Versioning
 
@@ -69,13 +69,13 @@ Every chunk span is also checked against that manifest: its page must exist, its
 - per-agent output limit;
 - research group size.
 
-Changing any producer field creates a distinct artifact ID. Multiple chunk sets and summaries may coexist for one source revision. Loading a complete `PaperFlowResult` without explicit artifact IDs is allowed only when one unambiguous linked pair exists.
+Changing any producer field creates a distinct artifact ID. Multiple chunk sets and summaries may coexist for one source revision. Loading a complete `PaperSemanticResult` without explicit artifact IDs is allowed only when one unambiguous linked pair exists.
 
 `PaperStructureTree.producer` records model and prompt identity, the instructions hash, the bounded physical-page text input policy, and tree/output bounds. It deliberately records no splitter or chunk-set identity. Rechunking an unchanged source therefore does not create a different structure tree.
 
 ## Citation and Lineage Integrity
 
-A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verbatim quote. `PaperFlowResult` rejects citations to missing chunks, pages outside the cited chunk spans, or quotes absent from chunk text.
+A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verbatim quote. `PaperSemanticResult` rejects citations to missing chunks, pages outside the cited chunk spans, or quotes absent from chunk text.
 
 `PaperGlobalSummary.derived_from` contains `ArtifactLocator` values. At least one locator must point to its producer's exact input chunk set, with the same source revision and no member ID. The library stores this relationship explicitly so lineage can be checked independently from the summary JSON.
 
@@ -95,6 +95,6 @@ Canonical paper models do not implement `embedding_text()` and do not select ret
 
 ## Compatibility Boundary
 
-`LegacyPaper` retains the pre-V1 `TreeKnowledge` shape only so existing version-2 databases and the bundled legacy example can be opened. It is not exported as `Paper`, is not produced by `paper_flow`, and is not part of the V1 paper contract.
+`LegacyPaper` retains the pre-V1 `TreeKnowledge` shape only so existing version-2 databases and the bundled legacy example can be opened. It is not exported as `Paper`, is not produced by `PaperFlow`, and is not part of the V1 paper contract.
 
 There is no nested `PaperTree` on the V1 result. `PaperStructureTree` is an independently versioned paper-artifact binding of the shared `StructureTree` base, derived directly from one exact source revision and independent of every chunk-set version; see [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).

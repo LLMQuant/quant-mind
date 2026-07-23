@@ -1,0 +1,47 @@
+name: Stale
+
+# Two-phase inactivity policy: mark stale (with a comment) after 14 days of
+# inactivity, then close 7 days later if still untouched. Any comment, commit,
+# or label change resets the clock and clears the stale label.
+
+on:
+  schedule:
+    - cron: '0 1 * * *' # Daily at 01:00 UTC.
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: stale
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 14
+          days-before-close: 7
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: 'help wanted,good first issue'
+          exempt-pr-labels: 'help wanted,good first issue'
+          exempt-draft-pr: true
+          operations-per-run: 60
+          stale-issue-message: >
+            This issue has been inactive for 14 days and is now marked stale.
+            It will be closed in 7 days if there is no further activity. Comment
+            or remove the stale label to keep it open.
+          stale-pr-message: >
+            This pull request has been inactive for 14 days and is now marked
+            stale. It will be closed in 7 days if there is no further activity.
+            Comment or remove the stale label to keep it open.
+          close-issue-message: >
+            Closing after 21 days of inactivity. Comment to reopen if this is
+            still relevant.
+          close-pr-message: >
+            Closing after 21 days of inactivity. Reopen when you are ready to
+            pick this back up.

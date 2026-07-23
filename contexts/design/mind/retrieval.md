@@ -119,7 +119,7 @@ trees = await batch_run(tree_flow.build, inputs)
 Rules:
 
 - **Bind the config, not the input.** `PaperFlow(cfg)` stores the immutable cfg; `build(input)` takes only the operand. A batch therefore runs every input under one unified setting, and a config can never drift mid-run — a reproducibility requirement, not ergonomics.
-- **The cfg type picks the shape.** `PaperStructureCfg` → `PaperStructureTree` (implemented now). A later `PaperCardCfg` → the chunk/summary shape reached through the same `build` seam; the existing `paper_flow(input, *, cfg)` function stays as a thin compatibility wrapper for that semantic shape until it lands.
+- **The cfg type picks the shape.** `PaperStructureCfg` → `PaperStructureTree` and `PaperSemanticCfg` → `PaperSemanticResult`, both reached through the same `build` seam. A later `PaperCardCfg` would add a further shape through that seam.
 - **Pure processing.** `build` fetches, parses, and structures, producing the complete self-contained artifact. It binds **no** library, persists nothing, and does not retrieve.
 - A caller who wants only the parsed source uses `quantmind.preprocess` directly; "parse only" is a component seam, not a public pipeline.
 

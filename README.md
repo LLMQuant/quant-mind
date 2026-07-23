@@ -101,7 +101,7 @@ uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
-`PaperFlow` refines one arXiv PDF into a self-contained paper artifact. The cfg **type** selects the knowledge shape. Bind a `PaperStructureCfg` to build a source-native **structure tree** — a hierarchy of page-cited nodes:
+`PaperFlow` refines one arXiv PDF into a self-contained paper artifact. The cfg **type** selects the knowledge shape (`PaperStructureCfg` → `PaperStructureTree`, `PaperSemanticCfg` → `PaperSemanticResult`). Bind a `PaperStructureCfg` to build a source-native **structure tree** — a hierarchy of page-cited nodes:
 
 ```python
 import asyncio
@@ -120,7 +120,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Prefer the **semantic** shape — a page-aware chunk set plus one cited global summary you can embed and retrieve over? Bind a `PaperSemanticCfg` instead (chunking + map-reduce summary controls) — same class, different cfg:
+Prefer the **semantic** shape — a page-aware chunk set plus one cited global summary you can embed and retrieve over? Bind a `PaperSemanticCfg` instead — same class, different cfg:
 
 ```python
 import asyncio
@@ -133,14 +133,69 @@ from quantmind.flows import PaperFlow
 async def main() -> None:
     flow = PaperFlow(PaperSemanticCfg(model="gpt-5.6-luna", chunk_size=512))
     result = await flow.build(ArxivIdentifier(id="1706.03762v7"))
-    print(result.chunk_set.id, result.global_summary.id)
+    print(result.global_summary.summary)
+    print(result.source_revision.id, result.chunk_set.id)
 
 
 asyncio.run(main())
 ```
 
-Fan any flow across a list of inputs with `batch_run(flow.build, inputs, ...)`, and collect a replayable news window with `collect_news`. More examples live under [`examples/`](examples/); design contracts live under [`contexts/design/`](contexts/design/).
+#### Fan out a batch with `batch_run`
 
+```python
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+from quantmind.configs import NewsCollectionCfg, NewsWindow
+from quantmind.flows import batch_run, collect_news
+
+
+async def main() -> None:
+    end = datetime.now(timezone.utc)
+    windows = [
+        NewsWindow(
+            source="pr-newswire",
+            start=end - timedelta(days=day + 1),
+            end=end - timedelta(days=day),
+        )
+        for day in range(3)
+    ]
+    result = await batch_run(
+        collect_news,
+        windows,
+        cfg=NewsCollectionCfg(retain_raw_html=False),
+        concurrency=3,
+        on_error="skip",
+        on_progress=lambda done, total: print(f"{done}/{total}"),
+    )
+    print(f"ok={result.success_count} failed={result.failure_count}")
+
+
+asyncio.run(main())
+```
+
+#### Resolve free-form intent with `magic`
+
+```python
+import asyncio
+
+from quantmind.flows import collect_news
+from quantmind.magic import resolve_magic_input
+
+
+async def main() -> None:
+    inp, cfg = await resolve_magic_input(
+        "Collect the last day of PR Newswire company news.",
+        target_flow=collect_news,
+    )
+    batch = await collect_news(inp, cfg=cfg)
+    print(f"documents={batch.success_count} complete={batch.complete}")
+
+
+asyncio.run(main())
+```
+
+More examples live under [`examples/`](examples/); design contracts live under [`contexts/design/`](contexts/design/).
 
 ### 🔬 Evaluation (In Design)
 

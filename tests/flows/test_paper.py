@@ -1,4 +1,4 @@
-"""Offline tests for source-first ``paper_flow`` behavior."""
+"""Offline tests for the source-first ``PaperFlow`` semantic build."""
 
 import asyncio
 import json
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 from agents import ModelSettings
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import (
     ArxivIdentifier,
     DoiIdentifier,
@@ -31,10 +31,10 @@ from quantmind.flows._paper_summary import (
     _validate_research_draft,
 )
 from quantmind.flows.paper import (
+    PaperFlow,
     UnsupportedContentTypeError,
     _build_summary,
     _fetch_paper_source,
-    paper_flow,
 )
 from quantmind.knowledge import PaperCitationValidationError
 from quantmind.preprocess.fetch import Fetched, RawPaper
@@ -89,13 +89,12 @@ class _FakeSummaryProvider:
 class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_local_pdf_builds_chunks_before_summary(self) -> None:
         provider = _FakeSummaryProvider()
-        cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
+        cfg = PaperSemanticCfg(chunk_size=256, chunk_overlap=32)
 
-        result = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        result = await PaperFlow(
+            cfg,
             _summary_provider=provider,
-        )
+        ).build(LocalFilePath(path=_FIXTURE))
 
         self.assertEqual(len(provider.calls), 1)
         source_seen, chunk_set_seen, _ = provider.calls[0]
@@ -139,11 +138,10 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             "quantmind.flows.paper.fetch_arxiv",
             new=AsyncMock(return_value=raw),
         ):
-            result = await paper_flow(
-                ArxivIdentifier(id="1706.03762v7"),
-                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+            result = await PaperFlow(
+                PaperSemanticCfg(chunk_size=256, chunk_overlap=32),
                 _summary_provider=_FakeSummaryProvider(),
-            )
+            ).build(ArxivIdentifier(id="1706.03762v7"))
 
         self.assertEqual(result.source_revision.arxiv_id, "1706.03762v7")
         self.assertEqual(result.source_revision.source.kind, "arxiv")
@@ -160,24 +158,21 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         provider = _FakeSummaryProvider(fail=RuntimeError("summary failed"))
 
         with self.assertRaisesRegex(RuntimeError, "summary failed"):
-            await paper_flow(
-                LocalFilePath(path=_FIXTURE),
-                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+            await PaperFlow(
+                PaperSemanticCfg(chunk_size=256, chunk_overlap=32),
                 _summary_provider=provider,
-            )
+            ).build(LocalFilePath(path=_FIXTURE))
 
     async def test_same_pdf_and_configs_have_idempotent_ids(self) -> None:
-        cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
-        first = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        cfg = PaperSemanticCfg(chunk_size=256, chunk_overlap=32)
+        first = await PaperFlow(
+            cfg,
             _summary_provider=_FakeSummaryProvider(),
-        )
-        second = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        ).build(LocalFilePath(path=_FIXTURE))
+        second = await PaperFlow(
+            cfg,
             _summary_provider=_FakeSummaryProvider(),
-        )
+        ).build(LocalFilePath(path=_FIXTURE))
 
         self.assertEqual(first.source_revision.id, second.source_revision.id)
         self.assertEqual(first.chunk_set.id, second.chunk_set.id)
@@ -229,7 +224,7 @@ class SourceDispatchTests(unittest.IsolatedAsyncioTestCase):
 class CitationValidationTests(unittest.TestCase):
     def test_unknown_chunk_page_and_quote_are_rejected(self) -> None:
         result = build_paper_result()
-        cfg = PaperFlowCfg(
+        cfg = PaperSemanticCfg(
             min_summary_citations=1,
             min_summary_pages=1,
         )
@@ -289,7 +284,7 @@ class CitationValidationTests(unittest.TestCase):
             _build_summary(
                 result.chunk_set,
                 draft,
-                PaperFlowCfg(),
+                PaperSemanticCfg(),
             )
 
 
@@ -361,14 +356,14 @@ class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
 
     def test_worker_and_reducer_output_is_capped(self) -> None:
         capped = _summary_model_settings(
-            PaperFlowCfg(
+            PaperSemanticCfg(
                 max_summary_output_tokens=256,
                 model_settings=ModelSettings(max_tokens=1024),
             )
         )
         self.assertEqual(capped.max_tokens, 256)
         lower = _summary_model_settings(
-            PaperFlowCfg(
+            PaperSemanticCfg(
                 max_summary_output_tokens=256,
                 model_settings=ModelSettings(max_tokens=128),
             )
@@ -377,7 +372,7 @@ class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_map_reduce_fans_out_one_worker_per_group(self) -> None:
         result = build_paper_result()
-        cfg = PaperFlowCfg(
+        cfg = PaperSemanticCfg(
             summary_research_group_size=1,
             summary_concurrency=2,
             min_summary_citations=1,
@@ -409,7 +404,7 @@ class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_summary_timeout_raises(self) -> None:
         result = build_paper_result()
-        cfg = PaperFlowCfg(
+        cfg = PaperSemanticCfg(
             summary_research_group_size=8,
             timeout_seconds=0.01,
             min_summary_citations=1,
