@@ -4,13 +4,12 @@
 
 ## Store a Paper Flow Result
 
-Run `paper_flow()` first, then explicitly store its complete result:
+Run `PaperFlow(PaperFlowCfg(...)).build()` first, then explicitly store its complete result:
 
 ```python
-result = await paper_flow(
-    ArxivIdentifier(id="1706.03762v7"),
-    cfg=PaperFlowCfg(model="gpt-4o-mini"),
-)
+result = await PaperFlow(
+    PaperFlowCfg(model="gpt-4o-mini"),
+).build(ArxivIdentifier(id="1706.03762v7"))
 
 library = await LocalKnowledgeLibrary.open(
     ".quantmind/library.db",

@@ -7,10 +7,10 @@ Deterministic operations such as ``collect_news`` return source-faithful
 - ``PaperFlow`` is the config-bound paper flow: ``PaperFlow(cfg)`` binds an
   immutable build config once and ``build(input)`` applies it per input,
   dispatching on the cfg **type** (``PaperStructureCfg`` → a self-contained
-  ``PaperStructureTree``). ``batch_run(flow.build, inputs)`` runs every input
-  under one unified setting.
-- ``paper_flow`` is a thin compatibility function for the semantic
-  chunk/summary shape (``PaperFlowResult``).
+  ``PaperStructureTree``; ``PaperFlowCfg`` → a source-first ``PaperFlowResult``).
+  ``batch_run(flow.build, inputs)`` runs every input under one unified setting.
+- ``paper_flow`` is a **deprecated** thin wrapper for the chunk/summary shape;
+  it warns and delegates to ``PaperFlow(PaperFlowCfg(...)).build(input)``.
 - ``batch_run`` runs any flow over a list of inputs with bounded
   concurrency and aggregated results.
 - ``BatchResult`` is the shape returned by ``batch_run``.

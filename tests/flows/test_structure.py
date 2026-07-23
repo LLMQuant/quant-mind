@@ -9,7 +9,7 @@ import httpx
 from agents import ModelSettings
 from openai import BadRequestError
 
-from quantmind.configs import PaperFlowCfg, PaperStructureCfg
+from quantmind.configs import BaseFlowCfg, PaperStructureCfg
 from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow, PaperStructureError
 from quantmind.flows.paper._structure import (
@@ -147,10 +147,11 @@ class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parse_spy.await_count, 1)
         self.assertEqual(provider.calls, 1)
 
-    async def test_non_structure_cfg_raises_not_implemented(self) -> None:
-        # A non-PaperStructureCfg selects an unwired shape: build must reject
-        # it by cfg type, before any fetch or parse.
-        flow = PaperFlow(PaperFlowCfg())
+    async def test_unwired_cfg_type_raises_not_implemented(self) -> None:
+        # A cfg type that is neither PaperStructureCfg nor PaperFlowCfg selects
+        # an unwired shape: build must reject it by cfg type, before any fetch
+        # or parse.
+        flow = PaperFlow(BaseFlowCfg())
         with patch(
             "quantmind.flows.paper.parse_pdf",
             new=AsyncMock(side_effect=AssertionError("must not parse")),

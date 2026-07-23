@@ -14,7 +14,7 @@ harness.
 
 | Operation | Import | Input and config | Result | Example | Design or guide |
 |---|---|---|---|---|---|
-| Source-first paper flow | `quantmind.flows.paper_flow` | `PaperInput`, `PaperFlowCfg` | `PaperFlowResult` | [Persist and search a paper](../examples/flows/paper.py) | [Paper flow design](../contexts/design/flow/paper.md) |
+| Source-first paper flow | `quantmind.flows.PaperFlow` | `PaperFlow(PaperFlowCfg)`; `build()`: `PaperInput` | `PaperFlowResult` | [Persist and search a paper](../examples/flows/paper.py) | [Paper flow design](../contexts/design/flow/paper.md) |
 | Paper structure build | `quantmind.flows.PaperFlow` | `PaperFlow(PaperStructureCfg)`; `build()`: `PaperInput` | `PaperStructureTree` (self-contained) | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
 | Reasoning-based retrieval (agentic) | `quantmind.mind.AgenticRetriever` | `AgenticRetriever(RetrievalCfg)`; `retrieve()`: one `StructureTree` + question (no library) | `list[RetrievalEvidence]` | [Build and retrieve](../examples/mind/paper_structure_retrieval.py) | [Structure retrieval design](../contexts/design/mind/retrieval.md) |
 | News collection | `quantmind.flows.collect_news` | `NewsWindow`, `NewsCollectionCfg` | `NewsBatch` from `quantmind.preprocess` | [Collect news](../examples/flows/collect_news.py) | [News collection design](../contexts/design/flow/news.md) |
@@ -31,7 +31,7 @@ Import result contracts from the canonical layer shown in the catalog.
 | Source | Source selection | Operation | Live-network component smoke test |
 |---|---|---|---|
 | PR Newswire | `NewsWindow(source="pr-newswire", ...)` | `collect_news` | `python scripts/verify_news_e2e.py` |
-| arXiv Transformer PDF | `ArxivIdentifier(id="1706.03762v7")` | `paper_flow`, persistence, reopen, search, and resolution | `python scripts/verify_pdf_rag_e2e.py` |
+| arXiv Transformer PDF | `ArxivIdentifier(id="1706.03762v7")` | `PaperFlow(PaperFlowCfg).build`, persistence, reopen, search, and resolution | `python scripts/verify_pdf_rag_e2e.py` |
 | Golden paper PDF (structure) | `LocalFilePath(...golden/paper.pdf)` | `PaperFlow.build`, standalone `put`/`open_structure`, and `AgenticRetriever.retrieve` | `python scripts/verify_structure_e2e.py` |
 
 The PR Newswire smoke test checks the public RSS feed, a complete preceding

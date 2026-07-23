@@ -31,6 +31,7 @@ from quantmind.flows._paper_summary import (
     _validate_research_draft,
 )
 from quantmind.flows.paper import (
+    PaperFlow,
     UnsupportedContentTypeError,
     _build_summary,
     _fetch_paper_source,
@@ -91,11 +92,10 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         provider = _FakeSummaryProvider()
         cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
 
-        result = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        result = await PaperFlow(
+            cfg,
             _summary_provider=provider,
-        )
+        ).build(LocalFilePath(path=_FIXTURE))
 
         self.assertEqual(len(provider.calls), 1)
         source_seen, chunk_set_seen, _ = provider.calls[0]
@@ -139,11 +139,10 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             "quantmind.flows.paper.fetch_arxiv",
             new=AsyncMock(return_value=raw),
         ):
-            result = await paper_flow(
-                ArxivIdentifier(id="1706.03762v7"),
-                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+            result = await PaperFlow(
+                PaperFlowCfg(chunk_size=256, chunk_overlap=32),
                 _summary_provider=_FakeSummaryProvider(),
-            )
+            ).build(ArxivIdentifier(id="1706.03762v7"))
 
         self.assertEqual(result.source_revision.arxiv_id, "1706.03762v7")
         self.assertEqual(result.source_revision.source.kind, "arxiv")
@@ -160,24 +159,21 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
         provider = _FakeSummaryProvider(fail=RuntimeError("summary failed"))
 
         with self.assertRaisesRegex(RuntimeError, "summary failed"):
-            await paper_flow(
-                LocalFilePath(path=_FIXTURE),
-                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+            await PaperFlow(
+                PaperFlowCfg(chunk_size=256, chunk_overlap=32),
                 _summary_provider=provider,
-            )
+            ).build(LocalFilePath(path=_FIXTURE))
 
     async def test_same_pdf_and_configs_have_idempotent_ids(self) -> None:
         cfg = PaperFlowCfg(chunk_size=256, chunk_overlap=32)
-        first = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        first = await PaperFlow(
+            cfg,
             _summary_provider=_FakeSummaryProvider(),
-        )
-        second = await paper_flow(
-            LocalFilePath(path=_FIXTURE),
-            cfg=cfg,
+        ).build(LocalFilePath(path=_FIXTURE))
+        second = await PaperFlow(
+            cfg,
             _summary_provider=_FakeSummaryProvider(),
-        )
+        ).build(LocalFilePath(path=_FIXTURE))
 
         self.assertEqual(first.source_revision.id, second.source_revision.id)
         self.assertEqual(first.chunk_set.id, second.chunk_set.id)
@@ -186,6 +182,41 @@ class PaperFlowTests(unittest.IsolatedAsyncioTestCase):
             [chunk.chunk_id for chunk in first.chunk_set.chunks],
             [chunk.chunk_id for chunk in second.chunk_set.chunks],
         )
+
+
+class PaperFlowDeprecationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_paper_flow_warns_and_delegates(self) -> None:
+        # The grandfathered ``paper_flow`` wrapper must emit a
+        # DeprecationWarning and delegate to ``PaperFlow.build`` for the same
+        # source-first result, forwarding the summary-provider seam.
+        provider = _FakeSummaryProvider()
+
+        with self.assertWarns(DeprecationWarning):
+            result = await paper_flow(
+                LocalFilePath(path=_FIXTURE),
+                cfg=PaperFlowCfg(chunk_size=256, chunk_overlap=32),
+                _summary_provider=provider,
+            )
+
+        self.assertEqual(len(provider.calls), 1)
+        _, chunk_set_seen, _ = provider.calls[0]
+        self.assertIs(chunk_set_seen, result.chunk_set)
+        self.assertIs(result.source_revision, provider.calls[0][0])
+        self.assertTrue(result.global_summary.summary)
+        self.assertEqual(len(result.source_revision.parsed.pages), 4)
+
+    async def test_paper_flow_defaults_cfg_when_omitted(self) -> None:
+        # Omitting cfg still delegates under a default ``PaperFlowCfg``.
+        provider = _FakeSummaryProvider()
+
+        with self.assertWarns(DeprecationWarning):
+            result = await paper_flow(
+                LocalFilePath(path=_FIXTURE),
+                _summary_provider=provider,
+            )
+
+        self.assertEqual(len(provider.calls), 1)
+        self.assertTrue(result.chunk_set.chunks)
 
 
 class SourceDispatchTests(unittest.IsolatedAsyncioTestCase):

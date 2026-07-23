@@ -71,8 +71,8 @@ A domain flow binds an immutable `cfg` at construction and applies it to each in
 
 - `collect_news` is a collection operation and follows these naming rules.
 - `batch_run` is a generic batch helper, not a news or paper operation.
-- `paper_flow` is an existing extraction **function** with an old name; keep it as a thin compatibility wrapper. Do not copy the `*_flow` function pattern for new operations.
-- `PaperFlow(cfg)` is the config-bound paper flow; `build(input)` produces a knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg` → `PaperStructureTree` today). `Flow` as a noun here is deliberate and allowed.
+- `paper_flow` is an existing extraction **function** with an old name, now a deprecated thin wrapper that emits a `DeprecationWarning` and delegates to `PaperFlow(PaperFlowCfg(...)).build(input)`. Do not copy the `*_flow` function pattern for new operations.
+- `PaperFlow(cfg)` is the config-bound paper flow; `build(input)` produces a knowledge artifact whose shape is chosen by the cfg *type* (`PaperStructureCfg` → `PaperStructureTree`, `PaperFlowCfg` → `PaperFlowResult`). `Flow` as a noun here is deliberate and allowed.
 - `AgenticRetriever(cfg)` is the reasoning-retrieval service in `quantmind.mind`; `retrieve(structure, question)` returns evidence values. It has one behavior — an LLM agent reasons over the structure — so it binds `RetrievalCfg` but does no cfg-type dispatch. Mechanical semantic search is `quantmind.library.search`, a different layer, not a strategy here.
 
 The current `quantmind.flows` package continues to contain public operations in this release. Renaming it to `operations` or adding a separate `pipelines` package is outside this page.

@@ -3,8 +3,8 @@
 ## Quick Summary
 
 - **Purpose**: Define how one exact PDF revision becomes a durable page-aware chunk set and a cited global summary.
-- **Read when**: Changing `paper_flow`, paper inputs, summarization limits, citation validation, or the end-to-end paper verifier.
-- **Status**: Implemented by `quantmind.flows.paper_flow` for PDF-backed arXiv, HTTP, and local inputs.
+- **Read when**: Changing the paper build (`PaperFlow(PaperFlowCfg).build` or the deprecated `paper_flow` wrapper), paper inputs, summarization limits, citation validation, or the end-to-end paper verifier.
+- **Status**: Implemented by the config-bound `quantmind.flows.PaperFlow` — a `PaperFlowCfg` selects this source-first shape — for PDF-backed arXiv, HTTP, and local inputs. `paper_flow` remains as a deprecated thin wrapper that delegates to it.
 - **Core rule**: Preserve and validate the source revision and chunk set before any model-generated summary is accepted.
 - **Canonical models**: [Paper source and artifact design](../knowledge/paper.md).
 
@@ -23,7 +23,7 @@
 
 ## Contract
 
-`paper_flow(input, *, cfg)` returns one validated `PaperFlowResult`:
+`PaperFlow(PaperFlowCfg(...)).build(input)` returns one validated `PaperFlowResult`. `PaperFlow` binds the immutable `PaperFlowCfg` once and its cfg **type** selects this source-first shape, so `batch_run(flow.build, inputs)` runs a batch under one setting. The deprecated `paper_flow(input, *, cfg)` wrapper emits a `DeprecationWarning` and delegates to the same build.
 
 ```text
 PaperFlowResult
@@ -61,7 +61,7 @@ The operation has a strict order:
 
 Steps 3, 5, 9, and 10 mint no IDs in the flow: the flow calls the knowledge-layer smart constructors `PaperSourceRevision.from_parsed`, `PaperChunkSet.from_parsed_chunks`, and `PaperGlobalSummary.from_draft`, which own every ID, content/producer hash, and citation resolution. The flow only fetches, parses, reads asset bytes, and maps those path-based artifacts into knowledge-native inputs. See [orchestration principles](../operations/orchestration.md).
 
-A summarization failure occurs after source and chunks exist in memory, but `paper_flow` returns no partial success value. Persistence is a separate explicit operation.
+A summarization failure occurs after source and chunks exist in memory, but the build returns no partial success value. Persistence is a separate explicit operation.
 
 ## Source Revision
 
@@ -152,4 +152,4 @@ It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical page
 - DOI-to-open-PDF resolution;
 - question answering over search results;
 - hidden or unbounded model calls;
-- implicit persistence from `paper_flow`.
+- implicit persistence from the paper build.
