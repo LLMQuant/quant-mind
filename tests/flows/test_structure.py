@@ -1,15 +1,17 @@
 """Offline tests for the config-bound ``PaperFlow.build`` structure shape."""
 
 import asyncio
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
 from agents import ModelSettings
+from agents.extensions.models.litellm_model import LitellmModel
 from openai import BadRequestError
 
-from quantmind.configs import PaperFlowCfg, PaperStructureCfg
+from quantmind.configs import PaperFlowCfg, PaperStructureCfg, atlascloud_model
 from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow, PaperStructureError
 from quantmind.flows.paper._structure import (
@@ -193,6 +195,35 @@ class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(agent.model, cfg.model)
         self.assertIs(agent.output_type, PaperStructureTreeDraft)
         self.assertIsNone(agent.model_settings.extra_body)
+
+    async def test_atlascloud_model_alias_uses_openai_compatible_adapter(
+        self,
+    ) -> None:
+        result = build_paper_result()
+        cfg = PaperStructureCfg(model=atlascloud_model())
+        run_mock = AsyncMock(return_value=_fixture_draft())
+        with patch.dict(
+            os.environ,
+            {"ATLASCLOUD_API_KEY": "atlas-test-key"},
+            clear=False,
+        ):
+            with patch(
+                "quantmind.flows.paper._structure.run_with_observability",
+                new=run_mock,
+            ):
+                draft = await _AgentsPaperStructureProvider().structure(
+                    signals=_empty_signals(),
+                    source=result.source_revision,
+                    cfg=cfg,
+                )
+
+        self.assertEqual(draft, _fixture_draft())
+        agent = run_mock.await_args.args[0]
+        self.assertIsInstance(agent.model, LitellmModel)
+        assert isinstance(agent.model, LitellmModel)
+        self.assertEqual(agent.model.model, "openai/qwen/qwen3.5-flash")
+        self.assertEqual(agent.model.base_url, "https://api.atlascloud.ai/v1")
+        self.assertEqual(agent.model.api_key, "atlas-test-key")
 
     async def test_falls_back_to_json_object_when_json_schema_is_rejected(
         self,

@@ -8,7 +8,16 @@ discriminated union. All cfg / input classes live here so that:
   - the magic-input resolver (PR5) has one introspection target.
 """
 
-from quantmind.configs.base import BaseFlowCfg, BaseInput
+from quantmind.configs.base import (
+    ATLASCLOUD_BASE_URL,
+    ATLASCLOUD_DEFAULT_CHAT_MODEL,
+    ATLASCLOUD_DEFAULT_REASONING_MODEL,
+    BaseFlowCfg,
+    BaseInput,
+    atlascloud_model,
+    is_atlascloud_model,
+    resolve_agent_model,
+)
 from quantmind.configs.earnings import EarningsFlowCfg, EarningsInput
 from quantmind.configs.news import NewsCollectionCfg, NewsWindow
 from quantmind.configs.paper import PaperFlowCfg, PaperInput
@@ -18,6 +27,9 @@ from quantmind.configs.structure import PaperStructureCfg
 __all__ = [
     "BaseFlowCfg",
     "BaseInput",
+    "ATLASCLOUD_BASE_URL",
+    "ATLASCLOUD_DEFAULT_CHAT_MODEL",
+    "ATLASCLOUD_DEFAULT_REASONING_MODEL",
     "EarningsFlowCfg",
     "EarningsInput",
     "NewsCollectionCfg",
@@ -26,4 +38,7 @@ __all__ = [
     "PaperInput",
     "PaperStructureCfg",
     "RetrievalCfg",
+    "atlascloud_model",
+    "is_atlascloud_model",
+    "resolve_agent_model",
 ]
