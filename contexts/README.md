@@ -14,7 +14,7 @@
 
 ## Routes
 
-This directory is the public repository context system for coding agents and maintainers. Start with the index that matches the work you are doing:
+This directory is the public repository context system for coding agents and maintainers. For a full page-by-page navigation index, see [`CONTEXT_MAP.md`](CONTEXT_MAP.md). Start with the index that matches the work you are doing:
 
 - [Develop QuantMind](dev/README.md) for architecture, contribution, testing, and verification guidance.
 - [Use QuantMind](usage/README.md) for public operations, examples, and usage documentation.

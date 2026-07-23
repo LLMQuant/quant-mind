@@ -1,10 +1,12 @@
 # QuantMind — Agent Instructions
 
-Guidance for coding agents contributing to this repository. Keep this file
-aligned with `CLAUDE.md` (same core rules); update both in the same change.
+Guidance for coding agents contributing to this repository. This file is the
+single source of repository instructions; `CLAUDE.md` imports it verbatim, so
+edit rules here, not there.
 
-Use [`contexts/README.md`](contexts/README.md) as the repository information
-entry point for either development or library-usage work.
+Start at [`contexts/CONTEXT_MAP.md`](contexts/CONTEXT_MAP.md), the navigation
+index for `contexts/`. [`contexts/README.md`](contexts/README.md) is the
+routing entry point for development or library-usage work.
 
 ## Progressive Context Loading
 
@@ -142,7 +144,7 @@ A new feature ships with a unit test **and** a focused example:
 For commit, pull-request, or component-implementation tasks, load the
 `quantmind-dev` skill and follow the matching reference:
 
-- `.agents/skills/quantmind-dev/SKILL.md` (this toolchain)
+- `.agents/skills/quantmind-dev/SKILL.md` (Codex and other AGENTS.md-based tools)
 - `.claude/skills/quantmind-dev/SKILL.md` (Claude Code)
 
 The two copies are identical; when changing the skill, update both in the

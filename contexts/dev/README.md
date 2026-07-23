@@ -21,6 +21,7 @@ Use this index when extending or maintaining the repository. Follow the linked r
 | Package responsibilities and coding rules | [`AGENTS.md`](../../AGENTS.md) or [`CLAUDE.md`](../../CLAUDE.md) |
 | Component-development workflow | [`quantmind-dev` component workflow](../../.agents/skills/quantmind-dev/references/develop-components.md) |
 | Issue and pull-request labels | [Repository label guidance](labels.md) |
+| Enforcement layers, hooks, rules, and Claude/Codex alignment | [Harness engineering](harness-engineering.md) |
 | Issue and pull-request body formatting | [GitHub writing style](github-writing.md) |
 | Public operation and source catalog | [`docs/README.md`](../../docs/README.md) |
 | Public operation naming | [Operation naming rules](../design/operations/naming.md) |

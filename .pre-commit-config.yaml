@@ -18,6 +18,11 @@ repos:
 
 -   repo: local
     hooks:
+    -   id: commit-msg-format
+        name: Enforce English Conventional Commit subject
+        entry: python3 scripts/hooks/commit_msg_check.py
+        language: system
+        stages: [commit-msg] # Runs against the commit message file.
     -   id: verify
         name: Run scripts/verify.sh (deterministic verification harness)
         entry: bash scripts/verify.sh

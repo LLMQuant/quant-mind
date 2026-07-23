@@ -3,6 +3,22 @@ import unittest
 from pathlib import Path
 
 
+def _guide_text(repo_root: Path, rel_path: str) -> str:
+    """Read a guide file, inlining any ``@path`` import lines.
+
+    Claude Code's memory-import syntax lets ``CLAUDE.md`` delegate to
+    ``AGENTS.md`` with a single ``@AGENTS.md`` line. Expanding it here checks a
+    guide by its effective content, so the single-source layout still satisfies
+    the literal-content assertions below.
+    """
+    text = (repo_root / rel_path).read_text(encoding="utf-8")
+
+    def _expand(match: "re.Match[str]") -> str:
+        return (repo_root / match.group(1)).read_text(encoding="utf-8")
+
+    return re.sub(r"(?m)^@([^\s`]+)\s*$", _expand, text)
+
+
 class TestContextEntryPoints(unittest.TestCase):
     def test_context_pages_support_progressive_disclosure(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -37,7 +53,7 @@ class TestContextEntryPoints(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[1]
 
         for guide_path in ("AGENTS.md", "CLAUDE.md"):
-            guide = (repo_root / guide_path).read_text(encoding="utf-8")
+            guide = _guide_text(repo_root, guide_path)
             with self.subTest(guide=guide_path):
                 self.assertIn("## Progressive Context Loading", guide)
                 self.assertIn("Read lines 1-80 first.", guide)
@@ -97,7 +113,7 @@ class TestContextEntryPoints(unittest.TestCase):
             with self.subTest(source=source_path):
                 self.assertIn(
                     f"]({target})",
-                    source.read_text(encoding="utf-8"),
+                    _guide_text(repo_root, source_path),
                     f"{source_path} must link to contexts/README.md",
                 )
                 self.assertTrue(
@@ -122,7 +138,7 @@ class TestContextEntryPoints(unittest.TestCase):
             with self.subTest(source=source_path):
                 self.assertIn(
                     f"]({target})",
-                    source.read_text(encoding="utf-8"),
+                    _guide_text(repo_root, source_path),
                     f"{source_path} must route to the canonical label guide",
                 )
                 self.assertTrue(
@@ -194,7 +210,7 @@ class TestContextEntryPoints(unittest.TestCase):
             with self.subTest(source=source_path):
                 self.assertIn(
                     f"]({target})",
-                    source.read_text(encoding="utf-8"),
+                    _guide_text(repo_root, source_path),
                     f"{source_path} must route to the GitHub writing guide",
                 )
                 self.assertTrue(
