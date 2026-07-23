@@ -31,3 +31,4 @@ docs/superpowers/
 .coverage
 htmlcov/
 coverage.xml
+.venv/

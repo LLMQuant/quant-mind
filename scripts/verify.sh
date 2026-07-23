@@ -35,7 +35,7 @@ echo "==> [4/5] lint-imports"
 lint-imports
 
 echo "==> [5/5] pytest --cov"
-pytest
+pytest --cov-fail-under=75
 
 echo
 echo "[OK] verify loop passed"
