@@ -48,7 +48,7 @@ LlamaIndex `Document`, node, retriever, index, and score-wrapper types remain pr
 
 ## Paper Flow Boundary
 
-[`paper_flow`](../flow/paper.md) uses `chunk_parsed_document()` as the deterministic split stage. It converts `ParsedChunk` values into canonical `PaperChunk` members only after an exact `PaperSourceRevision` exists.
+The [paper flow](../flow/paper.md) (`PaperFlow(PaperSemanticCfg).build`) uses `chunk_parsed_document()` as the deterministic split stage. It converts `ParsedChunk` values into canonical `PaperChunk` members only after an exact `PaperSourceRevision` exists.
 
 The conversion replaces parser paths with canonical source asset IDs and validates character spans against page evidence. The resulting `PaperChunkSet` is a durable, independently versioned artifact. `quantmind.rag` itself does not import or construct canonical paper models.
 

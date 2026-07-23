@@ -4,14 +4,19 @@ import io
 import json
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 from typing import Optional, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pydantic import BaseModel
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import (
+    NewsCollectionCfg,
+    NewsWindow,
+    PaperSemanticCfg,
+)
 from quantmind.configs.paper import ArxivIdentifier, PaperInput
-from quantmind.flows import paper_flow
+from quantmind.flows import collect_news
 from quantmind.magic import (
     ResolvedFlowConfig,
     _introspect_flow_signature,
@@ -37,28 +42,36 @@ class StripOptionalTests(unittest.TestCase):
         self.assertEqual(_strip_optional(anno), anno)
 
 
+def _news_window() -> NewsWindow:
+    """A minimal valid collection window for resolver fixtures."""
+    return NewsWindow(
+        source="pr-newswire",
+        start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        end=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+
 class IntrospectFlowSignatureTests(unittest.TestCase):
-    def test_paper_flow_returns_paper_input_and_cfg(self) -> None:
-        input_type, cfg_type = _introspect_flow_signature(paper_flow)
-        self.assertIs(cfg_type, PaperFlowCfg)
-        # PaperInput is the Annotated[Union[...]] alias; pass through.
-        self.assertEqual(input_type, PaperInput)
+    def test_collect_news_returns_window_input_and_cfg(self) -> None:
+        input_type, cfg_type = _introspect_flow_signature(collect_news)
+        self.assertIs(cfg_type, NewsCollectionCfg)
+        self.assertIs(input_type, NewsWindow)
 
     def test_resolves_postponed_annotations(self) -> None:
         async def postponed_flow(
             input: "ArxivIdentifier",
             *,
-            cfg: "PaperFlowCfg | None" = None,
+            cfg: "PaperSemanticCfg | None" = None,
         ) -> None:
             return None
 
         input_type, cfg_type = _introspect_flow_signature(postponed_flow)
 
         self.assertIs(input_type, ArxivIdentifier)
-        self.assertIs(cfg_type, PaperFlowCfg)
+        self.assertIs(cfg_type, PaperSemanticCfg)
 
     def test_missing_input_param_raises(self) -> None:
-        async def bad(*, cfg: PaperFlowCfg | None = None) -> None:
+        async def bad(*, cfg: PaperSemanticCfg | None = None) -> None:
             return None
 
         with self.assertRaises(TypeError):
@@ -81,11 +94,11 @@ class IntrospectFlowSignatureTests(unittest.TestCase):
 
 class PydanticSchemaStrTests(unittest.TestCase):
     def test_basemodel_renders_json_schema(self) -> None:
-        # PaperFlowCfg embeds ModelSettings which has callable fields;
+        # PaperSemanticCfg embeds ModelSettings which has callable fields;
         # the renderer falls back to a fields summary in that case.
-        out = _pydantic_schema_str(PaperFlowCfg)
+        out = _pydantic_schema_str(PaperSemanticCfg)
         parsed = json.loads(out)
-        self.assertEqual(parsed.get("title"), "PaperFlowCfg")
+        self.assertEqual(parsed.get("title"), "PaperSemanticCfg")
         self.assertIn("model", parsed["fields"])
 
     def test_basemodel_with_clean_schema(self) -> None:
@@ -126,9 +139,9 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
 
         # Build a fake resolver result whose final_output is a populated
         # ResolvedFlowConfig.
-        resolved = ResolvedFlowConfig[PaperInput, PaperFlowCfg](
-            input_obj=ArxivIdentifier(id="2604.12345"),
-            cfg_obj=PaperFlowCfg(model="gpt-test"),
+        resolved = ResolvedFlowConfig[NewsWindow, NewsCollectionCfg](
+            input_obj=_news_window(),
+            cfg_obj=NewsCollectionCfg(retain_raw_html=True),
         )
         fake_result = MagicMock()
         fake_result.final_output = resolved
@@ -140,14 +153,14 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             inp, cfg = await resolve_magic_input(
-                "fetch arxiv 2604.12345 about momentum",
-                target_flow=paper_flow,
+                "collect the last day of pr-newswire",
+                target_flow=collect_news,
             )
         self.assertIs(inp, resolved.input_obj)
         self.assertIs(cfg, resolved.cfg_obj)
         # Resolver agent was given a name derived from the flow.
-        self.assertEqual(captured["name"], "magic_resolver_paper_flow")
-        self.assertEqual(captured["model"], "gpt-4o-mini")
+        self.assertEqual(captured["name"], "magic_resolver_collect_news")
+        self.assertEqual(captured["model"], "gpt-5.6-luna")
 
     async def test_custom_resolver_instructions(self) -> None:
         captured: dict[str, object] = {}
@@ -156,9 +169,9 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
             captured.update(kwargs)
             return MagicMock()
 
-        resolved = ResolvedFlowConfig[PaperInput, PaperFlowCfg](
-            input_obj=ArxivIdentifier(id="x"),
-            cfg_obj=PaperFlowCfg(),
+        resolved = ResolvedFlowConfig[NewsWindow, NewsCollectionCfg](
+            input_obj=_news_window(),
+            cfg_obj=NewsCollectionCfg(),
         )
         fake_result = MagicMock()
         fake_result.final_output = resolved
@@ -172,12 +185,12 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
         ):
             await resolve_magic_input(
                 "x",
-                target_flow=paper_flow,
+                target_flow=collect_news,
                 resolver_instructions=template,
             )
         instructions = captured["instructions"]
         assert isinstance(instructions, str)
-        self.assertTrue(instructions.startswith("FLOW=paper_flow"))
+        self.assertTrue(instructions.startswith("FLOW=collect_news"))
         self.assertIn("INPUT=", instructions)
         self.assertIn("CFG=", instructions)
 
@@ -188,9 +201,9 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
             captured.update(kwargs)
             return MagicMock()
 
-        resolved = ResolvedFlowConfig[PaperInput, PaperFlowCfg](
-            input_obj=ArxivIdentifier(id="x"),
-            cfg_obj=PaperFlowCfg(),
+        resolved = ResolvedFlowConfig[NewsWindow, NewsCollectionCfg](
+            input_obj=_news_window(),
+            cfg_obj=NewsCollectionCfg(),
         )
         fake_result = MagicMock()
         fake_result.final_output = resolved
@@ -203,17 +216,17 @@ class ResolveMagicInputTests(unittest.IsolatedAsyncioTestCase):
         ):
             await resolve_magic_input(
                 "x",
-                target_flow=paper_flow,
-                resolver_model="claude-3-5-sonnet",
+                target_flow=collect_news,
+                resolver_model="custom-resolver-model",
             )
-        self.assertEqual(captured["model"], "claude-3-5-sonnet")
+        self.assertEqual(captured["model"], "custom-resolver-model")
 
 
 class PreviewResolveTests(unittest.IsolatedAsyncioTestCase):
     async def test_prints_and_returns_tuple(self) -> None:
-        resolved = ResolvedFlowConfig[PaperInput, PaperFlowCfg](
-            input_obj=ArxivIdentifier(id="2604.12345"),
-            cfg_obj=PaperFlowCfg(),
+        resolved = ResolvedFlowConfig[NewsWindow, NewsCollectionCfg](
+            input_obj=_news_window(),
+            cfg_obj=NewsCollectionCfg(),
         )
         fake_result = MagicMock()
         fake_result.final_output = resolved
@@ -226,10 +239,10 @@ class PreviewResolveTests(unittest.IsolatedAsyncioTestCase):
         ):
             buf = io.StringIO()
             with redirect_stdout(buf):
-                inp, cfg = await preview_resolve("x", target_flow=paper_flow)
+                inp, cfg = await preview_resolve("x", target_flow=collect_news)
         self.assertIs(inp, resolved.input_obj)
         self.assertIs(cfg, resolved.cfg_obj)
         out = buf.getvalue()
         self.assertIn("input_obj:", out)
         self.assertIn("cfg_obj:", out)
-        self.assertIn("2604.12345", out)
+        self.assertIn("pr-newswire", out)

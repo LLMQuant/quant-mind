@@ -12,8 +12,8 @@ from quantmind.knowledge import (
     Citation,
     PaperArtifact,
     PaperChunkSet,
-    PaperFlowResult,
     PaperGlobalSummary,
+    PaperSemanticResult,
     PaperSourceRevision,
     PaperStructureTree,
     ResolvedPaperArtifact,
@@ -168,7 +168,7 @@ class LocalKnowledgeLibrary:
             )
             self._index = None
 
-    async def put_paper(self, result: PaperFlowResult) -> None:
+    async def put_paper(self, result: PaperSemanticResult) -> None:
         """Persist one source-first paper result and all required projections.
 
         Embeddings are prepared before the SQLite transaction. A provider
@@ -286,7 +286,7 @@ class LocalKnowledgeLibrary:
         *,
         chunk_set_id: UUID | None = None,
         summary_id: UUID | None = None,
-    ) -> PaperFlowResult:
+    ) -> PaperSemanticResult:
         """Return one unambiguous source/chunk-set/summary combination."""
         async with self._lock:
             store = self._store

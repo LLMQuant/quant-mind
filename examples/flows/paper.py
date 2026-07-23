@@ -7,9 +7,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.configs.paper import ArxivIdentifier
-from quantmind.flows import paper_flow
+from quantmind.flows import PaperFlow
 from quantmind.knowledge import (
     PaperArtifactKind,
     PaperChunk,
@@ -62,13 +62,13 @@ async def main() -> None:
 
     workspace = Path(".quantmind")
     workspace.mkdir(exist_ok=True)
-    result = await paper_flow(
-        ArxivIdentifier(id=_ARXIV_ID),
-        cfg=PaperFlowCfg(
-            model="gpt-4o-mini",
+    flow = PaperFlow(
+        PaperSemanticCfg(
+            model="gpt-5.6-luna",
             output_dir=str(workspace / "attention-assets"),
-        ),
+        )
     )
+    result = await flow.build(ArxivIdentifier(id=_ARXIV_ID))
 
     database = workspace / "library.db"
     library = await LocalKnowledgeLibrary.open(

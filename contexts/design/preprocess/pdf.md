@@ -30,7 +30,7 @@ The caller chooses an artifact directory. When supplied, parsing renders one PNG
 Preprocessing ends after producing `ParsedDocument`. It does not chunk, index, rank, or answer a query.
 
 - [`quantmind.rag`](../rag/document.md) converts the parsed value into LlamaIndex-backed chunks and page-aware retrieval evidence.
-- [`paper_flow`](../flow/paper.md) uses the preserved source pages to build an exact source revision and a canonical chunk set before generating a cited summary.
+- The [paper flow](../flow/paper.md) (`PaperFlow(PaperSemanticCfg).build`) uses the preserved source pages to build an exact source revision and a canonical chunk set before generating a cited summary.
 - `extract_outline_signals()` consumes the same ordered pages to emit deterministic table-of-contents, heading, and printed-page-offset hints for structure-tree construction.
 
 Flattened Markdown remains a compatibility view produced from the preserved pages. It is not the primary parsing result.

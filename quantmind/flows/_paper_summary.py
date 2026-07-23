@@ -24,7 +24,7 @@ from typing import Any, Literal, Protocol
 from agents import Agent, ModelSettings
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from quantmind.configs import PaperFlowCfg
+from quantmind.configs import PaperSemanticCfg
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import PaperChunkSet, PaperSourceRevision
 
@@ -141,7 +141,7 @@ class _PaperSummaryProvider(Protocol):
         source: PaperSourceRevision,
         chunk_set: PaperChunkSet,
         *,
-        cfg: PaperFlowCfg,
+        cfg: PaperSemanticCfg,
     ) -> PaperSummaryDraft:
         """Create one bounded draft from the selected chunk set."""
         ...
@@ -241,7 +241,7 @@ def _reduce_payload(
     )
 
 
-def _summary_instructions(cfg: PaperFlowCfg) -> str:
+def _summary_instructions(cfg: PaperSemanticCfg) -> str:
     instructions = _SUMMARY_INSTRUCTIONS
     if cfg.summary_instructions:
         instructions = (
@@ -251,7 +251,7 @@ def _summary_instructions(cfg: PaperFlowCfg) -> str:
     return instructions
 
 
-def _summary_instructions_hash(cfg: PaperFlowCfg) -> str:
+def _summary_instructions_hash(cfg: PaperSemanticCfg) -> str:
     payload = json.dumps(
         {
             "orchestration": _ORCHESTRATION_VERSION,
@@ -267,7 +267,7 @@ def _summary_instructions_hash(cfg: PaperFlowCfg) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _summary_model_settings(cfg: PaperFlowCfg) -> ModelSettings:
+def _summary_model_settings(cfg: PaperSemanticCfg) -> ModelSettings:
     settings = cfg.model_settings or ModelSettings()
     configured = settings.max_tokens or cfg.max_summary_output_tokens
     return replace(
@@ -284,7 +284,7 @@ class _AgentsPaperSummaryProvider:
         source: PaperSourceRevision,
         chunk_set: PaperChunkSet,
         *,
-        cfg: PaperFlowCfg,
+        cfg: PaperSemanticCfg,
     ) -> PaperSummaryDraft:
         groups = _chunk_groups(
             len(chunk_set.chunks), cfg.summary_research_group_size

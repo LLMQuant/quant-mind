@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       news: ${{ steps.filter.outputs.news }}
-      paper_flow: ${{ steps.filter.outputs.paper_flow }}
+      paper_semantic: ${{ steps.filter.outputs.paper_semantic }}
       structure: ${{ steps.filter.outputs.structure }}
 
     steps:
@@ -73,12 +73,12 @@ jobs:
               - 'quantmind/preprocess/format/html.py'
               - 'quantmind/preprocess/fetch/**'
               - 'pyproject.toml'
-            paper_flow:
+            paper_semantic:
               - '.github/workflows/e2e.yml'
               - 'scripts/verify_pdf_rag_e2e.py'
               - 'quantmind/configs/paper.py'
               - 'quantmind/flows/_paper_summary.py'
-              - 'quantmind/flows/paper.py'
+              - 'quantmind/flows/paper/**'
               - 'quantmind/knowledge/paper.py'
               - 'quantmind/library/**'
               - 'quantmind/preprocess/fetch/arxiv.py'
@@ -132,7 +132,7 @@ jobs:
 
   paper-flow:
     needs: changes
-    if: github.event_name != 'pull_request' || needs.changes.outputs.paper_flow == 'true'
+    if: github.event_name != 'pull_request' || needs.changes.outputs.paper_semantic == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

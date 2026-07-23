@@ -92,7 +92,7 @@ Body source formatting follows the [GitHub writing style](github-writing.md), in
 | Context framework in [#101](https://github.com/LLMQuant/quant-mind/issues/101) | `type: feature`, `area: contexts` | It added a new routing capability. |
 | CI/E2E consolidation in [#102](https://github.com/LLMQuant/quant-mind/issues/102) | `type: refactor`, `area: harness`, `impact: live-network` | It restructures repository verification, including live smoke tests. |
 | This label-system issue and its PR | `type: docs`, `area: contexts`, `area: harness` | The main result is context guidance routed through contributor controls. |
-| Fix documented `paper_flow` behavior | `type: bug`, `area: flows` | An existing public operation is broken. |
+| Fix documented `PaperFlow.build` behavior | `type: bug`, `area: flows` | An existing public operation is broken. |
 | Update only the news design document | `type: docs`, `area: preprocess` | The document belongs to the news preprocessing surface, not contexts. |
 | Add a public news source | `type: feature`, `area: preprocess`, `impact: live-network` | It adds acquisition behavior backed by a real external source. |
 

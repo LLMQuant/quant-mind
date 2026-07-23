@@ -54,8 +54,12 @@ PaperInput = Annotated[
 ]
 
 
-class PaperFlowCfg(BaseFlowCfg):
-    """Chunking and summarization controls for ``paper_flow``.
+class PaperSemanticCfg(BaseFlowCfg):
+    """Chunking and summarization controls for the semantic paper build.
+
+    Selects the source-first chunk/summary shape when bound to
+    ``PaperFlow``: ``PaperFlow(PaperSemanticCfg(...)).build(input)`` returns a
+    ``PaperSemanticResult``.
 
     Summarization is a deterministic map-reduce: code tiles the chunk set into
     ``summary_research_group_size`` groups (so coverage is guaranteed by
@@ -63,9 +67,14 @@ class PaperFlowCfg(BaseFlowCfg):
     ``summary_concurrency`` parallelism, then runs one reducer. Per-agent output
     is bounded by ``max_summary_output_tokens`` through ``ModelSettings``; there
     is no hand-rolled token accountant.
+
+    This cfg carries no embedding setting: the build produces only source, chunk,
+    and summary text. Embeddings are minted downstream at persistence time, using
+    the ``embedding_model`` bound at ``LocalKnowledgeLibrary.open(...)`` (the
+    examples use ``text-embedding-3-small``).
     """
 
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-5.6-luna"
     max_turns: int = Field(default=16, ge=1)
     chunk_size: int = Field(default=512, gt=0)
     chunk_overlap: int = Field(default=64, ge=0)
@@ -78,7 +87,7 @@ class PaperFlowCfg(BaseFlowCfg):
     min_summary_pages: int = Field(default=2, ge=1)
 
     @model_validator(mode="after")
-    def _validate_paper_bounds(self) -> "PaperFlowCfg":
+    def _validate_paper_bounds(self) -> "PaperSemanticCfg":
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         if self.min_summary_pages > self.min_summary_citations:

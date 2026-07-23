@@ -51,10 +51,10 @@ class PackageExportTests(unittest.TestCase):
         from quantmind.configs import (
             EarningsFlowCfg,
             NewsCollectionCfg,
-            PaperFlowCfg,
+            PaperSemanticCfg,
         )
 
-        self.assertTrue(issubclass(PaperFlowCfg, BaseFlowCfgExport))
+        self.assertTrue(issubclass(PaperSemanticCfg, BaseFlowCfgExport))
         self.assertTrue(issubclass(NewsCollectionCfg, BaseFlowCfgExport))
         self.assertTrue(issubclass(EarningsFlowCfg, BaseFlowCfgExport))
         self.assertEqual(BaseInputExport.__name__, "BaseInput")

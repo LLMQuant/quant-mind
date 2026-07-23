@@ -20,11 +20,11 @@
 
 ## Motivation
 
-Every flow LLM call returns a `RunResult` whose `context_wrapper.usage` already carries input/output/total tokens and a `requests` count, but the flow returns only its domain artifact (`PaperStructureTree`, `PaperFlowResult`) and drops the `RunResult`. So today there is no answer to a basic optimization question: for one `PaperFlow(cfg).build(input)` or one `paper_flow(input)`, how many tokens did it burn, how long did it take, and how many model calls did it make.
+Every flow LLM call returns a `RunResult` whose `context_wrapper.usage` already carries input/output/total tokens and a `requests` count, but the flow returns only its domain artifact (`PaperStructureTree`, `PaperSemanticResult`) and drops the `RunResult`. So today there is no answer to a basic optimization question: for one `PaperFlow(cfg).build(input)`, how many tokens did it burn, how long did it take, and how many model calls did it make.
 
 Two facts make a naive `return result.context_wrapper.usage` insufficient:
 
-- **One flow run is many SDK runs.** `paper_flow`'s summary fans out one research agent per chunk group with `asyncio.gather`, then runs one reducer — `N + 1` separate `Runner.run` calls. A structure build that hits the `json_schema` → `json_object` fallback is two calls. The usage of "one flow run" is a sum across several runs, so it must be aggregated, not read from a single result.
+- **One flow run is many SDK runs.** The semantic build's summary fans out one research agent per chunk group with `asyncio.gather`, then runs one reducer — `N + 1` separate `Runner.run` calls. A structure build that hits the `json_schema` → `json_object` fallback is two calls. The usage of "one flow run" is a sum across several runs, so it must be aggregated, not read from a single result.
 - **Concurrency makes a summed duration lie.** Those `N` researchers run in parallel; summing their wall times over-reports latency several-fold. Real end-to-end time and summed busy time are different numbers, and optimization needs both.
 
 Cost is explicitly out of scope: this reports tokens, time, and steps only. Pricing changes per provider and per week; a caller who wants dollars multiplies tokens by their own rate table. See [Non-Enforcement](#layer-boundary-and-non-enforcement).
