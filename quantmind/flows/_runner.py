@@ -12,6 +12,7 @@ from typing import Any
 from agents import Agent, RunConfig, RunHooks, Runner
 
 from quantmind.configs import BaseFlowCfg
+from quantmind.flows._usage import record_usage
 
 
 async def run_with_observability(
@@ -55,6 +56,9 @@ async def run_with_observability(
         hooks=hooks,
         max_turns=cfg.max_turns,
     )
+    # No-op unless a `usage_scope` is active (e.g. inside `batch_run`);
+    # keeps every existing caller's behaviour unchanged.
+    record_usage(result.context_wrapper.usage)
     _archive_run_artifacts(cfg, memory, result)
     return result.final_output
 

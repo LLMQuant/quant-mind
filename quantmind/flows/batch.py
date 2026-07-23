@@ -13,9 +13,14 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, TypeVar
 
 from quantmind.configs import BaseFlowCfg, BaseInput
+from quantmind.flows._usage import PriceRate, usage_scope
 
 InputT = TypeVar("InputT", bound=BaseInput)
 OutputT = TypeVar("OutputT")
+
+
+class BudgetExceededError(Exception):
+    """Raised for inputs skipped after a batch token / cost budget tripped."""
 
 
 @dataclass(slots=True)
@@ -56,6 +61,7 @@ async def batch_run(
     concurrency: int = 4,
     on_error: Literal["raise", "skip"] = "skip",
     on_progress: Callable[[int, int], None] | None = None,
+    prices: dict[str, PriceRate] | None = None,
     **flow_kwargs: Any,
 ) -> BatchResult[OutputT]:
     """Run ``flow_fn`` over ``inputs`` with bounded concurrency.
@@ -75,19 +81,28 @@ async def batch_run(
             completion (success or failure). Must be cheap and
             non-blocking — callbacks are invoked synchronously inside
             the worker loop.
+        prices: Optional ``{model: PriceRate}`` table. When it covers
+            ``cfg.model``, ``cost_estimate_usd`` is filled and the
+            ``max_total_cost_usd`` guardrail is enforced; otherwise cost
+            stays ``0.0`` and only the token guardrail applies. Pricing is
+            caller-supplied so the library never ships model prices.
         **flow_kwargs: Forwarded verbatim to ``flow_fn``. ``memory=`` is
             **forbidden** in MVP; passing it raises ``ValueError``.
 
     Returns:
         ``BatchResult`` with ``results`` parallel to ``inputs`` (None for
-        failures) and ``errors`` sorted by index.
+        failures) and ``errors`` sorted by index. ``tokens_total`` holds
+        aggregate SDK usage (empty when nothing was recorded) and
+        ``cost_estimate_usd`` the priced total.
 
     Raises:
         ValueError: If ``memory=`` is passed via ``flow_kwargs``, or if
             ``concurrency < 1``.
         Exception: Re-raised when ``on_error="raise"`` and any input
-            fails. The exception is the first one raised by a worker;
-            other workers may already be cancelled when this surfaces.
+            fails (including a ``BudgetExceededError`` for an input skipped
+            after ``cfg.max_total_input_tokens`` / ``max_total_cost_usd``
+            tripped). Other workers may already be cancelled when this
+            surfaces.
     """
     if "memory" in flow_kwargs:
         raise ValueError(
@@ -105,11 +120,52 @@ async def batch_run(
     started = time.monotonic()
     done_counter = 0
 
+    price = prices.get(cfg.model) if prices is not None and cfg else None
+    max_tokens = cfg.max_total_input_tokens if cfg else None
+    max_cost = cfg.max_total_cost_usd if cfg else None
+    # asyncio is single-threaded; `.add` and these reads have no `await`
+    # between them, so this shared running total needs no lock.
+    running = {
+        "requests": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+    running_cost = 0.0
+    budget_tripped = False
+
     async def run_one(i: int, inp: InputT) -> None:
-        nonlocal done_counter
+        nonlocal done_counter, running_cost, budget_tripped
         async with sem:
             try:
-                results[i] = await flow_fn(inp, cfg=cfg, **flow_kwargs)
+                # ponytail: post-hoc gate — under concurrency we can't
+                # pre-check spend before it happens; we stop *launching*
+                # new work once the budget trips. Upgrade path: pre-flight
+                # token estimate per input if strict caps matter.
+                if budget_tripped:
+                    raise BudgetExceededError(
+                        f"input {i} skipped: batch budget already exceeded"
+                    )
+                with usage_scope() as acc:
+                    results[i] = await flow_fn(inp, cfg=cfg, **flow_kwargs)
+                summary = acc.summary()
+                running["requests"] += summary.requests
+                running["input_tokens"] += summary.input_tokens
+                running["output_tokens"] += summary.output_tokens
+                running["total_tokens"] += summary.total_tokens
+                if price is not None:
+                    running_cost = price.cost(
+                        running["input_tokens"], running["output_tokens"]
+                    )
+                if (
+                    max_tokens is not None
+                    and running["input_tokens"] > max_tokens
+                ) or (
+                    max_cost is not None
+                    and price is not None
+                    and running_cost > max_cost
+                ):
+                    budget_tripped = True
             except Exception as exc:
                 errors.append((i, exc))
                 if on_error == "raise":
@@ -133,4 +189,6 @@ async def batch_run(
         results=results,
         errors=sorted(errors, key=lambda t: t[0]),
         duration_seconds=time.monotonic() - started,
+        tokens_total=dict(running) if any(running.values()) else {},
+        cost_estimate_usd=running_cost,
     )

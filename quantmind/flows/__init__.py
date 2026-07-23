@@ -12,15 +12,19 @@ Deterministic operations such as ``collect_news`` return source-faithful
 - ``paper_flow`` is a thin compatibility function for the semantic
   chunk/summary shape (``PaperFlowResult``).
 - ``batch_run`` runs any flow over a list of inputs with bounded
-  concurrency and aggregated results.
-- ``BatchResult`` is the shape returned by ``batch_run``.
+  concurrency and aggregated results, reporting aggregate token usage
+  (and optionally priced cost) and enforcing the ``cfg`` budget guardrails.
+- ``BatchResult`` is the shape returned by ``batch_run``; ``UsageSummary``
+  and ``PriceRate`` describe its usage/cost fields, and
+  ``BudgetExceededError`` marks inputs skipped after a budget tripped.
 - ``UnsupportedContentTypeError`` is raised when a paper pipeline does not
   resolve a page-aware PDF.
 - ``PaperStructureError`` is raised when structure building exceeds its
   runtime boundary.
 """
 
-from quantmind.flows.batch import BatchResult, batch_run
+from quantmind.flows._usage import PriceRate, UsageSummary
+from quantmind.flows.batch import BatchResult, BudgetExceededError, batch_run
 from quantmind.flows.news import collect_news
 from quantmind.flows.paper import (
     PaperFlow,
@@ -32,10 +36,13 @@ from quantmind.knowledge import PaperCitationValidationError
 
 __all__ = [
     "BatchResult",
+    "BudgetExceededError",
     "PaperCitationValidationError",
     "PaperFlow",
     "PaperStructureError",
+    "PriceRate",
     "UnsupportedContentTypeError",
+    "UsageSummary",
     "batch_run",
     "collect_news",
     "paper_flow",
