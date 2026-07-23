@@ -19,144 +19,108 @@
   </a>
 </p>
 <p align="center">
-  <a href="#-why-quantmind">Why QuantMind</a> •
-  <a href="#system-architecture">Architecture</a> •
+  <a href="#-knowledge-engineering">Knowledge Engineering</a> •
+  <a href="#-the-vision">The Vision</a> •
   <a href="#-quick-start">Quick Start</a> •
-  <a href="#-usage-examples">Usage</a> •
+  <a href="#-evaluation-in-design">Evaluation</a> •
+  <a href="#-in-production-llmquant-data">In Production</a> •
   <a href="#%EF%B8%8F-roadmap">Roadmap</a> •
-  <a href="#the-vision-an-intelligent-research-agent">Vision</a> •
   <a href="#-contributing">Contributing</a>
 </p>
 
----
 
-**QuantMind** is an intelligent knowledge extraction and retrieval framework for quantitative finance. It transforms unstructured financial content—papers, news, blogs, reports—into a queryable knowledge base, enabling AI-powered research at scale.
+QuantMind is an information processor for quantitative finance: it refines raw financial information — papers, news, filings — into structured financial knowledge that downstream retrieval and reasoning can trust. Every piece of knowledge is typed, keeps its citation, and knows its timestamp, so it persists and time-queries standalone.
+
+The people who build these refinement flows are increasingly agents — coding agents, with humans behind them. So the repository is designed agent-oriented: you open the checkout, describe the pipeline you want, and an agent builds it here against the repo's contracts, skills, and deterministic verification. It is also a perfectly good importable Python library.
 
 ### 📰 News
 | 🗞️ News        | 📝 Description                                                                 |
 |----------------|-------------------------------------------------------------------------------|
+| 🛠️ 2026-07 | Rebuilding the repo **agent-native** — contexts, skills, hooks — so a coding agent can do QuantMind-quality work inside the checkout. |
 | 🎉 Accepted at NeurIPS 2025 Workshop | Our paper **[Quant-Mind](#)** has been accepted to the **[NeurIPS 2025 GenAI in Finance Workshop](https://sites.google.com/view/neurips-25-gen-ai-in-finance/home)** !🚀 |
 | 📢 First Release on GitHub  | **Quant-Mind** is now live on GitHub — please check it out and join us! 🤗 |
 
-### 🧐 Overview
 
-QuantMind is a next-generation AI platform that ingests, processes, and structures **every** new piece of quantitative-finance research, including papers, news, blogs, and SEC filings into a **semantic knowledge graph**. Institutional investors, hedge funds, and research teams can now explore the frontier of factor strategies, risk models, and market insights in **seconds**, unlocking alpha that would otherwise remain buried.
+### 🧩 Knowledge Engineering
 
-### ✨ Why QuantMind?
+**Any source → typed knowledge.**
 
-The financial research landscape is overwhelming. Every day, hundreds of papers, articles, and reports are published.
+<p align="center"><img src="assets/v1-context-engineering.png" width="920" alt="any source through preprocess and flows into typed knowledge and applications"></p>
 
-#### 🌐 The Opportunity
+*The target surface — shipping today: `PaperFlow` · `collect_news`; see Roadmap.*
 
-- **Information Overload**: 500 new research papers & reports published daily. Manual review takes weeks—costly, error-prone, and non-scalable
-- **Massive Market**: Financial data & analytics market ≫ expected to grow to US$961.89 billion by 2032, with a compound annual growth rate of 13.5%. Tens of thousands of quant teams & asset managers hungry for speed
-- **High ROI**: 1% improvement in research efficiency can translate to millions saved or earned in trading performance
+- **Deterministic preprocess** — `fetch` / parse / `format` + `clean` produce source-faithful values with no model in the loop, so provenance is exact and replayable.
+- **Config-driven operations** — `PaperFlow(cfg).build(input)` binds an immutable build config once and applies it per input; `collect_news` collects a replayable source window; `batch_run` fans any operation across a list of inputs. You never write `asyncio.gather` boilerplate.
+- **Typed knowledge shapes** — a `Paper` structure tree for whole documents, and flat cards for `News` / `Earnings` / `Factor` / `Thesis`. Every artifact is self-contained: it carries its own text, an `as_of` timestamp, and a light source ref, so it persists and time-queries standalone.
+- **Retrieval over that knowledge** — `rag/` (chunking + BM25 / similarity), `library/` (local persistence + meaning-based search), and `mind/` (agentic, reasoning-based retrieval). Together they serve RAG and Agentic RAG, deep research, and data-MCP serving.
 
----
+This is the substance shipped as the NeurIPS 2025 GenAI-in-Finance workshop paper (**arXiv:2509.21507**). The always-current statement lives in [`contexts/design/positioning.md`](contexts/design/positioning.md).
 
-#### 💡 **QuantMind** solves this by
+### 🧠 The Vision
 
-- 🔍 **Extracting** structured knowledge from any source (PDFs, web pages, APIs)
-- 🧠 **Understanding** content with domain-specific LLMs fine-tuned for finance
-- 💾 **Storing** information in a semantic knowledge graph
-- 🚀 **Retrieving** insights through natural language queries
+**Harness engineering — any agent → domain specialist.**
 
----
+<p align="center"><img src="assets/v2-harness-engineering.png" width="920" alt="the quant-mind harness: context layer, code layer, workspace, deterministic verify, deliverables"></p>
 
-### System Architecture
+> **Don't import it. Open it.**
 
-![quantmind-outline](assets/quantmind-stage-outline.png)
+The repository itself is the product surface — we call this **harness engineering**. Its `AGENTS.md` / `CLAUDE.md` contracts, progressive-disclosure `contexts/`, portable skills, and Claude + Codex hooks, all gated by a deterministic verify, upgrade a general coding agent into one that reliably does QuantMind-quality work. The bet: **a weak model in a good harness beats a strong model running bare.**
 
-QuantMind is built on a decoupled, two-stage architecture. This design separates the concerns of data ingestion from intelligent retrieval, ensuring both robustness and flexibility.
+- **Repo-level contracts** — `AGENTS.md` / `CLAUDE.md` state the always-on rules once, in one source, for every agent that opens the repo.
+- **Progressive-disclosure `contexts/`** — agent-facing pages with a Quick Summary / Contents preview, so an agent loads only the one page a task needs.
+- **Portable skills** — `quantmind-dev` ships today (contributor setup / commit / PR / component workflow), mirrored for Claude and Codex.
+- **Claude + Codex hooks** — shared hook scripts give both agents identical hard guarantees without maintaining two copies of a rule.
+- **Deterministic verify** — `scripts/verify.sh` runs lint + types + import boundaries + tests, fast-failing in a fixed order; CI runs the exact same script.
 
-#### **Stage 1: Knowledge Extraction**
+See [`contexts/dev/harness-engineering.md`](contexts/dev/harness-engineering.md) for the enforcement mechanics.
 
-This layer is responsible for collecting, parsing, and structuring raw information into standardized knowledge units.
-
-```text
-Source APIs (arXiv, News, Blogs) → Intelligent Parser → Workflow/Agent → Structured Knowledge Base
-```
-
-- **Source**: Connects to various sources (academic APIs, news feeds, financial blogs, perplexity search source) to pull content
-- **Parser**: Extracts text, tables, and figures from PDFs, HTML, and other formats
-- **Tagger**: Automatically categorizes content into research areas and topics
-- **Workflow/Agent**: Orchestrates the extraction pipeline with quality control and deduplication
-
-#### **Stage 2: Intelligent Retrieval**
-
-This layer transforms structured knowledge into actionable insights through various retrieval mechanisms.
-
-```
-Knowledge Base → Embeddings → Solution Scenarios (DeepResearch, RAG, Data MCP, ...)
-```
-
-- **Embedding Generation**: Converts knowledge units into high-dimensional vectors for semantic search
-
-- Solution Scenarios: Multiple retrieval patterns including:
-
-  - **DeepResearch**: Complex multi-hop reasoning across documents
-  - **RAG**: Retrieval-augmented generation for Q&A
-  - **Data MCP**: Structured data access protocols
-  - Custom retrieval patterns based on use case
-
----
 
 ### 🚀 Quick Start
 
-We use [uv](https://github.com/astral-sh/uv) for fast and reliable Python package management.
+#### The agent path (recommended)
 
-**Prerequisites:**
+QuantMind is meant to be opened, not imported. Point a coding agent at the checkout and describe the pipeline you want:
 
-- Python 3.8+
-- Git
+```bash
+git clone https://github.com/LLMQuant/quant-mind.git
+cd quant-mind && claude      # or: codex
+```
 
-**Installation:**
+Then, in the agent session:
 
-1. **Install uv (if not already installed):**
+> "Build me a source-first paper artifact for arXiv 1706.03762, then persist it and search the summary."
 
-   ```bash
-   # On macOS and Linux
-   curl -LsSf https://astral.sh/uv/install.sh | sh
+The agent reads the repo's contracts (`AGENTS.md`), loads the relevant `contexts/` pages, writes the pipeline, and runs `scripts/verify.sh` before it hands the change back.
 
-   # On Windows
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+#### The library path
 
-   # Or using pip
-   pip install uv
-   ```
+QuantMind is still a normal Python package. We use [uv](https://github.com/astral-sh/uv) for package management.
 
-2. **Clone the repository:**
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e .
+```
 
-   ```bash
-   git clone https://github.com/LLMQuant/quant-mind.git
-   cd quant-mind
-   ```
+`PaperFlow` refines one arXiv PDF into a self-contained paper artifact. The cfg **type** selects the knowledge shape (`PaperStructureCfg` → `PaperStructureTree`, `PaperSemanticCfg` → `PaperSemanticResult`). Bind a `PaperStructureCfg` to build a source-native **structure tree** — a hierarchy of page-cited nodes:
 
-3. **Create and activate virtual environment:**
+```python
+import asyncio
 
-   ```bash
-   # Create a virtual environment
-   uv venv
+from quantmind.configs import PaperStructureCfg
+from quantmind.configs.paper import ArxivIdentifier
+from quantmind.flows import PaperFlow
 
-   # Activate it
-   # On macOS/Linux:
-   source .venv/bin/activate
 
-   # On Windows:
-   .venv\Scripts\activate
-   ```
+async def main() -> None:
+    flow = PaperFlow(PaperStructureCfg(model="gpt-5.6-luna"))
+    tree = await flow.build(ArxivIdentifier(id="1706.03762v7"))
+    print(tree.id, len(tree.nodes))
 
-4. **Install dependencies:**
 
-   ```bash
-   uv pip install -e .
-   ```
+asyncio.run(main())
+```
 
-### 📚 Usage Examples
-
-Component-specific guides and architecture notes live under [`docs/`](docs/).
-
-#### Build an exact paper source, chunks, and cited summary
+Prefer the **semantic** shape — a page-aware chunk set plus one cited global summary you can embed and retrieve over? Bind a `PaperSemanticCfg` instead — same class, different cfg:
 
 ```python
 import asyncio
@@ -167,19 +131,14 @@ from quantmind.flows import PaperFlow
 
 
 async def main() -> None:
-    result = await PaperFlow(
-        PaperSemanticCfg(model="gpt-5.6-luna"),
-    ).build(ArxivIdentifier(id="1706.03762v7"))
+    flow = PaperFlow(PaperSemanticCfg(model="gpt-5.6-luna", chunk_size=512))
+    result = await flow.build(ArxivIdentifier(id="1706.03762v7"))
     print(result.global_summary.summary)
     print(result.source_revision.id, result.chunk_set.id)
 
 
 asyncio.run(main())
 ```
-
-`PaperFlow` binds an immutable `PaperSemanticCfg` once; the cfg **type** selects
-the shape (`PaperStructureCfg` → `PaperStructureTree`, `PaperSemanticCfg` →
-`PaperSemanticResult`).
 
 #### Fan out a batch with `batch_run`
 
@@ -236,70 +195,53 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Paper Flow V1 is source-first: code preserves the exact PDF revision and
-page-aware chunks before accepting a bounded, cited model summary. See the
-[complete persist/reopen/search example](examples/flows/paper.py) and
-[design contract](contexts/design/flow/paper.md).
+More examples live under [`examples/`](examples/); design contracts live under [`contexts/design/`](contexts/design/).
 
----
+### 🔬 Evaluation (In Design)
+
+> [!NOTE]
+> Evaluation is in the **design phase** — no results are claimed yet. Our framing follows Anthropic's [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents).
+
+**quantmind-bench** measures the harness bet directly. Following the SWE-bench model, it runs **paired trials on the same model and the same task set**: once against a bare checkout, once against the QuantMind repo mounted with its contracts, contexts, skills, and hooks. The reported deltas are **cost-to-green, pass@1, pass^k across seeds, and wall-clock** — how much a good harness moves a fixed model. Run instrumentation (tokens / cost / duration / a verify oracle) already ships; the protocol that consumes it is being designed, and no numbers are published.
+
+A separate **llmquant-data-bench** will score knowledge quality (correctness, citation precision/recall, point-in-time correctness); it is likewise in design.
+
+### 🏭 In Production: LLMQuant Data
+
+LLMQuant Data is QuantMind in production. The hosted data platform runs extraction pipelines powered by QuantMind: QuantMind is the open engine, LLMQuant Data is the operated product on top of it. The dependency direction is one-way — `llmquant-data` imports `quantmind`, never the reverse.
+
+<p align="center"><img src="assets/llmquant-data-cards.png" width="860"></p>
+
 
 ### 🗺️ Roadmap
 
-- [x] Better `flow` design for user-friendly usage
-- [x] First production level example (Quant Paper Agent)
-- [ ] Migrate Agent layer to OpenAI Agents SDK
-- [x] Standardize knowledge format with `knowledge/` (Pydantic-based)
-- [ ] Additional content sources (financial news, blogs, reports)
-- [ ] Cross-step working memory (`mind/memory`) for batch document processing
+Directions we are actively pushing on (not yet shipped):
 
----
+- **More agent-native** — a `quantmind-best-practice` skill alongside the shipped `quantmind-dev`, and an agent-first contributing path.
+- **Broader coverage** — a SEC / filings collection flow and a prediction-market knowledge type, beyond today's papers and news.
+- **Evaluation** — land the `quantmind-bench` protocol and publish its first paired runs.
 
-### The Vision: An Intelligent Research Framework
+Development is moving fast. If you need a source, a knowledge type, or a flow we do not have yet, [open an issue](https://github.com/LLMQuant/quant-mind/issues) — we welcome the request.
 
-> [!IMPORTANT]
-> **This section describes our long-term vision, not current capabilities.** While QuantMind today provides a solid knowledge extraction framework, the features described below represent our aspirational goals for future development.
-
-QuantMind is designed with a larger vision: to become a comprehensive intelligence layer for all financial knowledge. We're building toward a system that understands the interconnections between academic research, market news, analyst reports, and social sentiment—creating a unified knowledge base that powers better financial decisions.
-
-The foundation we're building today—starting with papers—will expand to encompass the entire financial information ecosystem.
-
-> [!NOTE]
-> The current source-first paper path produces independently versioned source,
-> chunk-set, and cited-summary artifacts. Future agent memory and cross-document
-> reasoning can build on `LocalKnowledgeLibrary.search()` without changing
-> those canonical artifacts.
-
-This future state represents our commitment to moving beyond simple data aggregation and toward genuine machine intelligence in the financial domain.
-
-------
 
 ### 🤝 Contributing
 
-We welcome contributions of all forms, from bug reports to feature development.
+Prefer manual steps? See [`.claude/skills/quantmind-dev/references/setup.md`](.claude/skills/quantmind-dev/references/setup.md).
+
+The fastest path is to let a coding agent drive. Inside the checkout, tell Claude Code:
+
+```text
+/quantmind-dev set me up as a contributor
+/quantmind-dev file an issue: <what you need>
+/quantmind-dev I want to contribute <your change>
+```
+
+Codex users say the same thing in words — the skill is mirrored under `.agents/skills/quantmind-dev/`, so both agents follow one workflow: contributor setup, filing an issue, and developing a change with tests, verification, commit, and PR.
 
 > [!IMPORTANT]
-> **For Contributors**: Please read [CONTRIBUTING.md](CONTRIBUTING.md) for essential development setup including pre-commit hooks, coding standards, and testing requirements.
+> **For Contributors**: [CONTRIBUTING.md](CONTRIBUTING.md) covers the same setup for humans — environment, pre-commit hooks, coding standards, and testing. `scripts/verify.sh` is the single deterministic check; CI runs the exact same script.
 
-**Quick Start for Contributors:**
-
-1. **Fork** the repository
-2. **Setup development environment**:
-
-   ```bash
-   uv venv && source .venv/bin/activate
-   uv pip install -e .
-   ./scripts/pre-commit-setup.sh
-   ```
-
-3. **Create feature branch** (`git checkout -b feat/my-feature`)
-4. **Follow conventional commits** (`feat: add new feature`)
-5. **Submit PR** with our template
-
-**Before Contributing:**
-
-- Open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss significant changes
-- Use our issue templates for bug reports and feature requests
-- Ensure all pre-commit hooks pass before submitting PR
+We welcome contributions of all forms, from bug reports to feature development. Open an [issue](https://github.com/LLMQuant/quant-mind/issues) to discuss significant changes before you start, and make sure `bash scripts/verify.sh` is green before you open a PR.
 
 ### License
 
@@ -309,3 +251,5 @@ QuantMind is released under the MIT License—see `LICENSE` for details.
 
 - **arXiv** for providing open access to a world of research.
 - The **open-source community** for the tools and libraries that make this project possible.
+</content>
+</invoke>

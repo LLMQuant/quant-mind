@@ -1,6 +1,6 @@
 ---
 name: quantmind-dev
-description: Contributor workflow for the QuantMind codebase. Covers commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, rag, flows, mind, utils) with tests, examples, and verification. Use when committing, opening a PR, or implementing/refactoring QuantMind code.
+description: Contributor workflow for the QuantMind codebase. Covers contributor setup (environment + hooks), filing issues, commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, rag, flows, mind, utils) with tests, examples, and verification. Use when setting up as a contributor, filing an issue, committing, opening a PR, or implementing/refactoring QuantMind code.
 ---
 
 # QuantMind Dev
@@ -24,6 +24,10 @@ Development workflow for contributing to the QuantMind codebase.
 
 ## Select Workflow
 
+- Setting up as a contributor (environment, hooks, first verify) →
+  `references/setup.md`
+- Filing an issue for a bug or a missing capability →
+  `references/setup.md` ("File an Issue" section)
 - Committing staged work → `references/commit.md`
 - Opening or updating a pull request → `references/pull-request.md`
 - Implementing or refactoring anything under `quantmind/` →
