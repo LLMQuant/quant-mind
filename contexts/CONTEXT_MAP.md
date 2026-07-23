@@ -20,6 +20,7 @@ contexts/
 ├── README.md                   ← routing entry point (dev / usage / design)
 ├── design/                     ← accepted design decisions and planned behavior
 │   ├── README.md               ← design index
+│   ├── positioning.md          ← canonical positioning: workbench, V1/V2, eval
 │   ├── flow/
 │   │   ├── paper.md            ← source-first Paper Flow V1
 │   │   └── news.md             ← news collection design and behavior
@@ -48,6 +49,7 @@ contexts/
 | I want to | Open |
 |---|---|
 | Understand the whole `contexts/` layout | the [Directory Map](#directory-map) above |
+| Understand what QuantMind is (positioning, V1/V2) | [`design/positioning.md`](design/positioning.md) |
 | Develop, fix, test, or review code | [`dev/README.md`](dev/README.md) |
 | Use QuantMind as a library | [`usage/README.md`](usage/README.md) |
 | Read or change a design decision | [`design/README.md`](design/README.md) |

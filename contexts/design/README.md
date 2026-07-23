@@ -18,6 +18,7 @@ This directory records QuantMind engineering decisions. Use it to understand whi
 
 | Domain | Design |
 |---|---|
+| Positioning | [What QuantMind is: workbench, V1/V2 bets, evaluation, production](positioning.md) |
 | Flow | [Source-first paper flow](flow/paper.md) |
 | Knowledge | [Paper sources, artifacts, citations, and locators](knowledge/paper.md) |
 | Flow | [News collection](flow/news.md) |

@@ -12,7 +12,7 @@
 - [Do Not Wrap Prose at a Fixed Width](#do-not-wrap-prose-at-a-fixed-width)
 - [Write Workflow](#write-workflow)
 
-This guide's workflow (Issue/PR templates, `--body-file`, the raw-body read-back) is specific to text submitted to GitHub. Its prose rule — do not hard-wrap at a fixed width — also governs contexts pages stored in the repository; see the contexts authoring standard.
+This guide's workflow (Issue/PR templates, `--body-file`, the raw-body read-back) is specific to text submitted to GitHub. Its prose rule — do not hard-wrap at a fixed width — also governs the repository `README.md` and contexts pages stored in the repository; see the contexts authoring standard.
 
 ## Do Not Wrap Prose at a Fixed Width
 

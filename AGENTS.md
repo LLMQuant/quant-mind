@@ -30,6 +30,18 @@ finance, built **on top of** the OpenAI Agents SDK. It is a domain library,
 not an agent framework: runtime, tracing, tool scaffolding, and multi-agent
 handoff all come from `openai-agents`.
 
+## Positioning
+
+QuantMind is an **agent-native workbench for financial knowledge extraction** —
+its primary consumer is a coding agent working inside this checkout, not only a
+human importing a package (workbench-first, library-second). Two engineering
+dimensions structure it: **context engineering** (any source → typed, cited,
+as-of-correct knowledge) and **harness engineering** (any agent → domain
+specialist, via this repo's contracts, `contexts/`, skills, hooks, and
+deterministic verify).
+The canonical, always-current statement lives in
+[`contexts/design/positioning.md`](contexts/design/positioning.md).
+
 ## Module Map
 
 | Module | Role |
