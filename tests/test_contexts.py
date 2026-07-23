@@ -101,49 +101,47 @@ class TestContextEntryPoints(unittest.TestCase):
 
     def test_required_files_link_to_context_entry_point(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        required_links = {
-            "AGENTS.md": "contexts/README.md",
-            "CLAUDE.md": "contexts/README.md",
-            ".agents/skills/quantmind-dev/SKILL.md": "../../../contexts/README.md",
-            ".claude/skills/quantmind-dev/SKILL.md": "../../../contexts/README.md",
-        }
-
-        for source_path, target in required_links.items():
-            source = repo_root / source_path
+        entry_point = "contexts/README.md"
+        # Root-level guides link to the entry point; nested skill files
+        # reference the same repo-root path in backticks. Both contain the
+        # path string, so one substring check is form-agnostic.
+        sources = (
+            "AGENTS.md",
+            "CLAUDE.md",
+            ".agents/skills/quantmind-dev/SKILL.md",
+            ".claude/skills/quantmind-dev/SKILL.md",
+        )
+        self.assertTrue(
+            (repo_root / entry_point).is_file(),
+            f"missing context entry point: {entry_point}",
+        )
+        for source_path in sources:
             with self.subTest(source=source_path):
                 self.assertIn(
-                    f"]({target})",
+                    entry_point,
                     _guide_text(repo_root, source_path),
-                    f"{source_path} must link to contexts/README.md",
-                )
-                self.assertTrue(
-                    (source.parent / target).resolve().is_file(),
-                    f"broken context entry link from {source_path}: {target}",
+                    f"{source_path} must reference {entry_point}",
                 )
 
     def test_label_guide_has_required_routes(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        required_links = {
-            "contexts/dev/README.md": "labels.md",
-            ".agents/skills/quantmind-dev/SKILL.md": (
-                "../../../contexts/dev/labels.md"
-            ),
-            ".claude/skills/quantmind-dev/SKILL.md": (
-                "../../../contexts/dev/labels.md"
-            ),
+        self.assertTrue(
+            (repo_root / "contexts/dev/labels.md").is_file(),
+            "missing canonical label guide",
+        )
+        # The dev index links a sibling page; nested skill files use a
+        # repo-root backtick reference.
+        references = {
+            "contexts/dev/README.md": "](labels.md)",
+            ".agents/skills/quantmind-dev/SKILL.md": "`contexts/dev/labels.md`",
+            ".claude/skills/quantmind-dev/SKILL.md": "`contexts/dev/labels.md`",
         }
-
-        for source_path, target in required_links.items():
-            source = repo_root / source_path
+        for source_path, expected in references.items():
             with self.subTest(source=source_path):
                 self.assertIn(
-                    f"]({target})",
+                    expected,
                     _guide_text(repo_root, source_path),
                     f"{source_path} must route to the canonical label guide",
-                )
-                self.assertTrue(
-                    (source.parent / target).resolve().is_file(),
-                    f"broken label guide link from {source_path}: {target}",
                 )
 
     def test_label_guide_has_complete_taxonomy(self) -> None:
@@ -186,36 +184,36 @@ class TestContextEntryPoints(unittest.TestCase):
 
     def test_github_writing_guide_has_required_routes(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        required_links = {
-            "contexts/dev/README.md": "github-writing.md",
-            "contexts/dev/labels.md": "github-writing.md",
-            "AGENTS.md": "contexts/dev/github-writing.md",
-            "CLAUDE.md": "contexts/dev/github-writing.md",
+        self.assertTrue(
+            (repo_root / "contexts/dev/github-writing.md").is_file(),
+            "missing GitHub writing guide",
+        )
+        # Sibling contexts pages link the short path; root guides link the
+        # repo-root path; nested skill files use a repo-root backtick reference.
+        references = {
+            "contexts/dev/README.md": "](github-writing.md)",
+            "contexts/dev/labels.md": "](github-writing.md)",
+            "AGENTS.md": "](contexts/dev/github-writing.md)",
+            "CLAUDE.md": "](contexts/dev/github-writing.md)",
             ".agents/skills/quantmind-dev/SKILL.md": (
-                "../../../contexts/dev/github-writing.md"
+                "`contexts/dev/github-writing.md`"
             ),
             ".claude/skills/quantmind-dev/SKILL.md": (
-                "../../../contexts/dev/github-writing.md"
+                "`contexts/dev/github-writing.md`"
             ),
             ".agents/skills/quantmind-dev/references/pull-request.md": (
-                "../../../../contexts/dev/github-writing.md"
+                "`contexts/dev/github-writing.md`"
             ),
             ".claude/skills/quantmind-dev/references/pull-request.md": (
-                "../../../../contexts/dev/github-writing.md"
+                "`contexts/dev/github-writing.md`"
             ),
         }
-
-        for source_path, target in required_links.items():
-            source = repo_root / source_path
+        for source_path, expected in references.items():
             with self.subTest(source=source_path):
                 self.assertIn(
-                    f"]({target})",
+                    expected,
                     _guide_text(repo_root, source_path),
                     f"{source_path} must route to the GitHub writing guide",
-                )
-                self.assertTrue(
-                    (source.parent / target).resolve().is_file(),
-                    f"broken GitHub writing guide link: {target}",
                 )
 
         marker = "<!-- github-prose-style:"

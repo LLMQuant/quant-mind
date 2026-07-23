@@ -22,6 +22,7 @@ This directory is the public repository context system for coding agents and mai
 
 ## Where Information Lives
 
+- **`contexts/` vs `docs/`**: `contexts/` is the internal navigation and design memory for coding agents and maintainers — design decisions in `contexts/design/`, contributor rules in `contexts/dev/`, usage routing in `contexts/usage/`. `docs/` is the user-facing surface for people consuming QuantMind as a library — the public component catalog `docs/README.md` and usage guides such as `docs/library.md`. A fact that helps an agent build the repo lives in `contexts/`; a fact that helps someone use the library lives in `docs/`. Neither keeps a second copy of the other.
 - Keep each kind of information in one place so agents do not have to compare competing versions.
 - `contexts/design/` records accepted design decisions and planned behavior.
 - `contexts/dev/` and `contexts/usage/` route readers to existing rules and examples instead of copying them.

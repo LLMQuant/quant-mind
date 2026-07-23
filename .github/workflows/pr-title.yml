@@ -1,0 +1,26 @@
+name: PR title
+
+# The commit-msg git hook only fires for contributors who ran
+# `pre-commit install`, so it cannot bind external contributors. This job is
+# the server-side floor: it lints the PR title (which becomes the squash-merge
+# commit subject) with the same rule as the commit-msg hook, reusing
+# scripts/hooks/commit_msg_check.py so the convention has a single source.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint PR title as an English Conventional Commit
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr_title.txt"
+          python3 scripts/hooks/commit_msg_check.py "$RUNNER_TEMP/pr_title.txt"
