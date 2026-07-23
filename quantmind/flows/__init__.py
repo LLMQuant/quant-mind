@@ -4,21 +4,37 @@ Semantic flows such as ``paper_flow`` return ``quantmind.knowledge`` values.
 Deterministic operations such as ``collect_news`` return source-faithful
 ``quantmind.preprocess`` values. Cross-flow utilities live alongside:
 
+- ``PaperFlow`` is the config-bound paper flow: ``PaperFlow(cfg)`` binds an
+  immutable build config once and ``build(input)`` applies it per input,
+  dispatching on the cfg **type** (``PaperStructureCfg`` → a self-contained
+  ``PaperStructureTree``). ``batch_run(flow.build, inputs)`` runs every input
+  under one unified setting.
+- ``paper_flow`` is a thin compatibility function for the semantic
+  chunk/summary shape (``PaperFlowResult``).
 - ``batch_run`` runs any flow over a list of inputs with bounded
   concurrency and aggregated results.
 - ``BatchResult`` is the shape returned by ``batch_run``.
-- ``UnsupportedContentTypeError`` is raised when ``paper_flow`` does not
+- ``UnsupportedContentTypeError`` is raised when a paper pipeline does not
   resolve a page-aware PDF.
+- ``PaperStructureError`` is raised when structure building exceeds its
+  runtime boundary.
 """
 
 from quantmind.flows.batch import BatchResult, batch_run
 from quantmind.flows.news import collect_news
-from quantmind.flows.paper import UnsupportedContentTypeError, paper_flow
+from quantmind.flows.paper import (
+    PaperFlow,
+    PaperStructureError,
+    UnsupportedContentTypeError,
+    paper_flow,
+)
 from quantmind.knowledge import PaperCitationValidationError
 
 __all__ = [
     "BatchResult",
     "PaperCitationValidationError",
+    "PaperFlow",
+    "PaperStructureError",
     "UnsupportedContentTypeError",
     "batch_run",
     "collect_news",

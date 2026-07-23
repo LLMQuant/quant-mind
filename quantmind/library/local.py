@@ -10,10 +10,12 @@ from quantmind.knowledge import (
     ArtifactLocator,
     BaseKnowledge,
     Citation,
+    PaperArtifact,
     PaperChunkSet,
     PaperFlowResult,
     PaperGlobalSummary,
     PaperSourceRevision,
+    PaperStructureTree,
     ResolvedPaperArtifact,
     TreeKnowledge,
     TreeNode,
@@ -92,8 +94,17 @@ class LocalKnowledgeLibrary:
             ),
         )
 
-    async def put(self, item: BaseKnowledge) -> None:
-        """Atomically persist canonical knowledge and its affected targets."""
+    async def put(self, item: BaseKnowledge | PaperStructureTree) -> None:
+        """Atomically persist canonical knowledge or a self-contained tree.
+
+        A ``PaperStructureTree`` is a derived, self-contained artifact: it is
+        stored on its own from its provenance metadata (``as_of`` / source ref /
+        ``source_content_hash``), with no source revision or chunk set required.
+        Every other supported value is canonical ``BaseKnowledge``.
+        """
+        if isinstance(item, PaperStructureTree):
+            await self.put_structure_tree(item)
+            return
         async with self._lock:
             store = self._store
             if store is None:
@@ -229,6 +240,38 @@ class LocalKnowledgeLibrary:
             )
             self._index = None
 
+    async def put_structure_tree(self, tree: PaperStructureTree) -> None:
+        """Persist one self-contained structure tree with no source or chunk set.
+
+        Reads ``as_of`` / source ref / ``source_content_hash`` from the tree's
+        own provenance metadata; storing it requires no source revision or chunk
+        set. This is the dump half of the ``open_structure`` dump/load pair, and
+        is what ``put(tree)`` dispatches to.
+        """
+        async with self._lock:
+            store = self._store
+            if store is None:
+                raise RuntimeError("LocalKnowledgeLibrary is closed")
+            prepared = store.prepare_structure_tree(tree)
+            store.put_structure_tree(prepared)
+            self._index = None
+
+    async def put_paper_structure_tree(
+        self,
+        source: PaperSourceRevision,
+        tree: PaperStructureTree,
+    ) -> None:
+        """Deprecated: persist a self-contained structure tree standalone.
+
+        Retained for backward compatibility. The ``source`` argument is only
+        checked for consistency with the tree; the tree is a self-contained
+        artifact stored on its own (no source revision or chunk set). Prefer
+        ``put(tree)`` / ``put_structure_tree(tree)``.
+        """
+        if tree.source_revision_id != source.id:
+            raise ValueError("paper structure tree belongs to another source")
+        await self.put_structure_tree(tree)
+
     async def get(self, item_id: UUID) -> BaseKnowledge:
         """Return validated canonical knowledge or report not-found/stale data."""
         async with self._lock:
@@ -255,15 +298,32 @@ class LocalKnowledgeLibrary:
                 summary_id=summary_id,
             )
 
-    async def get_artifact(
-        self, artifact_id: UUID
-    ) -> PaperChunkSet | PaperGlobalSummary:
+    async def get_artifact(self, artifact_id: UUID) -> PaperArtifact:
         """Return one validated canonical paper artifact aggregate."""
         async with self._lock:
             store = self._store
             if store is None:
                 raise RuntimeError("LocalKnowledgeLibrary is closed")
             return store.get_paper_artifact(artifact_id)
+
+    async def open_structure(self, tree_id: UUID) -> PaperStructureTree:
+        """Load one self-contained paper structure tree by its artifact id.
+
+        The returned tree is a complete value: every leaf node carries its own
+        text and provenance metadata, so callers can retrieve over it without
+        any further library round-trip. This is the load counterpart of
+        ``put(tree)`` / ``put_structure_tree``.
+        """
+        async with self._lock:
+            store = self._store
+            if store is None:
+                raise RuntimeError("LocalKnowledgeLibrary is closed")
+            artifact = store.get_paper_artifact(tree_id)
+            if not isinstance(artifact, PaperStructureTree):
+                raise KeyError(
+                    f"Paper artifact '{tree_id}' is not a structure tree"
+                )
+            return artifact
 
     async def resolve(
         self, locator: ArtifactLocator
@@ -321,7 +381,7 @@ class LocalKnowledgeLibrary:
             )
 
             canonical: dict[UUID, BaseKnowledge] = {}
-            paper_artifacts: dict[UUID, PaperChunkSet | PaperGlobalSummary] = {}
+            paper_artifacts: dict[UUID, PaperArtifact] = {}
             paper_sources: dict[UUID, PaperSourceRevision] = {}
             hits: list[SemanticHit] = []
             for result in ranked:

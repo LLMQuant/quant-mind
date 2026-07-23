@@ -2,7 +2,7 @@
 
 ## Quick Summary
 
-- **Purpose**: Define the deterministic PDF value shared by paper extraction, document RAG, and a future PageIndex adapter.
+- **Purpose**: Define the deterministic PDF value shared by paper extraction, document RAG, and structure-tree outline signals.
 - **Read when**: Changing PDF parsing, page artifacts, or multimodal source evidence.
 - **Status**: Implemented by `quantmind.preprocess.format.parse_pdf`.
 - **Core rule**: Parsing preserves every physical page and its source coordinates before any chunker or semantic artifact producer runs.
@@ -31,6 +31,6 @@ Preprocessing ends after producing `ParsedDocument`. It does not chunk, index, r
 
 - [`quantmind.rag`](../rag/document.md) converts the parsed value into LlamaIndex-backed chunks and page-aware retrieval evidence.
 - [`paper_flow`](../flow/paper.md) uses the preserved source pages to build an exact source revision and a canonical chunk set before generating a cited summary.
-- A future PageIndex adapter may consume the same ordered pages to propose independently versioned navigation evidence.
+- `extract_outline_signals()` consumes the same ordered pages to emit deterministic table-of-contents, heading, and printed-page-offset hints for structure-tree construction.
 
 Flattened Markdown remains a compatibility view produced from the preserved pages. It is not the primary parsing result.

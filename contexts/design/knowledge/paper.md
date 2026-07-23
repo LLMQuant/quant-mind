@@ -2,7 +2,7 @@
 
 ## Quick Summary
 
-- **Purpose**: Define canonical Paper Flow V1 source, chunk, summary, citation, and locator models.
+- **Purpose**: Define canonical paper source, chunk, summary, structure, citation, and locator models.
 - **Read when**: Changing `quantmind.knowledge.paper`, stable paper identities, artifact lineage, or paper search resolution.
 - **Status**: Implemented by `quantmind.knowledge.paper` and persisted by `quantmind.library`.
 - **Core rule**: Source revisions are immutable anchors; derived artifacts are independently versioned and never own retrieval vectors.
@@ -19,13 +19,14 @@
 
 ## Model Layers
 
-Paper Flow V1 separates three layers:
+Source-first paper handling separates four layers:
 
 | Layer | Canonical aggregate | Addressable members | Purpose |
 |---|---|---|---|
 | Exact source | `PaperSourceRevision` | `PaperAssetRef`, `PaperParsedPage`, `PaperParsedBlock` | Preserve fetched bytes, page-aware parser output, metadata, and visual evidence. |
 | Deterministic artifact | `PaperChunkSet` | `PaperChunk`, `PaperSourceSpan` | Record one exact chunking of the source before any summary call. |
 | Semantic artifact | `PaperGlobalSummary` | `PaperCitation` | Store one independently versioned model summary with resolvable chunk/page evidence. |
+| Structural artifact | `PaperStructureTree` | `TreeNode`, `Citation` | Store one independently versioned natural-section hierarchy over exact source pages. |
 
 `PaperFlowResult` validates one compatible source, chunk set, and summary combination. It is a transfer result, not a fourth stored artifact.
 
@@ -70,11 +71,15 @@ Every chunk span is also checked against that manifest: its page must exist, its
 
 Changing any producer field creates a distinct artifact ID. Multiple chunk sets and summaries may coexist for one source revision. Loading a complete `PaperFlowResult` without explicit artifact IDs is allowed only when one unambiguous linked pair exists.
 
+`PaperStructureTree.producer` records model and prompt identity, the instructions hash, the bounded physical-page text input policy, and tree/output bounds. It deliberately records no splitter or chunk-set identity. Rechunking an unchanged source therefore does not create a different structure tree.
+
 ## Citation and Lineage Integrity
 
 A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verbatim quote. `PaperFlowResult` rejects citations to missing chunks, pages outside the cited chunk spans, or quotes absent from chunk text.
 
 `PaperGlobalSummary.derived_from` contains `ArtifactLocator` values. At least one locator must point to its producer's exact input chunk set, with the same source revision and no member ID. The library stores this relationship explicitly so lineage can be checked independently from the summary JSON.
+
+`PaperStructureTree` binds directly to one `PaperSourceRevision`. Each node carries inclusive physical-page citations with no chunk coordinates, and the root must cover every source page. The tree has no artifact lineage because no chunk set or summary is an input to its construction.
 
 ## Retrieval Boundary
 
@@ -92,4 +97,4 @@ Canonical paper models do not implement `embedding_text()` and do not select ret
 
 `LegacyPaper` retains the pre-V1 `TreeKnowledge` shape only so existing version-2 databases and the bundled legacy example can be opened. It is not exported as `Paper`, is not produced by `paper_flow`, and is not part of the V1 paper contract.
 
-There is no `PaperTree` in V1. A future tree or PageIndex artifact must be independently versioned, linked to an exact source and inputs, and added only with a real retrieval use case and migration plan.
+There is no nested `PaperTree` on the V1 result. `PaperStructureTree` is an independently versioned paper-artifact binding of the shared `StructureTree` base, derived directly from one exact source revision and independent of every chunk-set version; see [Build and retrieve from a page-preserving structure tree](../mind/retrieval.md).

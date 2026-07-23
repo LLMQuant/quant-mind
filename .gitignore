@@ -31,3 +31,10 @@ docs/superpowers/
 .coverage
 htmlcov/
 coverage.xml
+
+# macOS
+.DS_Store
+
+# Ephemeral local scratch (temp dirs, e2e harness output)
+temp/
+tmp/
