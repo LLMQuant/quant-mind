@@ -71,7 +71,7 @@ async def resolve_magic_input(
     natural_language: str,
     *,
     target_flow: Callable[..., Awaitable[Any]],
-    resolver_model: str = "gpt-4o-mini",
+    resolver_model: str = "gpt-5.6-luna",
     resolver_instructions: str | None = None,
 ) -> tuple[Any, Any]:
     """Parse ``natural_language`` into ``(input_obj, cfg_obj)`` for ``target_flow``.
@@ -110,7 +110,7 @@ async def preview_resolve(
     natural_language: str,
     *,
     target_flow: Callable[..., Awaitable[Any]],
-    resolver_model: str = "gpt-4o-mini",
+    resolver_model: str = "gpt-5.6-luna",
 ) -> tuple[Any, Any]:
     """Resolve and pretty-print the result without invoking the flow."""
     inp, cfg = await resolve_magic_input(

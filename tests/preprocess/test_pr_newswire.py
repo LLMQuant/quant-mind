@@ -8,6 +8,7 @@ import httpx
 import respx
 
 from quantmind.preprocess.fetch.http import FetchPolicy
+from quantmind.preprocess.news import build_news_identity
 from quantmind.preprocess.pr_newswire import (
     _collect_pr_newswire,
     _discover_pr_newswire,
@@ -106,6 +107,15 @@ class DiscoverPRNewswireTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             len({item.identity for item in result.observations}), 3
+        )
+        first = result.observations[0]
+        self.assertEqual(
+            first.identity,
+            build_news_identity(
+                source_type="press_release",
+                source_url=first.canonical_url,
+                payload_id=first.payload_id,
+            ),
         )
         artifact = result.observations[0].discovery_artifact
         self.assertIn(
@@ -368,7 +378,12 @@ class CollectPRNewswireTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(document.article_artifact.content_hash)
         self.assertTrue(document.discovery_artifact.bytes)
         self.assertEqual(
-            document.identity.split(":", 2)[:2], ["news", "pr-newswire"]
+            document.identity,
+            build_news_identity(
+                source_type="press_release",
+                source_url=document.canonical_url,
+                payload_id=document.payload_id,
+            ),
         )
         self.assertEqual(document.ticker_hints[0].symbol, "EXCO")
 

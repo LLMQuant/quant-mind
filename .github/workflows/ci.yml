@@ -32,13 +32,13 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create virtual environment
         run: uv venv
 
       - name: Install project and development dependencies
-        run: uv pip install --python .venv/bin/python -e ".[dev]"
+        run: uv sync --frozen --extra dev
 
       - name: Run file-hygiene hooks
         run: |

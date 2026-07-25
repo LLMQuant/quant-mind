@@ -67,9 +67,9 @@ class SourceRefTests(unittest.TestCase):
 class ExtractionRefTests(unittest.TestCase):
     def test_minimal(self):
         e = ExtractionRef(
-            flow="paper_flow", model="gpt-4o", extracted_at=_now()
+            flow="paper_semantic", model="gpt-4o", extracted_at=_now()
         )
-        self.assertEqual(e.flow, "paper_flow")
+        self.assertEqual(e.flow, "paper_semantic")
         self.assertEqual(e.model, "gpt-4o")
         self.assertIsNone(e.run_id)
 
@@ -146,11 +146,11 @@ class BaseKnowledgeTests(unittest.TestCase):
 
     def test_extraction_round_trip(self):
         ext = ExtractionRef(
-            flow="paper_flow", model="gpt-4o", extracted_at=_now()
+            flow="paper_semantic", model="gpt-4o", extracted_at=_now()
         )
         item = _ConcreteKnowledge(as_of=_now(), source=_src(), extraction=ext)
         assert item.extraction is not None
-        self.assertEqual(item.extraction.flow, "paper_flow")
+        self.assertEqual(item.extraction.flow, "paper_semantic")
 
     def test_is_extracted_false_when_hand_curated(self):
         item = _ConcreteKnowledge(as_of=_now(), source=_src())
@@ -158,7 +158,7 @@ class BaseKnowledgeTests(unittest.TestCase):
 
     def test_is_extracted_true_when_extraction_set(self):
         ext = ExtractionRef(
-            flow="paper_flow", model="gpt-4o", extracted_at=_now()
+            flow="paper_semantic", model="gpt-4o", extracted_at=_now()
         )
         item = _ConcreteKnowledge(as_of=_now(), source=_src(), extraction=ext)
         self.assertTrue(item.is_extracted())
@@ -201,8 +201,8 @@ class PackageExportTests(unittest.TestCase):
             LegacyPaper,
             News,
             PaperChunkSet,
-            PaperFlowResult,
             PaperGlobalSummary,
+            PaperSemanticResult,
             PaperSourceRevision,
             SourceRef,
             Thesis,
@@ -221,7 +221,7 @@ class PackageExportTests(unittest.TestCase):
         self.assertEqual(PaperSourceRevision.__name__, "PaperSourceRevision")
         self.assertEqual(PaperChunkSet.__name__, "PaperChunkSet")
         self.assertEqual(PaperGlobalSummary.__name__, "PaperGlobalSummary")
-        self.assertEqual(PaperFlowResult.__name__, "PaperFlowResult")
+        self.assertEqual(PaperSemanticResult.__name__, "PaperSemanticResult")
         # Ensure side-imports are real classes
         self.assertEqual(Citation.__name__, "Citation")
         self.assertEqual(SourceRef.__name__, "SourceRef")

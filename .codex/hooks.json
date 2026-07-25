@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/hooks/pre_tool_use_no_bypass.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking for --no-verify bypass"
+          }
+        ]
+      }
+    ]
+  }
+}

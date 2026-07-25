@@ -62,13 +62,7 @@ Using the SDK does **not** force the agentic pattern. Single-agent `Runner.run(a
 
 **Do not build a framework for it.** The fan-out primitive is a function, not a base class: `asyncio.gather` over code-computed items with a `Semaphore`. Keep it inline until a second flow needs it; only then extract a small `map_reduce(items, map_fn, reduce_fn, *, concurrency)` helper. A `BaseFlow`/`ParallelWorkflow` base class is the framework this project explicitly avoids.
 
-Likewise, a small service may bind a genuinely shared construction-time thing —
-a model policy, a provider seam, or (most often) the immutable **config** that
-must stay constant across a batch — without introducing a generic workflow
-hierarchy; see [Callable Shape](#callable-shape-bind-config-pass-the-operand).
-Canonical knowledge artifacts remain frozen values and do not acquire
-`build()`, `retrieve()`, persistence, or provider state merely to make call
-sites look object-oriented.
+Likewise, a small service may bind a genuinely shared construction-time thing — a model policy, a provider seam, or (most often) the immutable **config** that must stay constant across a batch — without introducing a generic workflow hierarchy; see [Callable Shape](#callable-shape-bind-config-pass-the-operand). Canonical knowledge artifacts remain frozen values and do not acquire `build()`, `retrieve()`, persistence, or provider state merely to make call sites look object-oriented.
 
 ## Principle 3: Pipeline vs Component Altitude
 

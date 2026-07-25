@@ -3,8 +3,8 @@
 ## Quick Summary
 
 - **Purpose**: Define how one exact PDF revision becomes a durable page-aware chunk set and a cited global summary.
-- **Read when**: Changing `paper_flow`, paper inputs, summarization limits, citation validation, or the end-to-end paper verifier.
-- **Status**: Implemented by `quantmind.flows.paper_flow` for PDF-backed arXiv, HTTP, and local inputs.
+- **Read when**: Changing the paper build (`PaperFlow(PaperSemanticCfg).build`), paper inputs, summarization limits, citation validation, or the end-to-end paper verifier.
+- **Status**: Implemented by the config-bound `quantmind.flows.PaperFlow` — a `PaperSemanticCfg` selects this source-first shape — for PDF-backed arXiv, HTTP, and local inputs.
 - **Core rule**: Preserve and validate the source revision and chunk set before any model-generated summary is accepted.
 - **Canonical models**: [Paper source and artifact design](../knowledge/paper.md).
 
@@ -23,10 +23,10 @@
 
 ## Contract
 
-`paper_flow(input, *, cfg)` returns one validated `PaperFlowResult`:
+`PaperFlow(PaperSemanticCfg(...)).build(input)` returns one validated `PaperSemanticResult`. `PaperFlow` binds the immutable `PaperSemanticCfg` once and its cfg **type** selects this source-first shape, so `batch_run(flow.build, inputs)` runs a batch under one setting. It is the single entry point for the semantic shape; there is no standalone `*_flow` function.
 
 ```text
-PaperFlowResult
+PaperSemanticResult
 ├── source_revision: PaperSourceRevision
 ├── chunk_set: PaperChunkSet
 └── global_summary: PaperGlobalSummary
@@ -57,11 +57,11 @@ The operation has a strict order:
 7. Fan out one bounded research agent per group (bounded concurrency), each returning typed findings for its own range only.
 8. Run one reducer agent over the collected findings to synthesize the summary draft.
 9. Resolve model-returned chunk/page coordinates into canonical citations in code.
-10. Build and validate `PaperGlobalSummary` and the cross-artifact `PaperFlowResult`.
+10. Build and validate `PaperGlobalSummary` and the cross-artifact `PaperSemanticResult`.
 
 Steps 3, 5, 9, and 10 mint no IDs in the flow: the flow calls the knowledge-layer smart constructors `PaperSourceRevision.from_parsed`, `PaperChunkSet.from_parsed_chunks`, and `PaperGlobalSummary.from_draft`, which own every ID, content/producer hash, and citation resolution. The flow only fetches, parses, reads asset bytes, and maps those path-based artifacts into knowledge-native inputs. See [orchestration principles](../operations/orchestration.md).
 
-A summarization failure occurs after source and chunks exist in memory, but `paper_flow` returns no partial success value. Persistence is a separate explicit operation.
+A summarization failure occurs after source and chunks exist in memory, but the build returns no partial success value. Persistence is a separate explicit operation.
 
 ## Source Revision
 
@@ -103,7 +103,7 @@ Code accepts the draft only when:
 
 Summarization is a deterministic map-reduce, not an autonomous coordinator. Code — not a model — decides the decomposition: it tiles the chunk set into `summary_research_group_size` groups and runs one research agent per group, so complete chunk coverage is guaranteed by construction and never needs to be reconciled afterward.
 
-`PaperFlowCfg` exposes only structural bounds:
+`PaperSemanticCfg` exposes only structural bounds:
 
 - `summary_research_group_size` sets how many consecutive chunks each research agent receives;
 - `summary_concurrency` bounds simultaneous research-agent runs;
@@ -124,7 +124,7 @@ Bounding is delegated to the Agents SDK (per-agent `max_tokens`, structured `out
 - A research finding that cites outside its assigned group is rejected in code; a reducer timeout raises `PaperSummaryError`.
 - Any canonical identity, content hash, membership, lineage, or cross-artifact mismatch fails Pydantic validation.
 
-No failure is converted into a partially valid `PaperFlowResult`. Callers may retry with the same source and producer settings; stable IDs make successful repeated runs idempotent.
+No failure is converted into a partially valid `PaperSemanticResult`. Callers may retry with the same source and producer settings; stable IDs make successful repeated runs idempotent.
 
 ## Persistence and Retrieval
 
@@ -142,7 +142,7 @@ The bounded live slice is:
 python scripts/verify_pdf_rag_e2e.py
 ```
 
-It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical pages, creates multiple page-aware chunks, delegates complete coverage to bounded `gpt-4o-mini` research subagents, synthesizes a cited global summary, persists with `text-embedding-3-small`, closes and reopens the database, runs summary and chunk searches, resolves every returned locator, and prints useful summary, page, citation, and score diagnostics. The dedicated `paper-flow` job in `.github/workflows/e2e.yml` owns this non-required public-network check.
+It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical pages, creates multiple page-aware chunks, delegates complete coverage to bounded `gpt-5.6-luna` research subagents, synthesizes a cited global summary, persists with `text-embedding-3-small`, closes and reopens the database, runs summary and chunk searches, resolves every returned locator, and prints useful summary, page, citation, and score diagnostics. The dedicated `paper-flow` job in `.github/workflows/e2e.yml` owns this non-required public-network check.
 
 ## Out of Scope
 
@@ -152,4 +152,4 @@ It fetches exact arXiv revision `1706.03762v7`, parses at least 15 physical page
 - DOI-to-open-PDF resolution;
 - question answering over search results;
 - hidden or unbounded model calls;
-- implicit persistence from `paper_flow`.
+- implicit persistence from the paper build.

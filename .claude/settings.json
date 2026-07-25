@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/scripts/hooks/pre_tool_use_no_bypass.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

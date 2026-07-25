@@ -4,13 +4,12 @@
 
 ## Store a Paper Flow Result
 
-Run `paper_flow()` first, then explicitly store its complete result:
+Run `PaperFlow(PaperSemanticCfg(...)).build()` first, then explicitly store its complete result:
 
 ```python
-result = await paper_flow(
-    ArxivIdentifier(id="1706.03762v7"),
-    cfg=PaperFlowCfg(model="gpt-4o-mini"),
-)
+result = await PaperFlow(
+    PaperSemanticCfg(model="gpt-5.6-luna"),
+).build(ArxivIdentifier(id="1706.03762v7"))
 
 library = await LocalKnowledgeLibrary.open(
     ".quantmind/library.db",
@@ -99,7 +98,7 @@ The bundled AI-infrastructure scenario contains primary-source-backed `News`, `E
 python examples/library/semantic_search.py
 ```
 
-`LegacyPaper` exists only so older databases and this auditable example remain readable. New paper ingestion uses `PaperFlowResult` and `put_paper()`.
+`LegacyPaper` exists only so older databases and this auditable example remain readable. New paper ingestion uses `PaperSemanticResult` and `put_paper()`.
 
 Maintainers can regenerate the bundle after changing source data, projection rules, or the storage schema:
 

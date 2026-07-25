@@ -1,10 +1,12 @@
 # QuantMind — Agent Instructions
 
-Guidance for coding agents contributing to this repository. Keep this file
-aligned with `CLAUDE.md` (same core rules); update both in the same change.
+Guidance for coding agents contributing to this repository. This file is the
+single source of repository instructions; `CLAUDE.md` imports it verbatim, so
+edit rules here, not there.
 
-Use [`contexts/README.md`](contexts/README.md) as the repository information
-entry point for either development or library-usage work.
+Start at [`contexts/CONTEXT_MAP.md`](contexts/CONTEXT_MAP.md), the navigation
+index for `contexts/`. [`contexts/README.md`](contexts/README.md) is the
+routing entry point for development or library-usage work.
 
 ## Progressive Context Loading
 
@@ -28,6 +30,18 @@ finance, built **on top of** the OpenAI Agents SDK. It is a domain library,
 not an agent framework: runtime, tracing, tool scaffolding, and multi-agent
 handoff all come from `openai-agents`.
 
+## Positioning
+
+QuantMind is an **agent-native workbench for financial knowledge extraction** —
+its primary consumer is a coding agent working inside this checkout, not only a
+human importing a package (workbench-first, library-second). Two engineering
+dimensions structure it: **context engineering** (any source → typed, cited,
+as-of-correct knowledge) and **harness engineering** (any agent → domain
+specialist, via this repo's contracts, `contexts/`, skills, hooks, and
+deterministic verify).
+The canonical, always-current statement lives in
+[`contexts/design/positioning.md`](contexts/design/positioning.md).
+
 ## Module Map
 
 | Module | Role |
@@ -37,7 +51,7 @@ handoff all come from `openai-agents`.
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
 | `quantmind/preprocess/` | Deterministic fetch / format / clean / time utilities — depends only on `utils` |
 | `quantmind/rag/` | Opinionated LlamaIndex document chunking and retrieval — depends only on `preprocess` |
-| `quantmind/flows/` | Apex layer: public library operations (`paper_flow`, `collect_news`, `batch_run`) |
+| `quantmind/flows/` | Apex layer: public library operations (`PaperFlow`, `collect_news`, `batch_run`) |
 | `quantmind/magic.py` | `resolve_magic_input`: natural language → `(input, cfg)` |
 | `quantmind/mind/` | Pure-agentic reasoning layer — memory + agentic (reasoning-based) retrieval where an LLM decides; mechanical retrieval (similarity / BM25) lives in `rag` / `library` |
 | `quantmind/utils/` | Logger only — keep it that way |
@@ -142,7 +156,7 @@ A new feature ships with a unit test **and** a focused example:
 For commit, pull-request, or component-implementation tasks, load the
 `quantmind-dev` skill and follow the matching reference:
 
-- `.agents/skills/quantmind-dev/SKILL.md` (this toolchain)
+- `.agents/skills/quantmind-dev/SKILL.md` (Codex and other AGENTS.md-based tools)
 - `.claude/skills/quantmind-dev/SKILL.md` (Claude Code)
 
 The two copies are identical; when changing the skill, update both in the

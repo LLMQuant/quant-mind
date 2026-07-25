@@ -21,8 +21,8 @@ from quantmind.knowledge import (
     News,
     PaperArtifact,
     PaperChunkSet,
-    PaperFlowResult,
     PaperGlobalSummary,
+    PaperSemanticResult,
     PaperSourceRevision,
     PaperStructureTree,
     ResolvedPaperArtifact,
@@ -124,7 +124,7 @@ class _CanonicalPaperArtifact:
 class _PreparedPaperPut:
     """Validated source/artifact write plus reusable search projections."""
 
-    result: PaperFlowResult
+    result: PaperSemanticResult
     source_payload: str
     source_canonical_hash: str
     artifacts: tuple[_CanonicalPaperArtifact, ...]
@@ -784,7 +784,9 @@ class _SQLiteStore:
             existing_embeddings=existing,
         )
 
-    def prepare_put_paper(self, result: PaperFlowResult) -> _PreparedPaperPut:
+    def prepare_put_paper(
+        self, result: PaperSemanticResult
+    ) -> _PreparedPaperPut:
         """Validate paper blobs and load projections eligible for reuse."""
         source = result.source_revision
         source_payload, source_canonical_hash = _prepare_paper_source(source)
@@ -1585,7 +1587,7 @@ class _SQLiteStore:
         *,
         chunk_set_id: UUID | None,
         summary_id: UUID | None,
-    ) -> PaperFlowResult:
+    ) -> PaperSemanticResult:
         """Resolve one unambiguous V1 source/chunk-set/summary combination."""
         source = self.get_paper_source(source_revision_id)
 
@@ -1622,7 +1624,7 @@ class _SQLiteStore:
             summary, PaperGlobalSummary
         ):
             raise RuntimeError("Stored paper artifact types are inconsistent")
-        return PaperFlowResult(
+        return PaperSemanticResult(
             source_revision=source,
             chunk_set=chunk_set,
             global_summary=summary,

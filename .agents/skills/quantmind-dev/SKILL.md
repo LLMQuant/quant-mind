@@ -1,6 +1,6 @@
 ---
 name: quantmind-dev
-description: Contributor workflow for the QuantMind codebase. Covers commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, rag, flows, mind, utils) with tests, examples, and verification. Use when committing, opening a PR, or implementing/refactoring QuantMind code.
+description: Contributor workflow for the QuantMind codebase. Covers contributor setup (environment + hooks), filing issues, commit format, pull request format, and component development across quantmind/ modules (knowledge, configs, preprocess, rag, flows, mind, utils) with tests, examples, and verification. Use when setting up as a contributor, filing an issue, committing, opening a PR, or implementing/refactoring QuantMind code.
 ---
 
 # QuantMind Dev
@@ -9,21 +9,25 @@ Development workflow for contributing to the QuantMind codebase.
 
 ## Start Here
 
-1. Use the repository [`contexts/README.md`](../../../contexts/README.md) to
+1. Use the repository `contexts/README.md` to
    select the development context for this contribution.
 2. Read the repository root `AGENTS.md` or `CLAUDE.md` for the stable
    architecture constraints and the module map.
 3. Read `docs/README.md` when the task adds, changes, or uses a public
    operation or public-network source.
 4. When creating, updating, or triaging an issue or pull request, use the
-   canonical [repository label guidance](../../../contexts/dev/labels.md).
+   canonical repository label guidance in `contexts/dev/labels.md`.
 5. Before writing or editing any GitHub body, follow the canonical
-   [GitHub writing style](../../../contexts/dev/github-writing.md), including
+   GitHub writing style in `contexts/dev/github-writing.md`, including
    its no-hard-wrap rule.
 6. Pick exactly one workflow reference below; do not load the others.
 
 ## Select Workflow
 
+- Setting up as a contributor (environment, hooks, first verify) →
+  `references/setup.md`
+- Filing an issue for a bug or a missing capability →
+  `references/setup.md` ("File an Issue" section)
 - Committing staged work → `references/commit.md`
 - Opening or updating a pull request → `references/pull-request.md`
 - Implementing or refactoring anything under `quantmind/` →
