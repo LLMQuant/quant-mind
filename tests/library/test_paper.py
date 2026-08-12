@@ -130,6 +130,8 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 all("embedding" not in payload for payload in payloads)
             )
 
+        db.close()
+
     async def test_reopen_round_trip_reuses_vectors_and_resolves_hits(
         self,
     ) -> None:
@@ -285,6 +287,8 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 8,
             )
 
+        db.close()
+
     async def test_required_projection_failure_is_atomic(self) -> None:
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
@@ -315,6 +319,8 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+        db.close()
+
     async def test_rehydrate_rejects_asset_metadata_drift(self) -> None:
         result = build_paper_result()
         library = await LocalKnowledgeLibrary.open(
@@ -332,6 +338,7 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 ("application/tampered",),
             )
 
+        db.close()
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
             embedding_model="fake-2d",
@@ -361,6 +368,7 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 (str(result.global_summary.id),),
             )
 
+        db.close()
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
             embedding_model="fake-2d",
@@ -395,6 +403,7 @@ class PaperLibraryTests(unittest.IsolatedAsyncioTestCase):
                 (tampered, hashlib.sha256(tampered.encode()).hexdigest()),
             )
 
+        db.close()
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
             embedding_model="fake-2d",

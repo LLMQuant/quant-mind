@@ -100,6 +100,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
             ).fetchone()[0]
             self.assertEqual(target_count, 0)
 
+        db.close()
         reopened = await self._open(_FakeEmbeddingProvider())
         try:
             restored = await reopened.get_artifact(tree.id)
@@ -212,6 +213,8 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+        db.close()
+
     async def test_put_paper_structure_tree_rejects_a_tree_for_another_source(
         self,
     ) -> None:
@@ -236,6 +239,8 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+        db.close()
+
     async def test_rehydrate_fails_closed_on_member_metadata_drift(
         self,
     ) -> None:
@@ -254,6 +259,7 @@ class StructureTreeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 (str(tree.id), str(node.node_id)),
             )
 
+        db.close()
         reopened = await self._open(_FakeEmbeddingProvider())
         try:
             with self.assertRaisesRegex(
@@ -307,6 +313,7 @@ class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
                     """
                 )
 
+            db.close()
             library = await LocalKnowledgeLibrary.open(
                 path,
                 embedding_model="fake-2d",
@@ -359,6 +366,8 @@ class SchemaMigrationTests(unittest.IsolatedAsyncioTestCase):
                     ],
                     0,
                 )
+
+            db.close()
 
 
 if __name__ == "__main__":

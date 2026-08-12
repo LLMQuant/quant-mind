@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import os
 import tempfile
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -72,10 +73,21 @@ def _write_artifacts(
     screenshots_dir.mkdir(exist_ok=True)
     image_dir = artifact_dir / "images"
     image_dir.mkdir(exist_ok=True)
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as source:
+    # On Windows, NamedTemporaryFile keeps an exclusive handle on the file,
+    # which blocks the native parser from opening the path. Use delete=False,
+    # close the handle before handing the path to the parser, then remove the
+    # file afterwards so no temp file is left behind.
+    source = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    try:
         source.write(pdf_bytes)
         source.flush()
+        source.close()
         screenshots = parser.screenshot(source.name)
+    finally:
+        try:
+            os.unlink(source.name)
+        except OSError:
+            pass
     screenshot_paths: dict[int, str] = {}
     for screenshot in screenshots:
         path = screenshots_dir / f"page_{screenshot.page_num}.png"

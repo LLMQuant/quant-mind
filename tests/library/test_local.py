@@ -258,6 +258,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                     ).fetchone()[0],
                     3,
                 )
+            db.close()
             hits = await library.search(
                 SemanticQuery(
                     text=query_text,
@@ -551,6 +552,8 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+        db.close()
+
     async def test_stale_canonical_get_fails_but_delete_can_recover(self):
         item = _news("Stale canonical")
         provider = _FakeEmbeddingProvider()
@@ -568,6 +571,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                     "WHERE item_id = ?",
                     (str(item.id),),
                 )
+            db.close()
             with self.assertRaisesRegex(
                 RuntimeError, "Stale canonical knowledge"
             ):
@@ -595,6 +599,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 "DELETE FROM knowledge_items WHERE item_id = ?", (str(item.id),)
             )
 
+        db.close()
         reopened_provider = _FakeEmbeddingProvider()
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
@@ -630,6 +635,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                     """,
                     (str(paper.id), str(methods_id)),
                 )
+            db.close()
             with self.assertRaisesRegex(
                 RuntimeError, "node.*content hash mismatch"
             ):
@@ -656,6 +662,7 @@ class LocalKnowledgeLibraryTests(unittest.IsolatedAsyncioTestCase):
                 (b"bad", str(item.id)),
             )
 
+        db.close()
         library = await LocalKnowledgeLibrary.open(
             self.db_path,
             embedding_model="fake-2d",

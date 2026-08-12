@@ -146,6 +146,7 @@ class ExampleBundleSearchTests(unittest.IsolatedAsyncioTestCase):
                 {("text-embedding-3-small", 1536)},
             )
 
+        db.close()
         provider = _QueryEmbeddingProvider()
         library = await LocalKnowledgeLibrary.open(
             _DATABASE_PATH,
