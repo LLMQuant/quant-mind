@@ -16,6 +16,18 @@ from quantmind.preprocess.format import (
     ParsedPage,
 )
 
+_CJK_RANGES = "぀-ヿ㐀-䶿一-鿿豈-﫿"
+_CJK_AWARE_TOKEN_PATTERN = rf"(?u)[^\W{_CJK_RANGES}]{{2,}}|[{_CJK_RANGES}]"
+"""Tokenize CJK scripts per character, leaving other scripts untouched.
+
+The retriever default ``(?u)\\b\\w\\w+\\b`` assumes whitespace-delimited words.
+Japanese and Chinese are not, so a whole phrase becomes a single token and a
+query token can never equal a document token: every chunk scores ``0.0`` while
+the retriever still returns ``top_k`` hits. Splitting only CJK characters keeps
+the two-or-more-character rule for Latin, Cyrillic and other alphabets, so their
+scores and ranking stay identical.
+"""
+
 
 @dataclass(frozen=True)
 class SentenceSplitterConfig:
@@ -154,6 +166,7 @@ def retrieve_parsed_document(
     retriever = BM25Retriever.from_defaults(
         nodes=nodes,
         similarity_top_k=min(top_k, len(nodes)),
+        token_pattern=_CJK_AWARE_TOKEN_PATTERN,
     )
     results = retriever.retrieve(query)
     return tuple(
