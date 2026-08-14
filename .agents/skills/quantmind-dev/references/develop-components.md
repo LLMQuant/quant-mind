@@ -39,6 +39,7 @@ apply throughout.
 
 | Module | May import from `quantmind.*` |
 |--------|-------------------------------|
+| `quantmind/etl/` | nothing (independent leaf) |
 | `quantmind/utils/` | nothing (leaf) |
 | `quantmind/knowledge/` | nothing (leaf) |
 | `quantmind/configs/` | `knowledge` only |
@@ -46,7 +47,26 @@ apply throughout.
 | `quantmind/rag/` | `preprocess` only |
 | `quantmind/library/` | `knowledge` only |
 | `quantmind/mind/` | `knowledge`, `configs`, `utils` (retrieval is library-free; the `library` edge is reserved for the future collection path, not single-tree `retrieve`) |
-| `quantmind/flows/`, `quantmind/magic.py` | apex — may import all of the above |
+| `quantmind/flows/`, `quantmind/magic.py` | apex — may import domain layers above, but not the independent `etl` scaffold |
+
+### `quantmind/etl/` — observable whole-run and micro-batch ETL
+
+- Bind exactly three async stage callables to `ETLPipeline` for one whole-run
+  delivery. Use the parallel `BatchETLPipeline` when an async producer yields
+  business batches that each pass through transform and load. Never switch
+  execution shape by inspecting a callable's return value, and never hide batch
+  loads inside a whole-run transform.
+- Use composition rather than an ABC, subclass tree, or inheritance between the
+  two pipeline classes. Keep batch execution strictly serial unless a later
+  observation contract explicitly represents simultaneously active stages.
+- Keep it independent of every other `quantmind.*` package. Existing flows do
+  not inherit it; their pure `input → artifact` contract remains unchanged.
+- Report only real completed work through `PipelineContext.progress()`. In batch
+  mode, only a load that returns successfully increments the completed-batch
+  count; partial-write safety remains the business load's responsibility. The
+  scaffold owns its local lifecycle snapshots; do not add custom run-state
+  files, a CLI, heartbeat, scheduler, retry policy, checkpoint/resume, or
+  workflow engine. See `contexts/design/operations/etl.md`.
 
 ### `quantmind/knowledge/` — data standard
 
@@ -144,10 +164,13 @@ apply throughout.
 A public operation is complete only when all of these agree:
 
 1. A stage and name consistent with `contexts/design/operations/naming.md`.
-2. Typed input and config models, exported from `quantmind.configs`.
+2. Typed input and config models, when the operation has them, exported from
+   the canonical owning package (`quantmind.configs` for flow configs,
+   `quantmind.etl` for ETL run contracts, or another explicit owner).
 3. One intent-oriented async function, small service class, or document-scoped
-   handle exported from `quantmind.flows`, with its result contract exported
-   from the canonical owning layer.
+   handle exported from its canonical owning package (`quantmind.flows`,
+   `quantmind.etl`, `quantmind.library`, etc.), with its result contract
+   exported from the same owning layer.
 4. Offline success and failure tests for the public callable, plus a
    magic-introspection test when a function follows the `(input, *, cfg)`
    convention.

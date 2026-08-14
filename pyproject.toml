@@ -120,13 +120,30 @@ reportIncompatibleVariableOverride = "none"
 # ----------------------------------------------------------------------------
 # import-linter: architectural boundary contracts
 # ----------------------------------------------------------------------------
-# Encodes the target architecture: utils, knowledge, and preprocess are
-# leaves; configs and library depend only on knowledge; rag depends only on
-# preprocess; flows + magic is the apex layer. The transitional packages
-# (config/, flow/, llm/, models/) remain forbidden as a tripwire.
+# Encodes the target architecture: etl is an independent stdlib-only leaf;
+# utils, knowledge, and preprocess are leaves; configs and library depend only
+# on knowledge; rag depends only on preprocess; flows + magic is the apex
+# layer. The transitional packages (config/, flow/, llm/, models/) remain
+# forbidden as a tripwire.
 
 [tool.importlinter]
 root_packages = ["quantmind"]
+
+[[tool.importlinter.contracts]]
+name = "etl is independent (stdlib only)"
+type = "forbidden"
+source_modules = ["quantmind.etl"]
+forbidden_modules = [
+    "quantmind.configs",
+    "quantmind.flows",
+    "quantmind.knowledge",
+    "quantmind.library",
+    "quantmind.magic",
+    "quantmind.mind",
+    "quantmind.preprocess",
+    "quantmind.rag",
+    "quantmind.utils",
+]
 
 [[tool.importlinter.contracts]]
 name = "utils is a leaf (no inbound deps from quantmind packages)"
@@ -134,6 +151,7 @@ type = "forbidden"
 source_modules = ["quantmind.utils"]
 forbidden_modules = [
     "quantmind.configs",
+    "quantmind.etl",
     "quantmind.flows",
     "quantmind.knowledge",
     "quantmind.library",
@@ -149,6 +167,7 @@ type = "forbidden"
 source_modules = ["quantmind.knowledge"]
 forbidden_modules = [
     "quantmind.configs",
+    "quantmind.etl",
     "quantmind.flows",
     "quantmind.library",
     "quantmind.magic",
@@ -163,6 +182,7 @@ name = "configs only depends on knowledge"
 type = "forbidden"
 source_modules = ["quantmind.configs"]
 forbidden_modules = [
+    "quantmind.etl",
     "quantmind.flows",
     "quantmind.library",
     "quantmind.magic",
@@ -177,6 +197,7 @@ type = "forbidden"
 source_modules = ["quantmind.preprocess"]
 forbidden_modules = [
     "quantmind.configs",
+    "quantmind.etl",
     "quantmind.flows",
     "quantmind.knowledge",
     "quantmind.library",
@@ -192,6 +213,7 @@ source_modules = ["quantmind.library"]
 forbidden_modules = [
     "quantmind.config",
     "quantmind.configs",
+    "quantmind.etl",
     "quantmind.flow",
     "quantmind.flows",
     "quantmind.llm",
@@ -210,6 +232,7 @@ source_modules = ["quantmind.rag"]
 forbidden_modules = [
     "quantmind.config",
     "quantmind.configs",
+    "quantmind.etl",
     "quantmind.flow",
     "quantmind.flows",
     "quantmind.knowledge",
@@ -227,6 +250,7 @@ type = "forbidden"
 source_modules = ["quantmind.mind"]
 forbidden_modules = [
     "quantmind.config",
+    "quantmind.etl",
     "quantmind.flow",
     "quantmind.flows",
     "quantmind.llm",
@@ -247,6 +271,7 @@ source_modules = [
 # future code re-introducing them under the same names.
 forbidden_modules = [
     "quantmind.config",
+    "quantmind.etl",
     "quantmind.flow",
     "quantmind.llm",
     "quantmind.models",

@@ -28,6 +28,7 @@ This directory records QuantMind engineering decisions. Use it to understand whi
 | Mind | [Build and retrieve from a page-preserving structure tree](mind/retrieval.md) |
 | Operations | [Public operation naming](operations/naming.md) |
 | Operations | [Orchestration and construction altitude](operations/orchestration.md) |
+| Operations | [Observable whole-run and micro-batch ETL](operations/etl.md) |
 | Utils | [Cross-provider structured output](utils/structured_output.md) |
 | Utils | [Collect per-run token and timing usage from SDK traces](utils/usage.md) |
 
