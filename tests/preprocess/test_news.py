@@ -117,6 +117,39 @@ class NewsPreprocessTests(unittest.TestCase):
                     expected,
                 )
 
+    def test_exchange_ticker_hints_capture_shared_prefix_lists(self):
+        cases = (
+            (
+                "(OTCID: QVCAQ, QVCGQ, QVCPQ)",
+                [],
+            ),
+            (
+                "(NYSE: EVEX, EVEXW; B3: EVEB31)",
+                [("EVEX", "NYSE"), ("EVEXW", "NYSE")],
+            ),
+            (
+                "(NYSE: TME and HKEX: 1698)",
+                [("TME", "NYSE")],
+            ),
+            (
+                "(NASDAQ: VMAR; TSXV: VMAR)",
+                [("VMAR", "NASDAQ")],
+            ),
+            (
+                "(NYSE: ASR; BMV: ASUR)",
+                [("ASR", "NYSE")],
+            ),
+        )
+
+        for text, expected in cases:
+            with self.subTest(text=text):
+                hints = extract_exchange_ticker_hints(text)
+
+                self.assertEqual(
+                    [(hint.symbol, hint.exchange) for hint in hints],
+                    expected,
+                )
+
     def test_build_sec_news_identity(self):
         self.assertEqual(
             build_sec_news_identity(

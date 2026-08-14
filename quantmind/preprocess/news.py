@@ -56,6 +56,10 @@ _MARKDOWN_EMPHASIS_RE = re.compile(
     r"(?<!\*)\*{1,2}([A-Z][A-Z0-9.-]{0,9})\*{1,2}(?!\*)",
     re.IGNORECASE,
 )
+_EXCHANGE_TICKER_LIST_MEMBER_RE = re.compile(
+    r"\s*,\s*([A-Z][A-Z0-9.-]{0,9})\b",
+    re.IGNORECASE,
+)
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
 )
@@ -410,21 +414,42 @@ def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
     scan_text = _MARKDOWN_EMPHASIS_RE.sub(r"\1", scan_text)
     hints: list[NewsTickerHint] = []
     seen: set[tuple[str, str | None]] = set()
-    for match in _EXCHANGE_TICKER_RE.finditer(scan_text):
-        raw_exchange = " ".join(match.group(1).upper().split())
-        exchange = _EXCHANGE_NAMES.get(raw_exchange, raw_exchange)
-        symbol = match.group(2).upper()
+
+    def append_hint(
+        *,
+        symbol: str,
+        exchange: str,
+        raw: str,
+    ) -> None:
         key = (symbol, exchange)
         if key in seen:
-            continue
+            return
         seen.add(key)
         hints.append(
             NewsTickerHint(
                 symbol=symbol,
                 exchange=exchange,
-                raw=match.group(0).strip(),
+                raw=raw,
             )
         )
+
+    for match in _EXCHANGE_TICKER_RE.finditer(scan_text):
+        raw_exchange = " ".join(match.group(1).upper().split())
+        exchange = _EXCHANGE_NAMES.get(raw_exchange, raw_exchange)
+        symbol = match.group(2).upper()
+        append_hint(
+            symbol=symbol,
+            exchange=exchange,
+            raw=match.group(0).strip(),
+        )
+
+        tail = re.split(r"[;)]", scan_text[match.end() :], maxsplit=1)[0]
+        for list_match in _EXCHANGE_TICKER_LIST_MEMBER_RE.finditer(tail):
+            append_hint(
+                symbol=list_match.group(1).upper(),
+                exchange=exchange,
+                raw=f"{raw_exchange}: {list_match.group(1).upper()}",
+            )
     return tuple(hints)
 
 
