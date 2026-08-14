@@ -101,9 +101,11 @@ Inputs, complete configuration, intermediate values, individual load results, tr
 
 ## Distinguish staging from delivery
 
+Staging is intentionally not a fourth framework stage, and the scaffold exposes no `stage()` or `staging()` API. The authored `extract` or `transform` operation that creates and owns an intermediate also owns any staging write needed to recover or reuse it.
+
 `load` marks the delivery boundary. In a normal run, after it succeeds the pipeline's intended downstream consumer may treat that output as delivered; in dry-run it validates or plans the same boundary without delivering. A database call is not automatically a load. Extract or transform may perform staging writes when they persist an intermediate for recovery or reuse while keeping it unavailable to formal downstream consumers.
 
-Staging writes are permitted in any stage of a normal run when they are idempotent and their real completion is visible through progress. Dry-run must plan or validate them without writing. They remain business behavior: the scaffold provides no transaction, rollback, exactly-once, or artifact-management guarantee.
+Staging writes are permitted inside the owning extract or transform stage of a normal run when they are idempotent and their real completion is visible through progress. Dry-run must plan or validate them without writing. They remain business behavior: the scaffold provides no transaction, rollback, exactly-once, or artifact-management guarantee.
 
 If a batch write makes the final product consumable, it is a real batch load even when the target table is named `raw`. Repeated `transform(batch) → load(batch)` delivery belongs in `BatchETLPipeline`; hiding those loads inside a whole-run transform would make `run.json.stage` dishonest.
 

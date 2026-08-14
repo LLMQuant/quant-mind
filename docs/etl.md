@@ -109,6 +109,34 @@ The framework owns a strictly serial loop. While it awaits the next yielded batc
 
 See [batch local artifacts](../examples/etl/batch_local_artifacts.py) for a network-free, bounded-memory example with idempotent local loads.
 
+## Handle staging inside the owning stage
+
+Decide whether a write is staging or load by downstream consumability, not by whether it touches a database. A staging write persists an intermediate for recovery or reuse while keeping it unavailable to formal downstream consumers; `load` is the boundary after which the intended consumer may treat the result as delivered.
+
+Staging is not a fourth framework stage. Put it inside the `extract` or `transform` callable that creates and owns the intermediate, make the write idempotent, report its real completion through `ctx.progress()`, and suppress the mutation during dry-run. The framework observes the authored stage but does not manage staging artifacts, transactions, rollback, or recovery.
+
+```python
+async def extract(source: str, *, ctx: PipelineContext) -> list[str]:
+    raw_records = await fetch_raw_records(source)
+    if ctx.dry_run:
+        await validate_raw_records(raw_records)
+        metrics = {"planned_raw_records": len(raw_records)}
+        message = "raw staging planned"
+    else:
+        await raw_store.upsert_many(raw_records)  # Idempotent staging write.
+        metrics = {"raw_records_staged": len(raw_records)}
+        message = "raw records staged"
+    await ctx.progress(
+        len(raw_records),
+        total=len(raw_records),
+        message=message,
+        metrics=metrics,
+    )
+    return raw_records
+```
+
+If that write already makes a batch consumable, it is a real `load(batch)` even when the table or object is named `raw`. If an intermediate has an independent downstream consumer, model it as the delivered output of a separate pipeline. See [Distinguish staging from delivery](../contexts/design/operations/etl.md#distinguish-staging-from-delivery) for the canonical decision rule.
+
 ## Implement dry-run honestly
 
 `create_run(source, *, dry_run=...)` has no default. Production scripts should read the value from a runtime option such as `--dry-run` and pass that variable, so switching modes never requires editing stage code.
