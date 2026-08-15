@@ -57,8 +57,7 @@ _MARKDOWN_EMPHASIS_RE = re.compile(
     re.IGNORECASE,
 )
 _EXCHANGE_TICKER_LIST_MEMBER_RE = re.compile(
-    r"\s*,\s*([A-Z][A-Z0-9.-]{0,9})\b",
-    re.IGNORECASE,
+    r"\s*,\s*([A-Z][A-Z0-9.-]{0,9})\b"
 )
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
