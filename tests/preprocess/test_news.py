@@ -128,6 +128,10 @@ class NewsPreprocessTests(unittest.TestCase):
                 [("EVEX", "NYSE"), ("EVEXW", "NYSE")],
             ),
             (
+                "(NASDAQ: ABC, a leading provider announced results)",
+                [("ABC", "NASDAQ")],
+            ),
+            (
                 "(NYSE: TME and HKEX: 1698)",
                 [("TME", "NYSE")],
             ),
