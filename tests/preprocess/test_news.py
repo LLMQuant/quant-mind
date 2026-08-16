@@ -117,6 +117,107 @@ class NewsPreprocessTests(unittest.TestCase):
                     expected,
                 )
 
+    def test_exchange_ticker_hints_capture_shared_prefix_comma_list(self):
+        hints = extract_exchange_ticker_hints(
+            "Example issuer (NYSE: EVEX, EVEXW) announced results."
+        )
+
+        self.assertEqual(
+            tuple((hint.symbol, hint.exchange, hint.raw) for hint in hints),
+            (
+                ("EVEX", "NYSE", "(NYSE: EVEX, EVEXW)"),
+                ("EVEXW", "NYSE", "(NYSE: EVEX, EVEXW)"),
+            ),
+        )
+
+    def test_exchange_ticker_hints_stop_shared_list_at_semicolon(self):
+        hints = extract_exchange_ticker_hints(
+            "Example issuer (NYSE: EVEX, EVEXW; B3: EVEB31) announced results."
+        )
+
+        self.assertEqual(
+            tuple((hint.symbol, hint.exchange, hint.raw) for hint in hints),
+            (
+                (
+                    "EVEX",
+                    "NYSE",
+                    "(NYSE: EVEX, EVEXW; B3: EVEB31)",
+                ),
+                (
+                    "EVEXW",
+                    "NYSE",
+                    "(NYSE: EVEX, EVEXW; B3: EVEB31)",
+                ),
+            ),
+        )
+
+    def test_exchange_ticker_hints_capture_new_shared_list_members(self):
+        hints = extract_exchange_ticker_hints(
+            "Prior (NYSE: EVEX). Offering (NYSE: EVEX, EVEXW)."
+        )
+
+        self.assertEqual(
+            tuple((hint.symbol, hint.exchange, hint.raw) for hint in hints),
+            (
+                ("EVEX", "NYSE", "(NYSE: EVEX)"),
+                ("EVEXW", "NYSE", "(NYSE: EVEX, EVEXW)"),
+            ),
+        )
+
+    def test_exchange_ticker_hints_stop_at_shared_prefix_boundaries(self):
+        cases = (
+            (
+                "balanced mention followed by prose",
+                "Shares of (NYSE: IBM), and (NASDAQ: AAPL) rose today.",
+                (
+                    ("IBM", "NYSE", "(NYSE: IBM)"),
+                    ("AAPL", "NASDAQ", "(NASDAQ: AAPL)"),
+                ),
+            ),
+            ("unsupported exchange", "(OTCID: QVCAQ, QVCGQ, QVCPQ)", ()),
+            (
+                "conjunction boundary",
+                "(NYSE: TME and HKEX: 1698)",
+                (("TME", "NYSE", "(NYSE: TME"),),
+            ),
+            (
+                "semicolon boundary TSXV",
+                "(NASDAQ: VMAR; TSXV: VMAR)",
+                (("VMAR", "NASDAQ", "(NASDAQ: VMAR"),),
+            ),
+            (
+                "semicolon boundary BMV",
+                "(NYSE: ASR; BMV: ASUR)",
+                (("ASR", "NYSE", "(NYSE: ASR"),),
+            ),
+            (
+                "ordinary prose inside parentheses",
+                "(NYSE: IBM, and revenue increased)",
+                (("IBM", "NYSE", "(NYSE: IBM"),),
+            ),
+            (
+                "uppercase token before ordinary prose",
+                "(NYSE: IBM, ABC and revenue increased)",
+                (("IBM", "NYSE", "(NYSE: IBM"),),
+            ),
+            (
+                "uppercase token before non-exchange semicolon",
+                "(NYSE: IBM, ABC; revenue increased)",
+                (("IBM", "NYSE", "(NYSE: IBM"),),
+            ),
+        )
+
+        for name, text, expected in cases:
+            with self.subTest(name=name):
+                hints = extract_exchange_ticker_hints(text)
+
+                self.assertEqual(
+                    tuple(
+                        (hint.symbol, hint.exchange, hint.raw) for hint in hints
+                    ),
+                    expected,
+                )
+
     def test_build_sec_news_identity(self):
         self.assertEqual(
             build_sec_news_identity(

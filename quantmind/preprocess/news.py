@@ -56,6 +56,11 @@ _MARKDOWN_EMPHASIS_RE = re.compile(
     r"(?<!\*)\*{1,2}([A-Z][A-Z0-9.-]{0,9})\*{1,2}(?!\*)",
     re.IGNORECASE,
 )
+_SHARED_EXCHANGE_GROUP_RE = re.compile(
+    r"(?P<members>(?:\s*,\s*[A-Z][A-Z0-9.-]{0,9})+)"
+    r"(?=\s*(?:\)|;\s*[A-Z][A-Z0-9 .-]*\s*:))",
+)
+_SHARED_EXCHANGE_SYMBOL_RE = re.compile(r",\s*([A-Z][A-Z0-9.-]{0,9})")
 _EMAIL_PROTECTION_LINK_RE = re.compile(
     r"\[\[email protected]\]\(/cdn-cgi/l/email-protection#[^)]+\)"
 )
@@ -401,8 +406,9 @@ def canonicalize_source_url(url: str) -> str:
 def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
     """Extract exchange-qualified ticker mentions from PR-style text.
 
-    Examples matched include ``(NASDAQ: NVDA)`` and ``NYSE: IBM``. The result is
-    only a hint; downstream instrument resolution should still validate it.
+    Examples matched include ``(NASDAQ: NVDA)``, ``NYSE: IBM``, and a
+    parenthesized comma list such as ``(NYSE: EVEX, EVEXW)``. The result is only
+    a hint; downstream instrument resolution should still validate it.
     Markdown link and emphasis decoration is removed from a scan-only copy so
     stored news text and its content hash retain their original representation.
     """
@@ -414,17 +420,48 @@ def extract_exchange_ticker_hints(text: str) -> tuple[NewsTickerHint, ...]:
         raw_exchange = " ".join(match.group(1).upper().split())
         exchange = _EXCHANGE_NAMES.get(raw_exchange, raw_exchange)
         symbol = match.group(2).upper()
+        continuation_matches: list[re.Match[str]] = []
+        shared_group_raw: str | None = None
+        matched_text = match.group(0)
+        if matched_text.lstrip().startswith(
+            "("
+        ) and not matched_text.rstrip().endswith(")"):
+            closing_parenthesis = scan_text.find(")", match.end())
+            if closing_parenthesis != -1:
+                suffix = scan_text[match.end() : closing_parenthesis + 1]
+                shared_group = _SHARED_EXCHANGE_GROUP_RE.match(suffix)
+                if shared_group:
+                    continuation_matches = list(
+                        _SHARED_EXCHANGE_SYMBOL_RE.finditer(
+                            shared_group.group("members")
+                        )
+                    )
+                    shared_group_raw = scan_text[
+                        match.start() : closing_parenthesis + 1
+                    ].strip()
+
         key = (symbol, exchange)
-        if key in seen:
-            continue
-        seen.add(key)
-        hints.append(
-            NewsTickerHint(
-                symbol=symbol,
-                exchange=exchange,
-                raw=match.group(0).strip(),
+        if key not in seen:
+            seen.add(key)
+            hints.append(
+                NewsTickerHint(
+                    symbol=symbol,
+                    exchange=exchange,
+                    raw=shared_group_raw or matched_text.strip(),
+                )
             )
-        )
+        for continuation in continuation_matches:
+            symbol = continuation.group(1).upper()
+            key = (symbol, exchange)
+            if key not in seen:
+                seen.add(key)
+                hints.append(
+                    NewsTickerHint(
+                        symbol=symbol,
+                        exchange=exchange,
+                        raw=shared_group_raw,
+                    )
+                )
     return tuple(hints)
 
 
