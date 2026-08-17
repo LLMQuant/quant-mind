@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from agents import Agent, ModelSettings
 
-from quantmind.configs import PaperStructureCfg
+from quantmind.configs import PaperStructureCfg, resolve_agent_model
 from quantmind.flows._runner import run_with_observability
 from quantmind.knowledge import PaperSourceRevision, PaperStructureTreeDraft
 from quantmind.preprocess import OutlineSignals
@@ -131,7 +131,7 @@ class _AgentsPaperStructureProvider:
             model_settings = _structure_model_settings(cfg)
             kwargs: dict[str, Any] = {
                 "name": "paper_structure_builder",
-                "model": cfg.model,
+                "model": resolve_agent_model(cfg.model),
             }
             if json_object:
                 kwargs["instructions"] = json_object_instructions(

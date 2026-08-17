@@ -28,7 +28,7 @@ from agents import Agent, ModelSettings, RunConfig, Runner, function_tool
 from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel, ConfigDict, Field
 
-from quantmind.configs import RetrievalCfg
+from quantmind.configs import RetrievalCfg, resolve_agent_model
 from quantmind.knowledge import (
     ArtifactLocator,
     Citation,
@@ -344,7 +344,7 @@ async def _agentic_select(
         model_settings = cfg.model_settings or ModelSettings()
         kwargs: dict[str, Any] = {
             "name": "structure_agentic_retriever",
-            "model": cfg.model,
+            "model": resolve_agent_model(cfg.model),
             "tools": [get_document_structure, get_node_content],
         }
         if json_object:
