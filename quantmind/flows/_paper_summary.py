@@ -26,7 +26,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from quantmind.configs import PaperSemanticCfg
 from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import PaperChunkSet, PaperSourceRevision
+from quantmind.knowledge import (
+    PaperChunkSet,
+    PaperSourceRevision,
+    quote_matches_chunk_text,
+)
 
 _ORCHESTRATION_VERSION = "map-reduce-v1"
 
@@ -194,8 +198,25 @@ def _validate_research_draft(
     chunk_set: PaperChunkSet,
     group: _ChunkGroup,
     draft: PaperResearchDraft,
-) -> None:
+) -> PaperResearchDraft:
+    """Reject fabricated coordinates and drop quotes the chunk cannot support.
+
+    A chunk index outside the assigned group, or a page the cited chunk does
+    not own, is fabricated structure and raises. An unsupported quote is only
+    a paraphrase of real evidence: the finding keeps its claim, chunk, and
+    page, and the quote alone is dropped, so one loose quote in one group
+    cannot discard a whole paper build.
+
+    Args:
+        chunk_set: Chunk set the group was drawn from.
+        group: Chunk range this subagent was assigned.
+        draft: Draft returned by the subagent.
+
+    Returns:
+        The draft with every surviving quote supported by its chunk.
+    """
     allowed = set(range(group.start, group.start + group.count))
+    findings: list[PaperResearchFindingDraft] = []
     for finding in draft.findings:
         citation = finding.citation
         if citation.chunk_index not in allowed:
@@ -204,10 +225,12 @@ def _validate_research_draft(
         pages = {span.page_number for span in chunk.source_spans}
         if citation.page_number not in pages:
             raise ValueError("research finding cites a page outside its chunk")
-        if finding.quote is not None and finding.quote not in chunk.text:
-            raise ValueError(
-                "research finding quote is not present in its chunk"
-            )
+        if finding.quote is not None and not quote_matches_chunk_text(
+            finding.quote, chunk.text
+        ):
+            finding = finding.model_copy(update={"quote": None})
+        findings.append(finding)
+    return draft.model_copy(update={"findings": tuple(findings)})
 
 
 def _reduce_payload(
@@ -309,8 +332,7 @@ class _AgentsPaperSummaryProvider:
                     extra_run_hooks=[],
                 )
             draft = PaperResearchDraft.model_validate(output)
-            _validate_research_draft(chunk_set, group, draft)
-            return draft
+            return _validate_research_draft(chunk_set, group, draft)
 
         reports = await asyncio.gather(*(study(group) for group in groups))
 

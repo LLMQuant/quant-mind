@@ -93,7 +93,7 @@ Code accepts the draft only when:
 
 - every chunk index exists;
 - every cited page is present in that chunk's source spans;
-- every supplied quote occurs verbatim in the cited chunk;
+- every supplied quote occurs verbatim in the cited chunk, comparing both sides with whitespace removed (extracting a multi-column PDF injects column-gap padding and line-break hyphenation into the chunk text, so a faithful quote is rarely a byte-exact substring; a paraphrase still fails);
 - citation count meets `min_summary_citations`;
 - distinct cited-page count meets `min_summary_pages`.
 
@@ -121,7 +121,8 @@ Bounding is delegated to the Agents SDK (per-agent `max_tokens`, structured `out
 - Fetching, parsing, or missing parser assets raise their source error and produce no result.
 - Empty chunk output is invalid.
 - Invalid or insufficient summary citations raise `PaperCitationValidationError`.
-- A research finding that cites outside its assigned group is rejected in code; a reducer timeout raises `PaperSummaryError`.
+- A research finding that cites outside its assigned group, or a page its cited chunk does not own, is rejected in code; a reducer timeout raises `PaperSummaryError`.
+- A research finding whose quote its chunk does not support keeps its claim, chunk, and page and loses only the quote, so one paraphrased quote in one chunk group cannot discard a whole build. Coverage still fails loudly through `min_summary_citations` and `min_summary_pages`.
 - Any canonical identity, content hash, membership, lineage, or cross-artifact mismatch fails Pydantic validation.
 
 No failure is converted into a partially valid `PaperSemanticResult`. Callers may retry with the same source and producer settings; stable IDs make successful repeated runs idempotent.

@@ -27,9 +27,13 @@ result).
 Real run — arXiv ``1706.03762v7``, model ``gpt-5.6-luna`` (2026-07-24):
 
 - structure: 17 nodes (13 leaves), root ``"Attention Is All You Need"``.
-- semantic: 15 pages, 33 chunks. The cited-summary step asserts every research
-  quote verbatim against its chunk; the sampled models paraphrased, so that step
-  raised ``ValueError`` and produced no summary line on this run.
+- semantic: 15 pages, 33 chunks. The cited-summary step matches every research
+  quote against its chunk with whitespace removed on both sides, so a quote
+  copied faithfully off a multi-column page still validates even though
+  extraction padded it with column gaps and line-break hyphenation; a quote
+  the chunk cannot support is dropped and its finding keeps chunk and page.
+  (A byte-exact check instead failed on every sampled two-column paper, and a
+  single paraphrase discarded the whole build.)
 
 ``build`` fetches and parses **per call**: the flow binds no source, no library,
 persists nothing, and retrieves nothing. Persistence (``library``) and retrieval

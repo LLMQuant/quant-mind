@@ -60,6 +60,7 @@ from quantmind.knowledge.paper import (
     PaperStructureTreeDraft,
     PaperSummaryProducer,
     ResolvedPaperArtifact,
+    quote_matches_chunk_text,
 )
 from quantmind.knowledge.thesis import Thesis
 
@@ -111,4 +112,5 @@ __all__ = [
     "PaperSummaryProducer",
     "ResolvedPaperArtifact",
     "Thesis",
+    "quote_matches_chunk_text",
 ]
