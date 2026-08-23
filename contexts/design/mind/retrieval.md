@@ -54,7 +54,7 @@ flowchart TD
     subgraph FLW["flows — PaperFlow(cfg).build(input), pure processing"]
         OPEN["fetch + parse the input"]
         OUT["outline signals (deterministic)"]
-        DRAFT["draft structuring agent (model, private draft)"]
+        DRAFT["windowed draft structuring agent (model, private draft)"]
         BUILD["mint ids/links, read node text from cited pages, validate; self-contained PaperStructureTree (+ as_of / provenance)"]
     end
     subgraph LIB["library — dump / load only"]
@@ -76,7 +76,7 @@ flowchart TD
 | Owner | Responsibility |
 |---|---|
 | `quantmind.preprocess` | Emit deterministic outline signals (heading candidates, table-of-contents pages, printed-to-physical page offset) from a parsed document. No LLM calls. |
-| `quantmind.flows` (`PaperFlow`) | A **config-bound** flow: `PaperFlow(cfg)` binds the settings; `build(input)` fetches, parses, runs one draft-structuring agent, then calls the knowledge constructor and returns a **self-contained** `PaperStructureTree`. The cfg *type* selects the knowledge shape (`PaperStructureCfg` → tree today). No persistence, no retrieval, no library. |
+| `quantmind.flows` (`PaperFlow`) | A **config-bound** flow: `PaperFlow(cfg)` binds the settings; `build(input)` fetches, parses, drafts the hierarchy from full page text in character-bounded windows (one chained draft-structuring call per window, each extending the prior draft), then calls the knowledge constructor and returns a **self-contained** `PaperStructureTree`. The cfg *type* selects the knowledge shape (`PaperStructureCfg` → tree today). No persistence, no retrieval, no library. |
 | `quantmind.knowledge` | Own the `StructureTree` structural base and the source-bound `PaperStructureTree` artifact. `from_draft` mints identity, resolves page citations, **and populates each node's `content` from the exact source pages**, then runs the integrity gate. The artifact is a complete value. |
 | `quantmind.library` | Dump a self-contained tree and load it back unchanged (`put` / `open_structure`). A tree is an **independent** artifact: its library need not contain a chunk set, and loading it never depends on refilling text from another artifact. |
 | `quantmind.mind` | `AgenticRetriever(cfg)` binds the strategy config; `retrieve(tree, question)` reasons over one explicit tree value and returns evidence values with content already in them. It does **not** take or bind a library. |

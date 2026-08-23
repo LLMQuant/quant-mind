@@ -705,15 +705,25 @@ class PaperStructureTreeDraft(BaseModel):
 
 
 class PaperStructureProducer(BaseModel):
-    """Exact model, prompt, page-input, and bounds used to structure a paper."""
+    """Exact model, prompt, page-input, and bounds used to structure a paper.
+
+    ``orchestration`` names the draft input policy: ``single-pass-v1`` sent
+    every page once, clipped to ``page_text_chars``; ``windowed-v1`` sends
+    full page text in character-bounded windows (``window_chars`` per call,
+    ``window_overlap_pages`` shared pages between consecutive windows) with an
+    optional per-page clip. The window fields are ``None`` on artifacts
+    produced by the single-pass policy.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str
     prompt_version: str
-    orchestration: Literal["single-pass-v1"] = "single-pass-v1"
+    orchestration: Literal["single-pass-v1", "windowed-v1"] = "single-pass-v1"
     instructions_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    page_text_chars: int = Field(ge=80)
+    page_text_chars: int | None = Field(ge=80)
+    window_chars: int | None = Field(default=None, ge=2_000)
+    window_overlap_pages: int | None = Field(default=None, ge=0)
     max_output_tokens: int = Field(gt=0)
     max_depth: int = Field(ge=1)
     max_nodes: int = Field(ge=1)

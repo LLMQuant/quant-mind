@@ -1,7 +1,10 @@
 """Offline tests for the config-bound ``PaperFlow.build`` structure shape."""
 
 import asyncio
+import hashlib
+import json
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -14,9 +17,14 @@ from quantmind.configs.paper import LocalFilePath
 from quantmind.flows import PaperFlow, PaperStructureError
 from quantmind.flows.paper._structure import (
     _AgentsPaperStructureProvider,
+    _page_payloads,
     _structure_model_settings,
+    _window_pages,
 )
 from quantmind.knowledge import (
+    PaperPageInput,
+    PaperSourceFacts,
+    PaperSourceRevision,
     PaperStructureNodeDraft,
     PaperStructureTreeDraft,
 )
@@ -160,11 +168,193 @@ class PaperFlowBuildTests(unittest.IsolatedAsyncioTestCase):
                 await flow.build(LocalFilePath(path=_FIXTURE))
 
 
+def _page_entries(*lengths: int) -> tuple[dict, ...]:
+    return tuple(
+        {"page_number": index + 1, "text": "x" * length}
+        for index, length in enumerate(lengths)
+    )
+
+
+def _long_page_source(
+    *, page_count: int = 4, page_chars: int = 800
+) -> PaperSourceRevision:
+    """Build a dense synthetic source whose pages exceed one draft window."""
+    raw_bytes = b"windowed structure source"
+    when = datetime(2017, 12, 6, tzinfo=timezone.utc)
+    page_text = ("dense page text " * ((page_chars // 16) + 1))[:page_chars]
+    return PaperSourceRevision.from_parsed(
+        facts=PaperSourceFacts(
+            kind="arxiv",
+            uri="https://arxiv.org/pdf/1706.03762v7.pdf",
+            media_type="application/pdf",
+            raw_bytes=raw_bytes,
+            fetched_at=when,
+            available_at=when,
+            published_at=when,
+            arxiv_id="1706.03762v7",
+            title="Attention Is All You Need",
+            authors=("Ashish Vaswani",),
+        ),
+        source_hash=hashlib.sha256(raw_bytes).hexdigest(),
+        parser_name="fake-parser",
+        parser_version="1",
+        cleanup_version="1",
+        pages=tuple(
+            PaperPageInput(
+                page_number=number, width=612, height=792, text=page_text
+            )
+            for number in range(1, page_count + 1)
+        ),
+    )
+
+
+class WindowPagesTests(unittest.TestCase):
+    def test_small_document_forms_one_window(self) -> None:
+        pages = _page_entries(500, 500, 500)
+
+        windows = _window_pages(pages, window_chars=2_000, overlap_pages=1)
+
+        self.assertEqual(windows, (pages,))
+
+    def test_windows_share_overlap_pages_and_cover_every_page(self) -> None:
+        pages = _page_entries(800, 800, 800, 800)
+
+        windows = _window_pages(pages, window_chars=2_000, overlap_pages=1)
+
+        self.assertEqual(len(windows), 3)
+        self.assertEqual(
+            [[page["page_number"] for page in window] for window in windows],
+            [[1, 2], [2, 3], [3, 4]],
+        )
+
+    def test_oversized_page_forms_its_own_window(self) -> None:
+        pages = _page_entries(5_000, 300)
+
+        windows = _window_pages(pages, window_chars=2_000, overlap_pages=1)
+
+        self.assertEqual(
+            [[page["page_number"] for page in window] for window in windows],
+            [[1], [2]],
+        )
+
+    def test_large_overlap_still_advances_every_window(self) -> None:
+        pages = _page_entries(1_500, 1_500, 1_500)
+
+        windows = _window_pages(pages, window_chars=2_000, overlap_pages=5)
+
+        self.assertEqual(
+            [[page["page_number"] for page in window] for window in windows],
+            [[1], [2], [3]],
+        )
+
+
+class PagePayloadTests(unittest.TestCase):
+    def test_full_page_text_is_sent_by_default(self) -> None:
+        source = _long_page_source(page_count=1, page_chars=3_000)
+
+        pages = _page_payloads(source, PaperStructureCfg())
+
+        self.assertEqual(len(pages[0]["text"]), 3_000)
+        self.assertEqual(pages[0]["text"], source.parsed.pages[0].text)
+
+    def test_explicit_page_clip_still_truncates(self) -> None:
+        source = _long_page_source(page_count=1, page_chars=3_000)
+
+        pages = _page_payloads(source, PaperStructureCfg(page_text_chars=120))
+
+        self.assertEqual(len(pages[0]["text"]), 120)
+
+
 def _bad_request(message: str) -> BadRequestError:
     request = httpx.Request("POST", "https://api.test/v1/chat/completions")
     return BadRequestError(
         message, response=httpx.Response(400, request=request), body=None
     )
+
+
+class WindowedDraftingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_multi_window_drafting_extends_the_prior_draft(self) -> None:
+        # Four 800-char pages against a 2,000-char window pack into three
+        # overlapping windows, so drafting takes three chained model calls.
+        source = _long_page_source(page_count=4, page_chars=800)
+        cfg = PaperStructureCfg(window_chars=2_000, window_overlap_pages=1)
+        drafts = [
+            _fixture_draft(),
+            PaperStructureTreeDraft(
+                root=_fixture_draft().root, quality="medium"
+            ),
+            _fixture_draft(),
+        ]
+        run_mock = AsyncMock(side_effect=drafts)
+
+        with patch(
+            "quantmind.flows.paper._structure.run_with_observability",
+            new=run_mock,
+        ):
+            draft = await _AgentsPaperStructureProvider().structure(
+                signals=_empty_signals(),
+                source=source,
+                cfg=cfg,
+            )
+
+        self.assertEqual(run_mock.await_count, 3)
+        payloads = [
+            json.loads(call.args[1]) for call in run_mock.await_args_list
+        ]
+        self.assertEqual(
+            [payload["window"]["index"] for payload in payloads], [1, 2, 3]
+        )
+        self.assertTrue(
+            all(payload["window"]["total"] == 3 for payload in payloads)
+        )
+        self.assertEqual(payloads[0]["document"]["page_count"], 4)
+        self.assertIsNone(payloads[0]["draft_so_far"])
+        self.assertEqual(
+            payloads[1]["draft_so_far"],
+            drafts[0].root.model_dump(mode="json"),
+        )
+        self.assertEqual(
+            [page["page_number"] for page in payloads[1]["pages"]], [2, 3]
+        )
+        # Full page text crosses the seam: no window page is clipped.
+        self.assertTrue(
+            all(
+                len(page["text"]) == 800
+                for payload in payloads
+                for page in payload["pages"]
+            )
+        )
+        # The draft keeps the worst quality seen across windows.
+        self.assertEqual(draft.root, drafts[-1].root)
+        self.assertEqual(draft.quality, "medium")
+
+    async def test_small_document_still_drafts_in_one_call(self) -> None:
+        result = build_paper_result()
+        run_mock = AsyncMock(return_value=_fixture_draft())
+
+        with patch(
+            "quantmind.flows.paper._structure.run_with_observability",
+            new=run_mock,
+        ):
+            draft = await _AgentsPaperStructureProvider().structure(
+                signals=_empty_signals(),
+                source=result.source_revision,
+                cfg=PaperStructureCfg(),
+            )
+
+        self.assertEqual(draft, _fixture_draft())
+        run_mock.assert_awaited_once()
+        payload = json.loads(run_mock.await_args.args[1])
+        self.assertEqual(
+            payload["window"],
+            {
+                "index": 1,
+                "total": 1,
+                "start_page": 1,
+                "end_page": 2,
+            },
+        )
+        self.assertIsNone(payload["draft_so_far"])
 
 
 class AgentsStructureProviderTests(unittest.IsolatedAsyncioTestCase):

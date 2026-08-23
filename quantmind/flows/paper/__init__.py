@@ -11,9 +11,10 @@ each input, so a batch runs under one unified, reproducible setting:
 one config-bound flow produces every paper shape:
 
 - ``PaperStructureCfg`` selects the self-contained ``PaperStructureTree`` shape
-  (fetch + parse, deterministic outline signals, one draft-structuring agent,
-  then the knowledge-layer ``from_draft`` constructor that mints identity and
-  populates each leaf node's page-cited text).
+  (fetch + parse, deterministic outline signals, windowed full-page-text draft
+  structuring — one chained agent call per character-bounded window — then the
+  knowledge-layer ``from_draft`` constructor that mints identity and populates
+  each leaf node's page-cited text).
 - ``PaperSemanticCfg`` selects the source-first chunk/summary shape
   (``PaperSemanticResult``): fetch + parse, page-aware chunking, then a bounded
   map-reduce summary whose citations the knowledge layer resolves.
@@ -70,6 +71,7 @@ from quantmind.flows._paper_summary import (
     _summary_instructions_hash,
 )
 from quantmind.flows.paper._structure import (
+    _STRUCTURE_ORCHESTRATION,
     PaperStructureError,
     _AgentsPaperStructureProvider,
     _PaperStructureProvider,
@@ -206,10 +208,11 @@ class PaperFlow(Generic[_ResultT]):
         Dispatches on the bound cfg **type**:
 
         - ``PaperStructureCfg`` runs the structure pipeline (fetch + parse,
-          deterministic outline signals, one draft-structuring agent, then the
-          knowledge-layer constructor that mints identity, resolves page
-          citations, and populates each leaf node's ``content``), returning a
-          self-contained ``PaperStructureTree``.
+          deterministic outline signals, a draft-structuring agent reading
+          full page text in character-bounded windows — one chained call per
+          window — then the knowledge-layer constructor that mints identity,
+          resolves page citations, and populates each leaf node's
+          ``content``), returning a self-contained ``PaperStructureTree``.
         - ``PaperSemanticCfg`` runs the source-first chunk/summary pipeline (fetch +
           parse, page-aware chunking, bounded map-reduce summary), returning a
           ``PaperSemanticResult``.
@@ -256,8 +259,11 @@ class PaperFlow(Generic[_ResultT]):
         producer = PaperStructureProducer(
             model=cfg.model,
             prompt_version=cfg.prompt_version,
+            orchestration=_STRUCTURE_ORCHESTRATION,
             instructions_hash=_structure_instructions_hash(cfg),
             page_text_chars=cfg.page_text_chars,
+            window_chars=cfg.window_chars,
+            window_overlap_pages=cfg.window_overlap_pages,
             max_output_tokens=cfg.max_output_tokens,
             max_depth=cfg.max_depth,
             max_nodes=cfg.max_nodes,

@@ -12,8 +12,10 @@ class PaperStructureCfgTests(unittest.TestCase):
         cfg = PaperStructureCfg()
 
         self.assertEqual(cfg.model, "gpt-5.6-luna")
-        self.assertEqual(cfg.prompt_version, "paper-structure-v2")
-        self.assertEqual(cfg.page_text_chars, 1_200)
+        self.assertEqual(cfg.prompt_version, "paper-structure-v3")
+        self.assertIsNone(cfg.page_text_chars)
+        self.assertEqual(cfg.window_chars, 80_000)
+        self.assertEqual(cfg.window_overlap_pages, 1)
         self.assertEqual(cfg.max_depth, 6)
         self.assertEqual(cfg.max_nodes, 128)
 
@@ -21,7 +23,16 @@ class PaperStructureCfgTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             PaperStructureCfg(page_text_chars=20)
         with self.assertRaises(ValidationError):
+            PaperStructureCfg(window_chars=100)
+        with self.assertRaises(ValidationError):
+            PaperStructureCfg(window_overlap_pages=-1)
+        with self.assertRaises(ValidationError):
             PaperStructureCfg(max_nodes=0)
+
+    def test_optional_page_clip_accepts_explicit_bound(self) -> None:
+        cfg = PaperStructureCfg(page_text_chars=2_000)
+
+        self.assertEqual(cfg.page_text_chars, 2_000)
 
 
 if __name__ == "__main__":
