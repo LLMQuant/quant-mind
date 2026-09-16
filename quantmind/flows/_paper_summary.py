@@ -26,7 +26,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from quantmind.configs import PaperSemanticCfg
 from quantmind.flows._runner import run_with_observability
-from quantmind.knowledge import PaperChunkSet, PaperSourceRevision
+from quantmind.knowledge import (
+    PaperChunkSet,
+    PaperSourceRevision,
+    quote_matches_chunk_text,
+)
 
 _ORCHESTRATION_VERSION = "map-reduce-v1"
 
@@ -204,7 +208,9 @@ def _validate_research_draft(
         pages = {span.page_number for span in chunk.source_spans}
         if citation.page_number not in pages:
             raise ValueError("research finding cites a page outside its chunk")
-        if finding.quote is not None and finding.quote not in chunk.text:
+        if finding.quote is not None and not quote_matches_chunk_text(
+            finding.quote, chunk.text
+        ):
             raise ValueError(
                 "research finding quote is not present in its chunk"
             )

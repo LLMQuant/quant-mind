@@ -28,8 +28,10 @@ Real run — arXiv ``1706.03762v7``, model ``gpt-5.6-luna`` (2026-07-24):
 
 - structure: 17 nodes (13 leaves), root ``"Attention Is All You Need"``.
 - semantic: 15 pages, 33 chunks. The cited-summary step asserts every research
-  quote verbatim against its chunk; the sampled models paraphrased, so that step
-  raised ``ValueError`` and produced no summary line on this run.
+  quote against its chunk through ``quote_matches_chunk_text``, which compares
+  under collapsed whitespace so a quote that renders a chunk's hard-wrap newline
+  as a space still counts as verbatim; only quotes whose words or order differ
+  are rejected.
 
 ``build`` fetches and parses **per call**: the flow binds no source, no library,
 persists nothing, and retrieves nothing. Persistence (``library``) and retrieval

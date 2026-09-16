@@ -75,7 +75,7 @@ Changing any producer field creates a distinct artifact ID. Multiple chunk sets 
 
 ## Citation and Lineage Integrity
 
-A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verbatim quote. `PaperSemanticResult` rejects citations to missing chunks, pages outside the cited chunk spans, or quotes absent from chunk text.
+A `PaperCitation` identifies the exact chunk set, chunk, page, and optional verbatim quote. `PaperSemanticResult` rejects citations to missing chunks, pages outside the cited chunk spans, or quotes absent from chunk text. Quote presence is checked through `quote_matches_chunk_text`, which compares under collapsed whitespace so a faithful quote that renders a chunk's hard-wrap newline as a space still resolves; only quotes whose words or order differ are rejected.
 
 `PaperGlobalSummary.derived_from` contains `ArtifactLocator` values. At least one locator must point to its producer's exact input chunk set, with the same source revision and no member ID. The library stores this relationship explicitly so lineage can be checked independently from the summary JSON.
 

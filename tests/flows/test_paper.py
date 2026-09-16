@@ -354,6 +354,53 @@ class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
                 draft,
             )
 
+    def test_research_finding_quote_tolerates_line_breaks(self) -> None:
+        # chunk 0 text: "The Transformer removes recurrence and convolution."
+        result = build_paper_result()
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="contribution",
+                    claim="the model removes recurrence and convolution",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=0,
+                        page_number=1,
+                    ),
+                    quote="The Transformer removes recurrence\nand convolution.",
+                ),
+            ),
+        )
+        # A faithful quote whose only difference is a line break must pass.
+        _validate_research_draft(
+            result.chunk_set,
+            _ChunkGroup(start=0, count=1),
+            draft,
+        )
+
+    def test_research_finding_quote_absent_from_chunk_is_rejected(self) -> None:
+        result = build_paper_result()
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="contribution",
+                    claim="a claim with a fabricated quote",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=0,
+                        page_number=1,
+                    ),
+                    quote="words that never appear in the chunk",
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "quote is not present"):
+            _validate_research_draft(
+                result.chunk_set,
+                _ChunkGroup(start=0, count=1),
+                draft,
+            )
+
     def test_worker_and_reducer_output_is_capped(self) -> None:
         capped = _summary_model_settings(
             PaperSemanticCfg(

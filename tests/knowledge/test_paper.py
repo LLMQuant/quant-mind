@@ -7,9 +7,14 @@ from pydantic import ValidationError
 
 from quantmind.knowledge import (
     PaperCitation,
+    PaperCitationDraft,
+    PaperCitationValidationError,
+    PaperGlobalSummary,
     PaperSemanticResult,
     PaperSourceRevision,
     PaperSourceSpan,
+    PaperSummaryProducer,
+    quote_matches_chunk_text,
 )
 from quantmind.knowledge.paper import (
     _paper_chunk_id,
@@ -166,6 +171,70 @@ class PaperArtifactTests(unittest.TestCase):
                 chunk_set=invalid_chunk_set,
                 global_summary=result.global_summary,
             )
+
+
+class QuoteVerbatimTests(unittest.TestCase):
+    """The verbatim-quote rule tolerates only whitespace differences."""
+
+    def test_helper_treats_line_break_as_space(self) -> None:
+        chunk_text = "for statistical\nmachine translation."
+        self.assertTrue(
+            quote_matches_chunk_text(
+                "for statistical machine translation.", chunk_text
+            )
+        )
+
+    def test_helper_rejects_changed_words_and_order(self) -> None:
+        chunk_text = "The Transformer removes recurrence and convolution."
+        self.assertFalse(
+            quote_matches_chunk_text("removes recursion", chunk_text)
+        )
+        self.assertFalse(
+            quote_matches_chunk_text("convolution and recurrence", chunk_text)
+        )
+
+    def _summary_with_quote(self, quote: str | None) -> PaperGlobalSummary:
+        result = build_paper_result()
+        chunk_set = result.chunk_set
+        producer = PaperSummaryProducer(
+            model="fake-summary",
+            prompt_version="test-v1",
+            input_chunk_set_id=chunk_set.id,
+            instructions_hash="0" * 64,
+            max_output_tokens=512,
+            research_group_size=8,
+        )
+        return PaperGlobalSummary.from_draft(
+            chunk_set,
+            producer=producer,
+            summary="A cited summary of the paper's contribution.",
+            citations=(
+                PaperCitationDraft(
+                    chunk_index=0,
+                    page_number=chunk_set.chunks[0].source_spans[0].page_number,
+                    quote=quote,
+                ),
+            ),
+            min_citations=1,
+            min_pages=1,
+        )
+
+    def test_from_draft_accepts_whitespace_variant_quote(self) -> None:
+        # chunk 0 text: "The Transformer removes recurrence and convolution."
+        summary = self._summary_with_quote(
+            "The Transformer removes recurrence\nand convolution."
+        )
+        self.assertEqual(len(summary.citations), 1)
+        self.assertEqual(
+            summary.citations[0].quote,
+            "The Transformer removes recurrence\nand convolution.",
+        )
+
+    def test_from_draft_rejects_non_matching_quote(self) -> None:
+        with self.assertRaisesRegex(
+            PaperCitationValidationError, "quote is not present"
+        ):
+            self._summary_with_quote("a quote that is simply not in the chunk")
 
 
 if __name__ == "__main__":

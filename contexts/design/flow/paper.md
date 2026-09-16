@@ -93,7 +93,7 @@ Code accepts the draft only when:
 
 - every chunk index exists;
 - every cited page is present in that chunk's source spans;
-- every supplied quote occurs verbatim in the cited chunk;
+- every supplied quote occurs verbatim in the cited chunk, compared under collapsed whitespace so a quote that renders the chunk's hard-wrap newline as a space still counts (words and order must still match);
 - citation count meets `min_summary_citations`;
 - distinct cited-page count meets `min_summary_pages`.
 
