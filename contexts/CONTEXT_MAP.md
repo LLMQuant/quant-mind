@@ -28,6 +28,7 @@ contexts/
 │   ├── library/local.md        ← LocalKnowledgeLibrary storage and retrieval
 │   ├── mind/retrieval.md       ← page-preserving structure tree + agentic retrieval
 │   ├── operations/
+│   │   ├── etl.md              ← whole-run vs micro-batch ETL execution and observation
 │   │   ├── naming.md           ← public operation naming rules
 │   │   └── orchestration.md    ← pipelines vs components (altitude)
 │   ├── preprocess/pdf.md       ← page-aware ParsedDocument

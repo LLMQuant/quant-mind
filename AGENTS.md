@@ -46,6 +46,7 @@ The canonical, always-current statement lives in
 
 | Module | Role |
 |--------|------|
+| `quantmind/etl/` | Stdlib-only, observable whole-run and micro-batch `extract → transform → load` authoring scaffolds — independent leaf |
 | `quantmind/knowledge/` | Pydantic data standard (`FlattenKnowledge` / `TreeKnowledge` / `GraphKnowledge`) — dependency leaf |
 | `quantmind/library/` | Local persistence and semantic retrieval for canonical knowledge — depends only on `knowledge` |
 | `quantmind/configs/` | Operation cfg + typed input models or unions (`BaseFlowCfg`, `NewsWindow`, `PaperInput`) — depends only on `knowledge` |
@@ -131,6 +132,13 @@ the user explicitly authorizes it — fix the underlying issue instead.
    `BaseKnowledge`. Accept modest redundancy to keep artifacts self-contained.
    Half-finished intermediates stay component seams, not public flows. See
    `contexts/design/operations/orchestration.md`.
+10. **ETL execution stays separate from flows** — use
+    `quantmind.etl.ETLPipeline` for one whole-run delivery and
+    `BatchETLPipeline` for repeated business-batch deliveries. Call
+    `ctx.progress()` in long loops so the next Agent can observe real completed
+    work; do not write custom run-state files. Both are composition-based
+    authoring scaffolds, not base classes for `quantmind.flows`. See
+    `contexts/design/operations/etl.md`.
 
 ## Tests and Examples
 
