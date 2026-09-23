@@ -268,6 +268,33 @@ class CitationValidationTests(unittest.TestCase):
                         cfg,
                     )
 
+    def test_summary_quote_tolerates_extraction_whitespace(self) -> None:
+        result = build_paper_result()
+        chunk = result.chunk_set.chunks[0]
+        page = min(span.page_number for span in chunk.source_spans)
+        respaced = "\n   ".join(chunk.text.split()[:6])
+        draft = PaperSummaryDraft(
+            summary="a summary citing one respaced quote",
+            citations=(
+                PaperSummaryCitationDraft(
+                    chunk_index=0,
+                    page_number=page,
+                    quote=respaced,
+                ),
+            ),
+        )
+
+        summary = _build_summary(
+            result.chunk_set,
+            draft,
+            PaperSemanticCfg(
+                min_summary_citations=1,
+                min_summary_pages=1,
+            ),
+        )
+
+        self.assertEqual(summary.citations[0].quote, respaced)
+
     def test_configured_citation_and_page_coverage_is_enforced(self) -> None:
         result = build_paper_result()
         draft = PaperSummaryDraft(
@@ -353,6 +380,67 @@ class SummaryMapReduceTests(unittest.IsolatedAsyncioTestCase):
                 _ChunkGroup(start=0, count=1),
                 draft,
             )
+
+    def test_research_quote_tolerates_extraction_whitespace(self) -> None:
+        result = build_paper_result()
+        chunk = result.chunk_set.chunks[0]
+        page = min(span.page_number for span in chunk.source_spans)
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk only",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="result",
+                    claim="a quote respaced the way a PDF column gap does",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=0,
+                        page_number=page,
+                    ),
+                    quote="\n   ".join(chunk.text.split()[:6]),
+                ),
+            ),
+        )
+
+        checked = _validate_research_draft(
+            result.chunk_set,
+            _ChunkGroup(start=0, count=1),
+            draft,
+        )
+
+        self.assertEqual(
+            checked.findings[0].quote,
+            "\n   ".join(chunk.text.split()[:6]),
+        )
+
+    def test_research_quote_absent_from_its_chunk_is_dropped(self) -> None:
+        result = build_paper_result()
+        chunk = result.chunk_set.chunks[0]
+        page = min(span.page_number for span in chunk.source_spans)
+        draft = PaperResearchDraft(
+            scope_summary="reviewed the first chunk only",
+            findings=(
+                PaperResearchFindingDraft(
+                    kind="result",
+                    claim="a quote the chunk never contained",
+                    citation=PaperResearchCitationDraft(
+                        chunk_index=0,
+                        page_number=page,
+                    ),
+                    quote="the paper never wrote this sentence",
+                ),
+            ),
+        )
+
+        checked = _validate_research_draft(
+            result.chunk_set,
+            _ChunkGroup(start=0, count=1),
+            draft,
+        )
+
+        self.assertIsNone(checked.findings[0].quote)
+        self.assertEqual(
+            checked.findings[0].claim,
+            "a quote the chunk never contained",
+        )
 
     def test_worker_and_reducer_output_is_capped(self) -> None:
         capped = _summary_model_settings(

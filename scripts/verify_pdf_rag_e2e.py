@@ -186,7 +186,16 @@ def _summary_has_required_coverage(summary: str) -> bool:
                     "multi-head attention",
                     "multihead attention",
                 ),
-                ("translation", "training efficiency", "training time"),
+                # The machine-translation result, however the model names it:
+                # a faithful summary may report the benchmark ("BLEU", "WMT")
+                # without ever writing the word "translation".
+                (
+                    "translation",
+                    "training efficiency",
+                    "training time",
+                    "bleu",
+                    "wmt",
+                ),
             )
         )
         and attention_only

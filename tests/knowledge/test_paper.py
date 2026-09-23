@@ -10,6 +10,7 @@ from quantmind.knowledge import (
     PaperSemanticResult,
     PaperSourceRevision,
     PaperSourceSpan,
+    quote_matches_chunk_text,
 )
 from quantmind.knowledge.paper import (
     _paper_chunk_id,
@@ -166,6 +167,33 @@ class PaperArtifactTests(unittest.TestCase):
                 chunk_set=invalid_chunk_set,
                 global_summary=result.global_summary,
             )
+
+
+class QuoteMatchingTests(unittest.TestCase):
+    """A citation quote survives extraction noise but not paraphrase."""
+
+    def test_column_gaps_and_line_break_hyphenation_still_match(self) -> None:
+        extracted = (
+            "We show similar results in Fig 3 but for savings\n"
+            "This gives us    the       cost    savings         from pre-\n"
+            "    reconstitution trading."
+        )
+        self.assertTrue(
+            quote_matches_chunk_text(
+                "This gives us the cost savings from pre-reconstitution "
+                "trading.",
+                extracted,
+            )
+        )
+
+    def test_paraphrase_is_still_rejected(self) -> None:
+        self.assertFalse(
+            quote_matches_chunk_text(
+                "The authors report savings from trading early.",
+                "This gives us the cost savings from pre-reconstitution "
+                "trading.",
+            )
+        )
 
 
 if __name__ == "__main__":

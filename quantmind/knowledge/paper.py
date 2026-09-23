@@ -84,6 +84,28 @@ class PaperCitationValidationError(ValueError):
     """A generated summary did not provide valid source coverage."""
 
 
+def quote_matches_chunk_text(quote: str, text: str) -> bool:
+    """Return whether ``quote`` occurs in ``text`` ignoring whitespace runs.
+
+    Extracting a multi-column PDF interleaves column-gap padding and
+    line-break hyphenation into the chunk text, so a quote copied faithfully
+    off the rendered page is rarely a byte-exact substring of it: the chunk
+    may hold ``"from pre-"`` at one line end and ``"reconstitution tra"`` on
+    the next, where the model wrote ``"pre-reconstitution trading"``.
+    Comparing both sides with every whitespace character removed keeps a
+    faithful quote valid while a paraphrase or an invented sentence still
+    fails.
+
+    Args:
+        quote: Quote a model proposed for a citation.
+        text: Chunk text the quote must have come from.
+
+    Returns:
+        True when the quote occurs in the text ignoring whitespace.
+    """
+    return "".join(quote.split()) in "".join(text.split())
+
+
 @dataclass(frozen=True)
 class PaperSourceFacts:
     """Code-owned source facts normalized by the flow before construction.
@@ -1147,7 +1169,9 @@ class PaperGlobalSummary(BaseModel):
                 raise PaperCitationValidationError(
                     "paper summary citation page is not owned by its chunk"
                 )
-            if draft.quote is not None and draft.quote not in chunk.text:
+            if draft.quote is not None and not quote_matches_chunk_text(
+                draft.quote, chunk.text
+            ):
                 raise PaperCitationValidationError(
                     "paper summary citation quote is not present in its chunk"
                 )
@@ -1233,7 +1257,9 @@ class PaperSemanticResult(BaseModel):
             pages = {span.page_number for span in chunk.source_spans}
             if citation.page_number not in pages:
                 raise ValueError("paper summary citation page is not in chunk")
-            if citation.quote and citation.quote not in chunk.text:
+            if citation.quote and not quote_matches_chunk_text(
+                citation.quote, chunk.text
+            ):
                 raise ValueError("paper summary citation quote is not in chunk")
         return self
 
