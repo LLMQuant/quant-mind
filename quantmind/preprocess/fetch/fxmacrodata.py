@@ -56,22 +56,49 @@ async def fetch_fxmacrodata_calendar(
     contract. No parsing beyond splitting rows from the response envelope --
     interpreting the rows is the format layer's job.
     """
-
     limit_count = max(1, min(int(limit), 100))
     currency_code = currency.lower()
     params: dict[str, str] = {"limit": str(limit_count)}
 
     url = f"{base_url.rstrip('/')}/calendar/{currency_code}"
     headers = {"User-Agent": "QuantMind/0.2 fxmacrodata-fetch"}
+    api_key = (api_key or "").strip()
     if api_key:
+        if any(ch.isspace() for ch in api_key):
+            raise ValueError("FXMacroData api_key must not contain whitespace")
         # Sent as a header so the key is never captured in request logs or
         # proxy access logs the way a query parameter would be.
         headers["X-API-Key"] = api_key
 
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    # Redirects are not followed so the key header is never replayed to
+    # another host; a 3xx surfaces as an HTTPStatusError instead.
+    async with httpx.AsyncClient(
+        timeout=timeout, follow_redirects=False
+    ) as client:
         response = await client.get(url, params=params, headers=headers)
+        if response.is_redirect:
+            raise httpx.HTTPStatusError(
+                f"FXMacroData returned an unexpected redirect "
+                f"({response.status_code}) for {url}",
+                request=response.request,
+                response=response,
+            )
         response.raise_for_status()
-        payload: dict[str, Any] = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ValueError(
+                f"FXMacroData returned a non-JSON response for {url}"
+            ) from exc
+
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("data"), list
+    ):
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        raise ValueError(
+            f"FXMacroData returned an unexpected response for {url}"
+            + (f": {detail}" if detail else "")
+        )
 
     rows = payload.get("data")
     rows = rows[:limit_count] if isinstance(rows, list) else []
@@ -81,7 +108,9 @@ async def fetch_fxmacrodata_calendar(
             name=str(row.get("name", "")),
             announcement_datetime_utc=row.get("announcement_datetime_utc"),
             announcement_datetime_local=row.get("announcement_datetime_local"),
-            release_date_confirmed=bool(row.get("release_date_confirmed", False)),
+            release_date_confirmed=bool(
+                row.get("release_date_confirmed", False)
+            ),
             event_importance=row.get("event_importance"),
             market_tier=row.get("market_tier"),
             source=row.get("source"),
