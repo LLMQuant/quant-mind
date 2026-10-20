@@ -13,6 +13,12 @@ from quantmind.preprocess.fetch.doi import (
     CrossrefMetadata,
     resolve_doi,
 )
+from quantmind.preprocess.fetch.fxmacrodata import (
+    DEFAULT_FXMACRODATA_BASE_URL,
+    CalendarRelease,
+    RawCalendar,
+    fetch_fxmacrodata_calendar,
+)
 from quantmind.preprocess.fetch.http import (
     DEFAULT_USER_AGENT,
     FetchAttemptsExhausted,
@@ -30,16 +36,20 @@ from quantmind.preprocess.fetch.rss import (
 
 __all__ = [
     "ArxivIdParseError",
+    "CalendarRelease",
     "CrossrefMetadata",
+    "DEFAULT_FXMACRODATA_BASE_URL",
     "DEFAULT_USER_AGENT",
     "FeedItem",
     "FetchAttemptsExhausted",
     "FetchPolicy",
     "Fetched",
     "HttpFetcher",
+    "RawCalendar",
     "RawFeed",
     "RawPaper",
     "fetch_arxiv",
+    "fetch_fxmacrodata_calendar",
     "fetch_rss_feed",
     "fetch_url",
     "parse_feed",
