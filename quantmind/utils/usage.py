@@ -31,7 +31,6 @@ cap, price, or steer a run. Tokens/time/steps only — no cost, no budget.
 from __future__ import annotations
 
 import threading
-from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -107,15 +106,21 @@ class UsageScope:
 
 
 class SpanCollector(TracingProcessor):
-    """Process-global sink that buckets finished spans by ``trace_id``.
+    """Process-global sink for spans owned by active usage scopes.
 
-    Bucketing by ``trace_id`` is what makes concurrent scopes and ``batch_run``
-    fan-out safe: each scope only ever reads and evicts its own trace.
+    Each scope opens a bucket with ``start`` and removes it with ``pop``.
+    Unrelated traces and late spans cannot create buckets, so only active
+    scopes retain spans. Concurrent scopes read and evict only their own trace.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._by_trace: dict[str, list[Any]] = defaultdict(list)
+        self._by_trace: dict[str, list[Any]] = {}
+
+    def start(self, trace_id: str) -> None:
+        """Collect finished spans for one scope until ``pop`` is called."""
+        with self._lock:
+            self._by_trace[trace_id] = []
 
     def on_trace_start(self, trace: Any) -> None:  # noqa: D102 - no-op sink
         return None
@@ -127,9 +132,11 @@ class SpanCollector(TracingProcessor):
         return None
 
     def on_span_end(self, span: Any) -> None:
-        """Store the finished span under its trace bucket (thread-safe)."""
+        """Store a finished span only while its scope is active."""
         with self._lock:
-            self._by_trace[span.trace_id].append(span)
+            spans = self._by_trace.get(span.trace_id)
+            if spans is not None:
+                spans.append(span)
 
     def shutdown(self) -> None:  # noqa: D102 - nothing to flush
         return None
@@ -138,7 +145,7 @@ class SpanCollector(TracingProcessor):
         return None
 
     def pop(self, trace_id: str) -> list[Any]:
-        """Return and remove every span collected for ``trace_id``."""
+        """End collection and return this scope's spans under the same lock."""
         with self._lock:
             return self._by_trace.pop(trace_id, [])
 
@@ -184,6 +191,7 @@ def usage_scope(
     trace_id = gen_trace_id()
     scope = UsageScope(trace_id=trace_id)
     try:
+        collector.start(trace_id)
         with trace(workflow_name, trace_id=trace_id, group_id=group_id):
             yield scope
     finally:

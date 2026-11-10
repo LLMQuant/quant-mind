@@ -1,13 +1,23 @@
 """Tests for per-run usage collection from Agents SDK spans.
 
-Spans are hand-built so the suite runs fully offline: no model call, no real
-trace export. ``usage_scope`` is driven with a patched ``trace`` and spans
-pushed straight into the collector, simulating what the SDK would record.
+Hand-built spans exercise aggregation. Real SDK traces exercise collection
+with an isolated provider: no model call, network request, or trace export.
 """
 
+import asyncio
 import unittest
+from contextvars import Context
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+from agents.tracing import (
+    TracingProcessor,
+    generation_span,
+    get_current_trace,
+    trace,
+)
+from agents.tracing import create as tracing_create
+from agents.tracing.provider import DefaultTraceProvider
 
 from quantmind.utils import usage
 from quantmind.utils.usage import RunUsage, SpanCollector, usage_scope
@@ -210,6 +220,8 @@ class SpanCollectorTests(unittest.TestCase):
 
     def test_buckets_by_trace_id_and_pop_clears(self) -> None:
         collector = SpanCollector()
+        collector.start("t1")
+        collector.start("t2")
         collector.on_span_end(_agent("a1", "x", trace_id="t1"))
         collector.on_span_end(_agent("a2", "y", trace_id="t1"))
         collector.on_span_end(_agent("a3", "z", trace_id="t2"))
@@ -300,6 +312,209 @@ class UsageScopeTests(unittest.TestCase):
                 raise ValueError("boom")
 
         self.assertEqual(scope_ref["run"].usage.total_tokens, 10)
+
+
+def _sdk_generation(input_tokens: int = 10, output_tokens: int = 5) -> Any:
+    return generation_span(
+        model="synthetic-model",
+        usage={"input_tokens": input_tokens, "output_tokens": output_tokens},
+    )
+
+
+class RealSDKUsageScopeTests(unittest.TestCase):
+    """Real callbacks without changing the SDK's global provider/exporters."""
+
+    def setUp(self) -> None:
+        # DefaultTraceProvider starts empty; only this test's processors are
+        # registered. Its import and the create-module patch are test-only SDK
+        # internals; public trace/span context managers still run unchanged.
+        provider = DefaultTraceProvider()
+        provider.set_disabled(False)
+        self.observer = Mock(spec=TracingProcessor)
+        provider.register_processor(self.observer)
+        for patcher in (
+            patch.object(
+                tracing_create, "get_trace_provider", return_value=provider
+            ),
+            patch.object(
+                usage,
+                "add_trace_processor",
+                side_effect=provider.register_processor,
+            ),
+            patch.object(usage, "_collector", None),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(provider.shutdown)
+        self.collector = usage._get_collector()
+        self.context = Context()  # Do not inherit an ambient trace or span.
+
+    def test_unrelated_traces_are_not_retained_and_observers_still_run(
+        self,
+    ) -> None:
+        def scenario() -> None:
+            with usage_scope() as run:
+                with _sdk_generation():
+                    pass
+            for _ in range(3):
+                with trace("unrelated"), _sdk_generation(99, 1):
+                    pass
+
+            self.assertEqual(run.usage.total_tokens, 15)
+            self.assertEqual(run.usage.requests, 1)
+            self.assertEqual(self.observer.on_span_end.call_count, 4)
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(scenario)
+
+    def test_late_span_does_not_recreate_a_closed_scope_bucket(self) -> None:
+        def scenario() -> None:
+            with usage_scope() as run:
+                with _sdk_generation():
+                    pass
+                late_span = _sdk_generation(99, 1)
+                late_span.start()
+
+            snapshot = run.usage
+            late_span.finish()  # SDK permits span_end after trace_end.
+            self.assertEqual(snapshot.total_tokens, 15)
+            self.assertEqual(snapshot.requests, 1)
+            self.assertIs(run.usage, snapshot)
+            self.assertEqual(self.observer.on_span_end.call_count, 2)
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(scenario)
+
+    def test_nested_scopes_restore_the_existing_sdk_trace(self) -> None:
+        def scenario() -> None:
+            with trace("external") as external, _sdk_generation(99, 1):
+                with usage_scope() as outer:
+                    with _sdk_generation():
+                        pass
+                    with usage_scope() as inner:
+                        with _sdk_generation(2, 1):
+                            pass
+                    self.assertEqual(
+                        get_current_trace().trace_id, outer.trace_id
+                    )
+                    with _sdk_generation():
+                        pass
+                self.assertIs(get_current_trace(), external)
+
+            self.assertNotEqual(outer.trace_id, inner.trace_id)
+            self.assertEqual(outer.usage.total_tokens, 30)
+            self.assertEqual(outer.usage.requests, 2)
+            self.assertEqual(inner.usage.total_tokens, 3)
+            self.assertEqual(inner.usage.requests, 1)
+            self.assertIsNone(get_current_trace())
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(scenario)
+
+    def test_concurrent_scopes_keep_their_own_usage(self) -> None:
+        async def scenario() -> None:
+            ready = asyncio.Event()
+            entered = 0
+
+            async def worker(tokens: int) -> Any:
+                nonlocal entered
+                with usage_scope() as run:
+                    with _sdk_generation(tokens, 1):
+                        entered += 1
+                        if entered == 2:
+                            ready.set()
+                        await ready.wait()
+                        self.assertEqual(
+                            get_current_trace().trace_id, run.trace_id
+                        )
+                return run
+
+            first, second = await asyncio.gather(worker(10), worker(20))
+            self.assertNotEqual(first.trace_id, second.trace_id)
+            self.assertEqual(first.usage.total_tokens, 11)
+            self.assertEqual(second.usage.total_tokens, 21)
+            self.assertEqual(first.usage.requests, 1)
+            self.assertEqual(second.usage.requests, 1)
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(asyncio.run, scenario())
+
+    def test_child_tasks_count_only_when_finished_before_scope_exit(
+        self,
+    ) -> None:
+        async def scenario() -> None:
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def child() -> None:
+                with _sdk_generation(3, 2):
+                    started.set()
+                    await release.wait()
+
+            with usage_scope() as joined:
+                release.set()
+                await asyncio.create_task(child())
+            self.assertEqual(joined.usage.total_tokens, 5)
+            self.assertEqual(joined.usage.requests, 1)
+
+            started.clear()
+            release.clear()
+            with usage_scope() as exited:
+                with _sdk_generation():
+                    pass
+                task = asyncio.create_task(child())
+                await started.wait()
+            snapshot = exited.usage
+            release.set()
+            await task
+            self.assertEqual(snapshot.total_tokens, 15)
+            self.assertEqual(snapshot.requests, 1)
+            self.assertIs(exited.usage, snapshot)
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(asyncio.run, scenario())
+
+    def test_block_and_trace_entry_exceptions_release_the_scope(self) -> None:
+        def scenario() -> None:
+            with self.assertRaisesRegex(ValueError, "block failed"):
+                with usage_scope() as run, _sdk_generation():
+                    raise ValueError("block failed")
+            self.assertEqual(run.usage.total_tokens, 15)
+            self.assertEqual(run.usage.requests, 1)
+            self.assertEqual(self.collector._by_trace, {})
+
+            with patch.object(usage, "trace") as broken_trace:
+                broken_trace.return_value.__enter__.side_effect = RuntimeError(
+                    "trace entry failed"
+                )
+                with self.assertRaisesRegex(RuntimeError, "trace entry failed"):
+                    with usage_scope():
+                        self.fail("trace entry should have raised")
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(scenario)
+
+    def test_cancellation_propagates_and_releases_the_scope(self) -> None:
+        async def scenario() -> None:
+            started = asyncio.Event()
+            scopes = []
+
+            async def worker() -> None:
+                with usage_scope() as run, _sdk_generation():
+                    scopes.append(run)
+                    started.set()
+                    await asyncio.Event().wait()
+
+            task = asyncio.create_task(worker())
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual(scopes[0].usage.total_tokens, 15)
+            self.assertEqual(scopes[0].usage.requests, 1)
+            self.assertEqual(self.collector._by_trace, {})
+
+        self.context.run(asyncio.run, scenario())
 
 
 if __name__ == "__main__":
